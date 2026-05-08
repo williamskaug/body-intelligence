@@ -4,29 +4,47 @@ import { TEMPLATE_PATHS, loadTemplates } from "@/lib/memory/templates";
 
 export const runtime = "nodejs";
 
+type EmailOtpType = "magiclink" | "signup" | "invite" | "recovery" | "email_change" | "email";
+
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
+  const tokenHash = searchParams.get("token_hash");
+  const type = searchParams.get("type") as EmailOtpType | null;
   const next = searchParams.get("next") ?? "/";
 
   // Supabase appends ?error=...&error_code=... when the magic link is
   // invalid, expired, or already-consumed (often by an email link scanner).
-  const errorCode = searchParams.get("error_code");
+  const errorCode = searchParams.get("error_code") ?? searchParams.get("error");
   if (errorCode) {
     return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(errorCode)}`);
   }
 
-  if (!code) {
+  if (!code && !tokenHash) {
     return NextResponse.redirect(`${origin}/login?error=missing_code`);
   }
 
   const supabase = await createClient();
-  const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
 
-  if (exchangeError) {
-    return NextResponse.redirect(
-      `${origin}/login?error=${encodeURIComponent(exchangeError.message)}`,
-    );
+  if (tokenHash && type) {
+    // SSR token_hash flow — what Supabase's recommended email template uses.
+    const { error: verifyError } = await supabase.auth.verifyOtp({
+      token_hash: tokenHash,
+      type,
+    });
+    if (verifyError) {
+      return NextResponse.redirect(
+        `${origin}/login?error=${encodeURIComponent(verifyError.message)}`,
+      );
+    }
+  } else if (code) {
+    // PKCE flow — kept as a fallback in case the email template uses it.
+    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+    if (exchangeError) {
+      return NextResponse.redirect(
+        `${origin}/login?error=${encodeURIComponent(exchangeError.message)}`,
+      );
+    }
   }
 
   const {
