@@ -1,6 +1,4 @@
-import { eq, and, isNull, gt } from "drizzle-orm";
-import { db } from "@/lib/db/client";
-import { oauthClients, oauthCodes, oauthTokens } from "@/lib/db/schema";
+import { adminClient } from "@/lib/supabase/admin";
 import {
   generateClientId,
   generateClientSecret,
@@ -25,16 +23,16 @@ export async function registerClient(
   input: RegisterClientInput,
 ): Promise<RegisteredClient> {
   const clientId = generateClientId();
-  // PKCE-only public clients (the typical MCP case) don't get a secret.
   const clientSecret = input.isPublic ? null : generateClientSecret();
   const clientSecretHash = clientSecret ? hashToken(clientSecret) : null;
 
-  await db.insert(oauthClients).values({
-    clientId,
-    clientSecretHash,
+  const { error } = await adminClient().from("oauth_clients").insert({
+    client_id: clientId,
+    client_secret_hash: clientSecretHash,
     name: input.name,
-    redirectUris: input.redirectUris,
+    redirect_uris: input.redirectUris,
   });
+  if (error) throw new Error(`registerClient: ${error.message}`);
 
   return {
     clientId,
@@ -44,13 +42,27 @@ export async function registerClient(
   };
 }
 
-export async function getClient(clientId: string) {
-  const rows = await db
-    .select()
-    .from(oauthClients)
-    .where(eq(oauthClients.clientId, clientId))
-    .limit(1);
-  return rows[0] ?? null;
+export type StoredClient = {
+  clientId: string;
+  clientSecretHash: string | null;
+  name: string;
+  redirectUris: string[];
+};
+
+export async function getClient(clientId: string): Promise<StoredClient | null> {
+  const { data, error } = await adminClient()
+    .from("oauth_clients")
+    .select("client_id, client_secret_hash, name, redirect_uris")
+    .eq("client_id", clientId)
+    .maybeSingle();
+  if (error) throw new Error(`getClient: ${error.message}`);
+  if (!data) return null;
+  return {
+    clientId: data.client_id,
+    clientSecretHash: data.client_secret_hash,
+    name: data.name,
+    redirectUris: data.redirect_uris,
+  };
 }
 
 export type StoreCodeInput = {
@@ -65,16 +77,17 @@ export type StoreCodeInput = {
 };
 
 export async function storeAuthorizationCode(input: StoreCodeInput): Promise<void> {
-  await db.insert(oauthCodes).values({
-    codeHash: hashToken(input.code),
-    userId: input.userId,
-    clientId: input.clientId,
-    redirectUri: input.redirectUri,
-    codeChallenge: input.codeChallenge,
-    codeChallengeMethod: input.codeChallengeMethod,
+  const { error } = await adminClient().from("oauth_codes").insert({
+    code_hash: hashToken(input.code),
+    user_id: input.userId,
+    client_id: input.clientId,
+    redirect_uri: input.redirectUri,
+    code_challenge: input.codeChallenge,
+    code_challenge_method: input.codeChallengeMethod,
     scopes: input.scopes,
-    expiresAt: new Date(Date.now() + input.ttlSeconds * 1000),
+    expires_at: new Date(Date.now() + input.ttlSeconds * 1000).toISOString(),
   });
+  if (error) throw new Error(`storeAuthorizationCode: ${error.message}`);
 }
 
 export type ConsumedCode = {
@@ -90,30 +103,27 @@ export async function consumeAuthorizationCode(
   code: string,
 ): Promise<ConsumedCode | null> {
   const codeHash = hashToken(code);
-  const now = new Date();
+  const nowIso = new Date().toISOString();
 
-  const rows = await db
-    .update(oauthCodes)
-    .set({ consumedAt: now })
-    .where(
-      and(
-        eq(oauthCodes.codeHash, codeHash),
-        isNull(oauthCodes.consumedAt),
-        gt(oauthCodes.expiresAt, now),
-      ),
-    )
-    .returning();
-
-  const row = rows[0];
-  if (!row) return null;
+  // Atomic consume: only succeeds when the row is unconsumed and unexpired.
+  const { data, error } = await adminClient()
+    .from("oauth_codes")
+    .update({ consumed_at: nowIso })
+    .eq("code_hash", codeHash)
+    .is("consumed_at", null)
+    .gt("expires_at", nowIso)
+    .select("user_id, client_id, redirect_uri, code_challenge, code_challenge_method, scopes")
+    .maybeSingle();
+  if (error) throw new Error(`consumeAuthorizationCode: ${error.message}`);
+  if (!data) return null;
 
   return {
-    userId: row.userId,
-    clientId: row.clientId,
-    redirectUri: row.redirectUri,
-    codeChallenge: row.codeChallenge,
-    codeChallengeMethod: row.codeChallengeMethod,
-    scopes: row.scopes,
+    userId: data.user_id,
+    clientId: data.client_id,
+    redirectUri: data.redirect_uri,
+    codeChallenge: data.code_challenge,
+    codeChallengeMethod: data.code_challenge_method,
+    scopes: data.scopes,
   };
 }
 
@@ -137,15 +147,17 @@ export async function issueTokens(params: {
     process.env.OAUTH_REFRESH_TOKEN_TTL_SECONDS ?? 30 * 24 * 3600,
   );
 
-  await db.insert(oauthTokens).values({
-    userId: params.userId,
-    clientId: params.clientId,
-    accessTokenHash: hashToken(accessToken),
-    refreshTokenHash: hashToken(refreshToken),
-    accessExpiresAt: new Date(Date.now() + accessTtlSeconds * 1000),
-    refreshExpiresAt: new Date(Date.now() + refreshTtlSeconds * 1000),
+  const now = Date.now();
+  const { error } = await adminClient().from("oauth_tokens").insert({
+    user_id: params.userId,
+    client_id: params.clientId,
+    access_token_hash: hashToken(accessToken),
+    refresh_token_hash: hashToken(refreshToken),
+    access_expires_at: new Date(now + accessTtlSeconds * 1000).toISOString(),
+    refresh_expires_at: new Date(now + refreshTtlSeconds * 1000).toISOString(),
     scopes: params.scopes,
   });
+  if (error) throw new Error(`issueTokens: ${error.message}`);
 
   return {
     accessToken,
@@ -155,17 +167,28 @@ export async function issueTokens(params: {
   };
 }
 
-export async function lookupAccessToken(accessToken: string) {
-  const rows = await db
-    .select()
-    .from(oauthTokens)
-    .where(
-      and(
-        eq(oauthTokens.accessTokenHash, hashToken(accessToken)),
-        isNull(oauthTokens.revokedAt),
-        gt(oauthTokens.accessExpiresAt, new Date()),
-      ),
-    )
-    .limit(1);
-  return rows[0] ?? null;
+export type AccessTokenSession = {
+  userId: string;
+  clientId: string;
+  scopes: string[];
+};
+
+export async function lookupAccessToken(
+  accessToken: string,
+): Promise<AccessTokenSession | null> {
+  const nowIso = new Date().toISOString();
+  const { data, error } = await adminClient()
+    .from("oauth_tokens")
+    .select("user_id, client_id, scopes")
+    .eq("access_token_hash", hashToken(accessToken))
+    .is("revoked_at", null)
+    .gt("access_expires_at", nowIso)
+    .maybeSingle();
+  if (error) throw new Error(`lookupAccessToken: ${error.message}`);
+  if (!data) return null;
+  return {
+    userId: data.user_id,
+    clientId: data.client_id,
+    scopes: data.scopes,
+  };
 }
