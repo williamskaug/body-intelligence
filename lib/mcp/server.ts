@@ -91,13 +91,10 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     {
       title: "Read a memory document",
       description:
-        "Read one of the user's memory documents by path. Returns the document content as text.",
+        "Read one of the user's memory documents by path. Returns { path, content, updated_at } or null if the path doesn't exist.",
       inputSchema: fsReadInputSchema,
     },
-    async (input) => {
-      const content = await fsRead(ctx.userId, input);
-      return { content: [{ type: "text", text: content }] };
-    },
+    async (input) => jsonResult(await fsRead(ctx.userId, input)),
   );
 
   server.registerTool(

@@ -9,17 +9,23 @@ export const fsReadInputSchema = {
     .describe("Document path, e.g. 'PROFILE.md' or 'CURRENT.md'"),
 };
 
+export type FsReadResult = {
+  path: string;
+  content: string;
+  updated_at: string;
+} | null;
+
 export async function fsRead(
   userId: string,
   input: { path: string },
-): Promise<string> {
+): Promise<FsReadResult> {
   const { data, error } = await adminClient()
     .from("documents")
-    .select("content")
+    .select("path, content, updated_at")
     .eq("user_id", userId)
     .eq("path", input.path)
     .maybeSingle();
   if (error) throw new Error(`fs_read: ${error.message}`);
-  if (!data) throw new Error(`Document not found: ${input.path}`);
-  return data.content;
+  if (!data) return null;
+  return data;
 }
