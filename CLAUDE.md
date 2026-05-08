@@ -57,8 +57,7 @@ body-intelligence/
 ├── lib/
 │   ├── db/
 │   │   ├── schema.ts                  Drizzle table definitions
-│   │   ├── client.ts                  Drizzle + postgres client
-│   │   └── migrations/
+│   │   └── client.ts                  Drizzle + postgres client
 │   ├── mcp/
 │   │   ├── server.ts                  MCP server bootstrap + tool registry
 │   │   └── tools/                     one file per tool
@@ -76,6 +75,8 @@ body-intelligence/
 ├── .claude/
 │   ├── settings.json
 │   └── commands/
+├── supabase/
+│   └── migrations/                    Drizzle-generated SQL; auto-applied on push to main
 └── (config: .env.example, .gitignore, README.md, package.json, tsconfig.json,
    next.config.ts, drizzle.config.ts, tailwind.config.ts)
 ```
@@ -179,7 +180,7 @@ The first time a user adds the BI MCP URL to Cowork, Cowork's MCP client runs DC
 - File naming: kebab-case for files, PascalCase for React components, camelCase for functions and variables.
 - No default exports for React components or library functions — named exports only.
 - Server Components by default. Client components mark `"use client"` and live in the same directory as their server parent.
-- All DB access through Drizzle. Raw SQL only inside `lib/db/migrations/`.
+- All DB access through Drizzle. Raw SQL only inside `supabase/migrations/` (Drizzle-generated, auto-applied by Supabase on push to main).
 - Zod schemas in `lib/schemas/` mirror Drizzle types — input validation at the MCP boundary; output types come from Drizzle's inferred types.
 - One MCP tool per file under `lib/mcp/tools/`. Tools are pure functions: `(input, ctx) => result`. Side effects (DB writes) happen through `ctx.db`.
 - Tests via `vitest`. Each tool ships with at least one happy-path test and one validation-failure test.
@@ -208,8 +209,8 @@ The first time a user adds the BI MCP URL to Cowork, Cowork's MCP client runs DC
 3. Install dev deps: `drizzle-kit`, `vitest`, `@types/node`, `@types/pg`
 4. Initialize shadcn-ui
 5. Create Supabase project (production + test). Configure Resend SMTP for Supabase Auth emails. Copy env vars into `.env.local`.
-6. Write `lib/db/schema.ts` (eight tables) and run first Drizzle migration
-7. Add RLS policies via Supabase SQL alongside the migration
+6. Write `lib/db/schema.ts` (eight tables); `pnpm drizzle-kit generate` writes SQL to `supabase/migrations/`; commit + push triggers Supabase auto-apply
+7. Add RLS policies as a follow-up migration in `supabase/migrations/` (Drizzle doesn't manage RLS — write the SQL by hand)
 8. Add the signup-trigger function that seeds `user_profiles` + the eight `documents` rows from `lib/memory/templates/`
 9. Implement OAuth AS routes (`/api/oauth/*`)
 10. Stub `/api/mcp/route.ts` with one tool (`fs_read`) end-to-end, validating Bearer tokens against `oauth_tokens`
