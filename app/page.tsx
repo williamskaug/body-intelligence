@@ -16,20 +16,20 @@ export default async function HomePage() {
             Body Intelligence
           </Link>
           <nav className="flex items-center gap-3 text-sm">
-            <Link
-              href="/legal/privacy"
-              className="text-muted-foreground hover:text-foreground"
-            >
-              Privacy
-            </Link>
-            <Link
-              href="/legal/terms"
-              className="text-muted-foreground hover:text-foreground"
-            >
-              Terms
-            </Link>
             {user ? (
               <>
+                <Link
+                  href="/agents"
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  Agents
+                </Link>
+                <Link
+                  href="/settings"
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  Settings
+                </Link>
                 <span className="ml-2 hidden text-muted-foreground sm:inline">
                   {user.email}
                 </span>
@@ -43,12 +43,26 @@ export default async function HomePage() {
                 </form>
               </>
             ) : (
-              <Link
-                href="/login"
-                className={buttonVariants({ size: "sm", className: "ml-2" })}
-              >
-                Sign in
-              </Link>
+              <>
+                <Link
+                  href="/legal/privacy"
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  Privacy
+                </Link>
+                <Link
+                  href="/legal/terms"
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  Terms
+                </Link>
+                <Link
+                  href="/login"
+                  className={buttonVariants({ size: "sm", className: "ml-2" })}
+                >
+                  Sign in
+                </Link>
+              </>
             )}
           </nav>
         </div>
@@ -68,22 +82,30 @@ export default async function HomePage() {
         </p>
         <div className="mt-10 flex items-center gap-3">
           {user ? (
-            <form action="/auth/signout" method="post">
-              <button type="submit" className={buttonVariants({ size: "lg" })}>
-                Sign out
-              </button>
-            </form>
+            <>
+              <Link href="/agents" className={buttonVariants({ size: "lg" })}>
+                Open recipe library
+              </Link>
+              <Link
+                href="/settings"
+                className={buttonVariants({ variant: "ghost", size: "lg" })}
+              >
+                Settings
+              </Link>
+            </>
           ) : (
-            <Link href="/login" className={buttonVariants({ size: "lg" })}>
-              Get started
-            </Link>
+            <>
+              <Link href="/login" className={buttonVariants({ size: "lg" })}>
+                Get started
+              </Link>
+              <Link
+                href="#how-it-works"
+                className={buttonVariants({ variant: "ghost", size: "lg" })}
+              >
+                How it works
+              </Link>
+            </>
           )}
-          <Link
-            href="#how-it-works"
-            className={buttonVariants({ variant: "ghost", size: "lg" })}
-          >
-            How it works
-          </Link>
         </div>
       </section>
 
