@@ -173,6 +173,41 @@ export type AccessTokenSession = {
   scopes: string[];
 };
 
+/**
+ * Rotates a refresh token: atomically revokes the old token row and issues a
+ * fresh access/refresh pair. Returns null if the refresh token is unknown,
+ * already used, expired, or doesn't belong to the expected client.
+ *
+ * The atomicity comes from the .update().is/gt/eq filters — concurrent
+ * refreshes can't both see the row as unrevoked.
+ */
+export async function rotateRefreshToken(
+  refreshToken: string,
+  expectedClientId: string,
+): Promise<IssuedTokens | null> {
+  const sb = adminClient();
+  const refreshHash = hashToken(refreshToken);
+  const nowIso = new Date().toISOString();
+
+  const { data, error } = await sb
+    .from("oauth_tokens")
+    .update({ revoked_at: nowIso })
+    .eq("refresh_token_hash", refreshHash)
+    .eq("client_id", expectedClientId)
+    .is("revoked_at", null)
+    .gt("refresh_expires_at", nowIso)
+    .select("user_id, client_id, scopes")
+    .maybeSingle();
+  if (error) throw new Error(`rotateRefreshToken: ${error.message}`);
+  if (!data) return null;
+
+  return issueTokens({
+    userId: data.user_id,
+    clientId: data.client_id,
+    scopes: data.scopes,
+  });
+}
+
 export async function lookupAccessToken(
   accessToken: string,
 ): Promise<AccessTokenSession | null> {
