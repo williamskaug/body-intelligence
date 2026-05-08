@@ -1,6 +1,6 @@
 # Body Intelligence (BI)
 
-Personal health intelligence — the same shape as Project Intelligence, but for the athlete-self instead of the work-self. Tracks workouts, sleep, nutrition, wellness check-ins, and health events. Stores everything as structured rows plus a markdown-style memory layer. **The app has no internal AI** — Claude does all reasoning over the data via the MCP surface this app exposes.
+Personal health intelligence — the same shape as Project Intelligence, but for the athlete-self instead of the work-self. Tracks workouts, sleep, meals, wellness check-ins, and health events. Stores everything as structured rows plus a markdown-style memory layer. **The app has no internal AI** — Claude does all reasoning over the data via the MCP surface this app exposes.
 
 ## Status
 
@@ -82,11 +82,12 @@ body-intelligence/
 
 ## Data model
 
-Seven Postgres tables. RLS on every user-scoped one, scoped to `auth.uid()`.
+Eight Postgres tables. RLS on every user-scoped one, scoped to `auth.uid()`.
 
 - `user_profiles` — one row per user, seeded on signup. `display_name`, `timezone` (IANA), `units_system` (`metric`/`imperial`), `locale`, `preferences` (jsonb forward-compat blob).
 - `workouts` — one row per workout. `date`, free-form `type`, `duration_min`, `distance_km`, `avg_hr`, `max_hr`, `rpe`, `shoes`, `source`, `source_id` (idempotency key for connector writes), `notes`.
 - `daily_entries` — one row per (user, date), enforced by unique. Sleep, HRV, RHR, weight, six 1–5 wellness scales (**5 = best, always, even for fatigue/soreness/stress**), and three free-text notes blocks (sleep, wellness, meals).
+- `meals` — one row per meal. `eaten_at`, `meal_type`, required `description`, optional `calories` and `protein_g`/`carbs_g`/`fat_g`/`fiber_g`, `notes`, `source`, `source_id` (same idempotency pattern as `workouts`). Macros nullable on purpose — manual logs are description-only; macros fill in via Phase 2 connector recipes (MyFitnessPal, Cronometer, Apple Health). Coexists with `daily_entries.meal_notes` (day's prose) and `NUTRITION.md` (dietary philosophy) — same split as workouts/`PRINCIPLES.md` and `health_events`/`HEALTH_LOG.md`.
 - `health_events` — append-only log of injuries, illnesses, symptoms. `date`, `kind`, `body_part`, `severity`, `notes`, `resolved_date`.
 - `documents` — virtual filesystem for memory files, keyed by `(user_id, path)`. Content is text. Standard paths: `MEMORY.md`, `PROFILE.md`, `PRINCIPLES.md`, `GOALS.md`, `CURRENT.md`, `HEALTH_LOG.md`, `NUTRITION.md`, `EQUIPMENT.md`.
 - `oauth_clients` — DCR-registered MCP clients (Cowork instances). Not user-scoped.
@@ -94,17 +95,18 @@ Seven Postgres tables. RLS on every user-scoped one, scoped to `auth.uid()`.
 
 Full DDL and RLS policies: `docs/schema.md`.
 
-## MCP surface (seven tools)
+## MCP surface (eight tools)
 
 Capture:
 - `log_workout(date, type, ...)` → upsert into `workouts`
 - `log_daily(date, ...partial)` → upsert into `daily_entries`; partial fields allowed
+- `log_meal(eaten_at, description, ...)` → upsert into `meals`; idempotent via `(source, source_id)` for connector writes
 - `log_health_event(date, kind, body_part, ...)` → insert into `health_events`
 - `fs_write(path, content)` → upsert into `documents`
 
 Read:
 - `fs_read(path)` / `fs_list(prefix?)` / `fs_search(query)` — virtual filesystem over `documents`
-- `get_recent(days, kinds=['workouts','daily','health_events'])` — typed bundle
+- `get_recent(days, kinds=['workouts','daily','meals','health_events'])` — typed bundle
 - `search_everything(query)` — text search across all entity tables + documents
 
 All tools authenticated via OAuth bearer token. RLS handles user scoping; tools never accept a `user_id` argument.
@@ -185,16 +187,16 @@ The first time a user adds the BI MCP URL to Cowork, Cowork's MCP client runs DC
 
 ## Build phases
 
-**Phase 1 — MVP (manual capture only).** Scaffolding, schema migrations, Supabase project, the seven MCP tools, OAuth AS + Supabase Auth integration, public signup with abuse hardening, four UI surfaces (marketing/login, /agents, /settings, /legal stubs), six seed recipes (onboarding + five capture/review), memory-file template seeding on user creation.
+**Phase 1 — MVP (manual capture only).** Scaffolding, schema migrations, Supabase project, the eight MCP tools, OAuth AS + Supabase Auth integration, public signup with abuse hardening, four UI surfaces (marketing/login, /agents, /settings, /legal stubs), six seed recipes (onboarding + five capture/review), memory-file template seeding on user creation.
 
-**Phase 2 — Connector recipes.** Two recipes (Garmin sync, Strava sync) that orchestrate external Claude connectors with BI's MCP. No code changes to BI itself; this is pure recipe authoring. Each recipe instructs Claude to read from a connector MCP and persist to BI via `log_workout` / `log_daily`, using `source` + `source_id` for idempotency.
+**Phase 2 — Connector recipes.** Garmin sync, Strava sync, and a nutrition-source sync (MyFitnessPal / Cronometer / Apple Health, whichever ships a Claude connector first) that orchestrate external connectors with BI's MCP. No code changes to BI itself; this is pure recipe authoring. Each recipe instructs Claude to read from a connector MCP and persist to BI via `log_workout` / `log_daily` / `log_meal`, using `source` + `source_id` for idempotency.
 
 **Phase 3 — Quality of life.** Dashboard page, better recipe library (categories + search), mobile-first capture polish.
 
 ## Status tracker
 
 **Done:**
-- Architecture and schema locked (seven tables including `user_profiles`)
+- Architecture and schema locked (eight tables including `user_profiles` and `meals`)
 - Design docs written (this `CLAUDE.md` plus `docs/`)
 - Eight memory file templates drafted in `lib/memory/templates/`
 - Onboarding recipe spec written
@@ -206,13 +208,13 @@ The first time a user adds the BI MCP URL to Cowork, Cowork's MCP client runs DC
 3. Install dev deps: `drizzle-kit`, `vitest`, `@types/node`, `@types/pg`
 4. Initialize shadcn-ui
 5. Create Supabase project (production + test). Configure Resend SMTP for Supabase Auth emails. Copy env vars into `.env.local`.
-6. Write `lib/db/schema.ts` (seven tables) and run first Drizzle migration
+6. Write `lib/db/schema.ts` (eight tables) and run first Drizzle migration
 7. Add RLS policies via Supabase SQL alongside the migration
 8. Add the signup-trigger function that seeds `user_profiles` + the eight `documents` rows from `lib/memory/templates/`
 9. Implement OAuth AS routes (`/api/oauth/*`)
 10. Stub `/api/mcp/route.ts` with one tool (`fs_read`) end-to-end, validating Bearer tokens against `oauth_tokens`
 11. **Spike: connect Cowork to the stub MCP and verify the OAuth + DCR handshake works.** Highest-risk step in the architecture — do it before building further. See `.claude/commands/spike-oauth.md`.
-12. Implement the remaining six MCP tools
+12. Implement the remaining seven MCP tools
 13. Write `lib/agents/recipe-data.ts` with all six Phase-1 recipes (onboarding + five capture/review)
 14. Build the four UI surfaces: marketing landing + magic-link login (with Turnstile/hCaptcha), `/agents` (recipe library + install modal + `required_connectors` badges), `/settings` (Connected Applications + profile + Run-Onboarding button), and `/legal/{terms,privacy}` stubs
 15. Deploy to Vercel; rerun the OAuth spike against the deployed URL; sanity-check signup → templates seeded → onboarding recipe → first daily check-in flow end-to-end

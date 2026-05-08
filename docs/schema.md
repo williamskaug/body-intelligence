@@ -85,6 +85,38 @@ Constraints: `unique (user_id, date)`. Check constraints on the 1–5 scales: `b
 
 Indexes: `(user_id, date desc)`.
 
+### `meals`
+
+One row per meal. Per-meal capture so recipes can aggregate calories/macros over time and correlate intake with workouts and wellness scales.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `uuid pk` | |
+| `user_id` | `uuid not null` | FK `auth.users(id)` |
+| `eaten_at` | `timestamptz not null` | meal timing matters for fasting windows, pre/post-workout fueling |
+| `meal_type` | `text` | free-form: `"breakfast"`, `"lunch"`, `"snack"`, `"pre-run"`, `"post-workout"` |
+| `description` | `text not null` | what was eaten, in prose: `"oatmeal, banana, almond butter"` |
+| `calories` | `integer` | nullable |
+| `protein_g` | `numeric(6,2)` | nullable |
+| `carbs_g` | `numeric(6,2)` | nullable |
+| `fat_g` | `numeric(6,2)` | nullable |
+| `fiber_g` | `numeric(6,2)` | nullable |
+| `notes` | `text` | how it felt, "skipped a gel", etc. |
+| `source` | `text not null default 'manual'` | free-form: `manual`, `mfp`, `cronometer`, `apple_health`, etc. |
+| `source_id` | `text` | nullable — idempotency key from the source. Required for connector writes; null for manual writes. |
+| `created_at` | `timestamptz default now()` | |
+| `updated_at` | `timestamptz default now()` | |
+
+Indexes: `(user_id, eaten_at desc)`.
+
+Constraints: `unique (user_id, source, source_id) where source_id is not null` — same idempotency pattern as `workouts`. Manual entries (no `source_id`) always insert, so two manual snacks with identical fields are allowed.
+
+**Coexistence with other surfaces:**
+- `daily_entries.meal_notes` stays — it's the day's free-text reflection ("felt heavy after lunch"), different grain.
+- `NUTRITION.md` stays — it's the dietary philosophy ("oatmeal pre-long-run works, gels above 80 min don't"). Same relationship `HEALTH_LOG.md` has to `health_events` and `PRINCIPLES.md` has to `workouts`.
+
+Macro fields are nullable on purpose: manual per-meal logging is usually description-only. Macros fill in via Phase 2 connector recipes (MyFitnessPal, Cronometer, Apple Health) where the source already has them.
+
 ### `health_events`
 
 Append-only log. Active issues = `resolved_date is null`.
@@ -165,6 +197,7 @@ Enable RLS on every user-scoped table:
 ```sql
 alter table workouts enable row level security;
 alter table daily_entries enable row level security;
+alter table meals enable row level security;
 alter table health_events enable row level security;
 alter table documents enable row level security;
 alter table oauth_tokens enable row level security;

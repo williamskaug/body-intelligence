@@ -1,6 +1,6 @@
 # MCP Tools
 
-The seven-tool surface that the BI MCP server exposes. All tools are authenticated via OAuth bearer token. None of them accept a `user_id` argument — RLS handles scoping automatically based on the resolved token.
+The eight-tool surface that the BI MCP server exposes. All tools are authenticated via OAuth bearer token. None of them accept a `user_id` argument — RLS handles scoping automatically based on the resolved token.
 
 ## Tool registry shape
 
@@ -83,6 +83,36 @@ Upsert the daily entry for `(user_id, date)`. Partial fields are allowed — cal
 **Notes:**
 - All wellness scales follow the **5 = best** convention. This is non-negotiable — recipe prompts and `get_recent` synthesis rely on it.
 - If the row exists, `updated_at` is set to `now()`. If it didn't exist, `created_at` and `updated_at` are both `now()`.
+
+---
+
+### `log_meal`
+
+Insert or upsert a meal. Manual writes (no `source_id`) always insert a new row; connector-driven writes (with `source_id`) upsert on the unique `(user_id, source, source_id)` key for idempotency across recipe re-runs.
+
+**Input:**
+```ts
+{
+  eaten_at: string;          // ISO timestamp. With offset (`2026-05-08T08:30:00+02:00`) preferred; bare `YYYY-MM-DDTHH:mm:ss` is resolved against the user's timezone.
+  meal_type?: string;        // free-form: "breakfast", "lunch", "snack", "pre-run", "post-workout"
+  description: string;       // required: what was eaten, in prose
+  calories?: number;
+  protein_g?: number;
+  carbs_g?: number;
+  fat_g?: number;
+  fiber_g?: number;
+  notes?: string;
+  source?: string;           // default "manual". Connector recipes pass "mfp", "cronometer", "apple_health", etc.
+  source_id?: string;        // optional. When provided, makes the write idempotent.
+}
+```
+
+**Output:** the created or updated meal row, plus a flag indicating which: `{ row, action: "inserted" | "updated" }`.
+
+**Notes:**
+- `description` is the only required field. A user logging "ate ramen" with no macros is a valid call — macros are nice-to-have, not required.
+- Manual logging is high-friction; expect this tool to fill mostly via Phase 2 connector recipes (MyFitnessPal, Cronometer, Apple Health). The `source` + `source_id` pattern matches `log_workout` exactly so connector authoring stays consistent across both.
+- BI does not split a meal into per-food rows. If a connector source has food-level granularity, the recipe is responsible for flattening to per-meal totals before calling this tool. Per-food modeling would require a foods catalog and adds schema-vs-payoff debt that v1 explicitly avoids.
 
 ---
 
@@ -185,7 +215,7 @@ Bundle recent rows across multiple entity tables. Used by nearly every Claude re
 ```ts
 {
   days: number;                                   // 1-90
-  kinds?: Array<"workouts" | "daily" | "health_events">; // default: all three
+  kinds?: Array<"workouts" | "daily" | "meals" | "health_events">; // default: all four
 }
 ```
 
@@ -194,6 +224,7 @@ Bundle recent rows across multiple entity tables. Used by nearly every Claude re
 {
   workouts: WorkoutRow[];           // ordered by date desc
   daily: DailyEntryRow[];           // ordered by date desc
+  meals: MealRow[];                 // ordered by eaten_at desc
   health_events: HealthEventRow[];  // ordered by date desc, includes unresolved older than `days`
 }
 ```
@@ -215,16 +246,16 @@ Text search across all entity tables and documents.
 **Output:**
 ```ts
 Array<{
-  kind: "workout" | "daily_entry" | "health_event" | "document";
+  kind: "workout" | "daily_entry" | "meal" | "health_event" | "document";
   id: string;
-  date?: string;        // for entity rows
+  date?: string;        // for entity rows (`eaten_at` date for meals)
   path?: string;        // for documents
   snippet: string;      // matched excerpt
   updated_at: string;
 }>
 ```
 
-Implementation: union four separate full-text queries and merge by `updated_at` desc with limit applied at the end.
+Implementation: union five separate full-text queries (workouts, daily_entries, meals, health_events, documents) and merge by `updated_at` desc with limit applied at the end.
 
 ---
 
