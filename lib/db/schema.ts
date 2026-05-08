@@ -203,6 +203,27 @@ export const oauthClients = pgTable("oauth_clients", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const oauthCodes = pgTable(
+  "oauth_codes",
+  {
+    codeHash: text("code_hash").primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => usersInAuth.id, { onDelete: "cascade" }),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => oauthClients.clientId, { onDelete: "cascade" }),
+    redirectUri: text("redirect_uri").notNull(),
+    codeChallenge: text("code_challenge").notNull(),
+    codeChallengeMethod: text("code_challenge_method").notNull().default("S256"),
+    scopes: text().array().notNull().default(sql`'{}'::text[]`),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("oauth_codes_expires_idx").on(t.expiresAt)],
+);
+
 export const oauthTokens = pgTable(
   "oauth_tokens",
   {
