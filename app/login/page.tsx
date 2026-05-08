@@ -76,5 +76,8 @@ function decodeErrorMessage(code: string): string {
   if (code === "invalid_email") return "Please enter a valid email address.";
   if (code === "missing_code") return "Magic link was missing — try sending a new one.";
   if (code === "no_user") return "Could not load your account. Try again.";
+  if (code === "otp_expired")
+    return "That link has expired or was already used. Send yourself a new one below.";
+  if (code === "access_denied") return "That link is no longer valid. Send a new one below.";
   return decodeURIComponent(code);
 }

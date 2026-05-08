@@ -9,6 +9,13 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get("code");
   const next = searchParams.get("next") ?? "/";
 
+  // Supabase appends ?error=...&error_code=... when the magic link is
+  // invalid, expired, or already-consumed (often by an email link scanner).
+  const errorCode = searchParams.get("error_code");
+  if (errorCode) {
+    return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(errorCode)}`);
+  }
+
   if (!code) {
     return NextResponse.redirect(`${origin}/login?error=missing_code`);
   }
