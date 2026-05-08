@@ -7,6 +7,7 @@ import { signInWithMagicLink } from "./actions";
 type SearchParams = Promise<{
   error?: string;
   sent?: string;
+  next?: string;
 }>;
 
 export default async function LoginPage({
@@ -14,14 +15,15 @@ export default async function LoginPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const { error, sent } = await searchParams;
+  const { error, sent, next } = await searchParams;
+  const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : "";
 
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (user) {
-    redirect("/");
+    redirect(safeNext || "/");
   }
 
   return (
@@ -57,6 +59,9 @@ export default async function LoginPage({
                 className="mt-1 block w-full rounded-md border bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </label>
+            {safeNext ? (
+              <input type="hidden" name="next" value={safeNext} />
+            ) : null}
             <Button type="submit" className="w-full" size="lg">
               Send magic link
             </Button>

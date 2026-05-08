@@ -1,8 +1,11 @@
+import { cookies } from "next/headers";
 import { type NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { TEMPLATE_PATHS, loadTemplates } from "@/lib/memory/templates";
 
 export const runtime = "nodejs";
+
+const NEXT_COOKIE = "bi_next";
 
 type EmailOtpType = "magiclink" | "signup" | "invite" | "recovery" | "email_change" | "email";
 
@@ -11,7 +14,15 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get("code");
   const tokenHash = searchParams.get("token_hash");
   const type = searchParams.get("type") as EmailOtpType | null;
-  const next = searchParams.get("next") ?? "/";
+
+  // Resolve the post-auth destination. Priority:
+  //   1. bi_next cookie set on /login (survives the round-trip through email)
+  //   2. ?next= on the callback URL (in case the email template carries it)
+  //   3. "/"
+  const cookieJar = await cookies();
+  const nextCookie = cookieJar.get(NEXT_COOKIE)?.value;
+  const nextParam = searchParams.get("next");
+  const next = pickSafeNext(nextCookie ?? nextParam ?? "/");
 
   // Supabase appends ?error=...&error_code=... when the magic link is
   // invalid, expired, or already-consumed (often by an email link scanner).
@@ -57,7 +68,15 @@ export async function GET(request: NextRequest) {
 
   await seedNewUser(supabase, user);
 
+  // Consume the cookie so a later sign-in doesn't re-redirect into a stale path.
+  if (nextCookie) cookieJar.delete(NEXT_COOKIE);
+
   return NextResponse.redirect(`${origin}${next}`);
+}
+
+function pickSafeNext(value: string): string {
+  if (value.startsWith("/") && !value.startsWith("//")) return value;
+  return "/";
 }
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
