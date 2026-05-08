@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { createClient } from "@/lib/supabase/server";
 import { signInWithMagicLink } from "./actions";
 
 type SearchParams = Promise<{
@@ -13,6 +15,14 @@ export default async function LoginPage({
   searchParams: SearchParams;
 }) {
   const { error, sent } = await searchParams;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user) {
+    redirect("/");
+  }
 
   return (
     <main className="flex flex-1 items-center justify-center px-6 py-16">
