@@ -96,11 +96,12 @@ End with a single sentence about what was logged or "all caught up."`,
 1. Call get_recent({days: 7}) to pull this week's workouts, daily entries, and active health events.
 2. Call get_recent({days: 28}) to pull the broader 4-week context for trends.
 3. fs_read PRINCIPLES.md, GOALS.md, and CURRENT.md.
+4. fs_list({ prefix: "daily/" }) to find this week's per-day vendor context files. fs_read each one written within the last 7 days for vendor-specific scores (Garmin training readiness, Whoop recovery, etc.) that don't live in the structured tables.
 
 Write a brief review covering:
 - Training load this week (workout count, total duration, perceived intensity from RPE)
 - How the week compares to the 4-week trend (heavier, lighter, same)
-- Recovery indicators: average HRV, RHR, sleep, fatigue scale trend
+- Recovery indicators: average HRV, RHR, sleep, fatigue scale trend, plus any vendor-side signals (e.g. Garmin readiness or training-status flags) from the daily/ files
 - Active health flags from health_events
 - One sentence on whether the week tracked toward GOALS.md
 

@@ -140,11 +140,12 @@ End with a single sentence about what was logged or "all caught up."`
 1. Call get_recent({days: 7}) to pull this week's workouts, daily entries, and active health events.
 2. Call get_recent({days: 28}) to pull the broader 4-week context for trends.
 3. fs_read PRINCIPLES.md, GOALS.md, and CURRENT.md.
+4. fs_list({ prefix: "daily/" }) to find this week's per-day vendor context files. fs_read each one written within the last 7 days for vendor-specific scores (Garmin training readiness, Whoop recovery, etc.) that don't live in the structured tables.
 
 Write a brief review covering:
 - Training load this week (workout count, total duration, perceived intensity from RPE)
 - How the week compares to the 4-week trend (heavier, lighter, same)
-- Recovery indicators: average HRV, RHR, sleep, fatigue scale trend
+- Recovery indicators: average HRV, RHR, sleep, fatigue scale trend, plus any vendor-side signals (e.g. Garmin readiness or training-status flags) from the daily/ files
 - Active health flags from health_events
 - One sentence on whether the week tracked toward GOALS.md
 
@@ -225,7 +226,7 @@ These compose external Claude connectors (Garmin, Strava, etc.) with the BI MCP.
   category: "connector",
   schedule: "0 7 * * *",                    // daily 7am
   description: "Pulls yesterday's sleep, HRV, RHR, and activities from Garmin and persists them to BI.",
-  required_tools: ["log_daily", "log_workout", "get_recent"],
+  required_tools: ["log_daily", "log_workout", "fs_write", "fs_read", "get_recent"],
   required_connectors: ["garmin"],
   prompt: `Sync yesterday's Garmin data into Body Intelligence.
 
@@ -238,8 +239,9 @@ You have access to two MCPs: a Garmin connector and the Body Intelligence (BI) M
    - Morning HRV
    - Resting heart rate
    - All activities (one entry per activity)
+   - Vendor-specific scores: training readiness, training status, body battery range, VO2 max, race predictions
 
-3. Call BI's log_daily with yesterday's date and the sleep + HRV + RHR fields. log_daily upserts on (user_id, date), so this is safe to re-run; manually-logged fields like fatigue/mood will not be overwritten because log_daily preserves untouched fields.
+3. Call BI's log_daily with yesterday's date and the canonical fields (sleep_h, hrv_ms, rhr_bpm, weight_kg if logged). log_daily upserts on (user_id, date), so this is safe to re-run; manually-logged fields like fatigue/mood will not be overwritten because log_daily preserves untouched fields.
 
 4. For each Garmin activity, call BI's log_workout with:
    - source: "garmin"
@@ -248,7 +250,9 @@ You have access to two MCPs: a Garmin connector and the Body Intelligence (BI) M
    - duration_min, distance_km, avg_hr, max_hr from the activity
    - notes: any Garmin-provided activity title or description
 
-5. End with a one-line summary of what was synced. Do not editorialize on the data.
+5. Write the vendor-specific context as a markdown document. Call fs_write({ path: "daily/<YYYY-MM-DD>.md", content: "..." }) with a Garmin section containing the proprietary scores from step 2 — training readiness, training status, body battery, VO2 max, sleep score, anything else worth capturing. If the file already exists (Whoop or Oura sync wrote first), fs_read it first and merge — keep other vendors' sections intact. The weekly-review recipe reads these files when synthesizing trends.
+
+6. End with a one-line summary of what was synced. Do not editorialize on the data.
 
 If the Garmin connector returns no data for yesterday (rest day, watch off charger), exit silently — don't write empty entries.`
 }
@@ -263,7 +267,7 @@ If the Garmin connector returns no data for yesterday (rest day, watch off charg
   category: "connector",
   schedule: "0 7 * * *",                    // daily 7am — runs after Garmin if both installed
   description: "Pulls yesterday's outdoor activities from Strava and persists them to BI.",
-  required_tools: ["log_workout", "get_recent"],
+  required_tools: ["log_workout", "fs_write", "fs_read", "get_recent"],
   required_connectors: ["strava"],
   prompt: `Sync yesterday's Strava activities into Body Intelligence.
 
@@ -271,7 +275,7 @@ You have access to a Strava connector and the BI MCP.
 
 1. Determine yesterday's date in the user's timezone (read PROFILE.md if needed).
 
-2. From the Strava connector, fetch yesterday's activities.
+2. From the Strava connector, fetch yesterday's activities (with segment efforts and any Strava-side metrics like relative effort / suffer score if available).
 
 3. For each activity, call BI's log_workout with:
    - source: "strava"
@@ -280,9 +284,11 @@ You have access to a Strava connector and the BI MCP.
    - duration_min, distance_km, avg_hr, max_hr
    - notes: the Strava activity title plus a brief description if present
 
-4. **Deduplication note for users with both Garmin and Strava:** Strava activities often originate from Garmin and will already have been written by the Garmin sync recipe with source: "garmin". The unique constraint is on (user_id, source, source_id), so the Strava write will succeed as a separate row — but this is intentional. Strava is the source of truth for route/segment data, while Garmin is the source of truth for HR. If users find this duplicative, they can disable one of the two sync recipes.
+4. If any Strava-side scores worth capturing came back (relative effort, suffer score, segment PRs, kudos count), write them into daily/<YYYY-MM-DD>.md under a "Strava" section. fs_read first to merge with other vendors' sections if the file exists.
 
-5. End with a one-line summary.
+5. **Deduplication note for users with both Garmin and Strava:** Strava activities often originate from Garmin and will already have been written by the Garmin sync recipe with source: "garmin". The unique constraint is on (user_id, source, source_id), so the Strava write will succeed as a separate row — but this is intentional. Strava is the source of truth for route/segment data, while Garmin is the source of truth for HR. If users find this duplicative, they can disable one of the two sync recipes.
+
+6. End with a one-line summary.
 
 If Strava returns no activities, exit silently.`
 }
