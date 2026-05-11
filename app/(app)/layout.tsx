@@ -23,6 +23,7 @@ export default async function AppLayout({
               Body Intelligence
             </Link>
             <nav className="flex items-center gap-1 text-sm">
+              <NavLink href="/data">Data</NavLink>
               <NavLink href="/agents">Agents</NavLink>
               <NavLink href="/settings">Settings</NavLink>
             </nav>
