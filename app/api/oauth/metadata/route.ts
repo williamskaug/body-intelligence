@@ -1,14 +1,19 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function getIssuer(): string {
-  return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+function deriveIssuer(request: NextRequest): string {
+  // Prefer the request's own origin so dev (any port) and prod (real domain)
+  // both produce correct discovery without env juggling.
+  const url = new URL(request.url);
+  const proto = request.headers.get("x-forwarded-proto") ?? url.protocol.replace(":", "");
+  const host = request.headers.get("x-forwarded-host") ?? url.host;
+  return `${proto}://${host}`;
 }
 
-export async function GET() {
-  const issuer = getIssuer();
+export async function GET(request: NextRequest) {
+  const issuer = deriveIssuer(request);
 
   return NextResponse.json({
     issuer,
