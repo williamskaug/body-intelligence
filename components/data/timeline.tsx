@@ -61,6 +61,8 @@ export type TimelineMeal = {
   carbs_g: string | null;
   fat_g: string | null;
   fiber_g: string | null;
+  notes: string | null;
+  source: string;
 };
 
 export type TimelineEvent = {
@@ -346,9 +348,9 @@ function DayCard({
       ) : null}
 
       {events.length > 0 ? (
-        <div className="mt-3 flex flex-wrap gap-1.5 px-5">
+        <div className="mt-3 flex flex-col gap-1.5 px-5">
           {events.map((e) => (
-            <EventChip key={e.id} event={e} />
+            <EventRow key={e.id} event={e} />
           ))}
         </div>
       ) : null}
@@ -424,9 +426,19 @@ function ContinuousChip({
 
 function WorkoutRow({ workout: w }: { workout: TimelineWorkout }) {
   const display = displayForType(w.type);
+  const primaryKeys = new Set(display.stats);
   const stats = display.stats
     .map((k) => formatStat(k, w))
     .filter((s): s is { label: string; value: string } => s != null);
+  // Secondary fields: anything captured that the type-specific display doesn't
+  // already surface. Avoids "—" placeholders but still shows everything we have.
+  const secondary: Array<{ label: string; value: string }> = [];
+  if (!primaryKeys.has("max_hr") && w.max_hr != null) {
+    secondary.push({ label: "max HR", value: String(w.max_hr) });
+  }
+  if (!primaryKeys.has("shoes") && w.shoes) {
+    secondary.push({ label: "shoes", value: w.shoes });
+  }
   return (
     <div className="flex flex-wrap items-center gap-2 text-sm">
       <span
@@ -440,6 +452,12 @@ function WorkoutRow({ workout: w }: { workout: TimelineWorkout }) {
           <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
             {s.label}
           </span>
+        </span>
+      ))}
+      {secondary.map((s, i) => (
+        <span key={`sec-${i}`} className="text-xs text-muted-foreground">
+          <span className="font-mono tabular-nums">{s.value}</span>{" "}
+          <span className="text-[10px] uppercase tracking-wide">{s.label}</span>
         </span>
       ))}
       {w.source !== "manual" ? (
@@ -463,45 +481,61 @@ function MealsRow({ meals }: { meals: TimelineMeal[] }) {
       <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
         Meals
       </span>
-      {sorted.map((m) => {
-        const hasMacros =
-          m.calories != null ||
-          m.protein_g != null ||
-          m.carbs_g != null ||
-          m.fat_g != null ||
-          m.fiber_g != null;
-        return (
-          <span
-            key={m.id}
-            className="inline-flex max-w-[20rem] items-center gap-1.5 rounded-md border bg-muted/30 px-2 py-1 text-xs"
-            title={`${m.eaten_at.slice(11, 16)} · ${m.description}`}
-          >
-            <span className="font-mono text-[10px] text-muted-foreground">
-              {m.eaten_at.slice(11, 16)}
-            </span>
-            {m.meal_type ? (
-              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                {m.meal_type}
-              </span>
-            ) : null}
-            <span className="truncate">{m.description}</span>
-            {hasMacros && m.calories != null ? (
-              <span className="font-mono tabular-nums text-muted-foreground">
-                {m.calories}kcal
-              </span>
-            ) : !hasMacros ? (
-              <span className="text-[10px] italic text-muted-foreground">
-                no macros
-              </span>
-            ) : null}
-            {m.fiber_g != null ? (
-              <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
-                · {Number(m.fiber_g).toFixed(0)}g fiber
-              </span>
-            ) : null}
+      {sorted.map((m) => (
+        <MealChip key={m.id} meal={m} />
+      ))}
+    </div>
+  );
+}
+
+function MealChip({ meal: m }: { meal: TimelineMeal }) {
+  const hasMacros =
+    m.calories != null ||
+    m.protein_g != null ||
+    m.carbs_g != null ||
+    m.fat_g != null ||
+    m.fiber_g != null;
+  const macroParts: string[] = [];
+  if (m.protein_g != null) macroParts.push(`${Number(m.protein_g).toFixed(0)}P`);
+  if (m.carbs_g != null) macroParts.push(`${Number(m.carbs_g).toFixed(0)}C`);
+  if (m.fat_g != null) macroParts.push(`${Number(m.fat_g).toFixed(0)}F`);
+  if (m.fiber_g != null) macroParts.push(`${Number(m.fiber_g).toFixed(0)}g fiber`);
+  const hasSecondaryLine = macroParts.length > 0 || !!m.notes;
+  return (
+    <div className="flex max-w-[22rem] flex-col gap-0.5 rounded-md border bg-muted/30 px-2 py-1 text-xs">
+      <div className="flex items-center gap-1.5">
+        <span className="font-mono text-[10px] text-muted-foreground">
+          {m.eaten_at.slice(11, 16)}
+        </span>
+        {m.meal_type ? (
+          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            {m.meal_type}
           </span>
-        );
-      })}
+        ) : null}
+        <span className="truncate">{m.description}</span>
+        {hasMacros && m.calories != null ? (
+          <span className="ml-auto font-mono tabular-nums text-muted-foreground">
+            {m.calories}kcal
+          </span>
+        ) : !hasMacros ? (
+          <span className="ml-auto text-[10px] italic text-muted-foreground">
+            no macros
+          </span>
+        ) : null}
+        {m.source !== "manual" ? (
+          <Badge variant="outline" className="text-[10px]">
+            {m.source}
+          </Badge>
+        ) : null}
+      </div>
+      {hasSecondaryLine ? (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 pl-[2.75rem] text-[10px] text-muted-foreground">
+          {macroParts.length > 0 ? (
+            <span className="font-mono tabular-nums">{macroParts.join(" · ")}</span>
+          ) : null}
+          {m.notes ? <span className="italic">· {m.notes}</span> : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -571,24 +605,30 @@ function hasActivity(d: TimelineDaily): boolean {
   );
 }
 
-function EventChip({ event: e }: { event: TimelineEvent }) {
+function EventRow({ event: e }: { event: TimelineEvent }) {
   const tone = e.resolved_date
     ? "bg-muted text-muted-foreground border-border"
     : "bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-500/30";
   return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs ${tone}`}
-      title={e.notes ?? undefined}
-    >
-      <span className="font-medium uppercase tracking-wide">{e.kind}</span>
-      {e.body_part ? <span>· {e.body_part}</span> : null}
-      {e.severity ? (
-        <span className="text-[10px] opacity-75">sev {e.severity}/5</span>
+    <div className="flex flex-col gap-0.5 text-xs">
+      <div className="flex flex-wrap items-center gap-2">
+        <span
+          className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 ${tone}`}
+        >
+          <span className="font-medium uppercase tracking-wide">{e.kind}</span>
+          {e.body_part ? <span>· {e.body_part}</span> : null}
+          {e.severity ? (
+            <span className="text-[10px] opacity-75">sev {e.severity}/5</span>
+          ) : null}
+          {e.resolved_date ? (
+            <span className="text-[10px] opacity-75">resolved {e.resolved_date}</span>
+          ) : null}
+        </span>
+      </div>
+      {e.notes ? (
+        <p className="pl-2 text-[11px] italic text-muted-foreground">{e.notes}</p>
       ) : null}
-      {e.resolved_date ? (
-        <span className="text-[10px] opacity-75">resolved {e.resolved_date}</span>
-      ) : null}
-    </span>
+    </div>
   );
 }
 
