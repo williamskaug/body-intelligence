@@ -3,6 +3,7 @@ import { jsonResult } from "./tools/shared";
 import { fsRead, fsReadInputSchema } from "./tools/fs-read";
 import { fsWrite, fsWriteInputSchema } from "./tools/fs-write";
 import { fsDelete, fsDeleteInputSchema } from "./tools/fs-delete";
+import { fsMove, fsMoveInputSchema } from "./tools/fs-move";
 import { fsList, fsListInputSchema } from "./tools/fs-list";
 import { fsSearch, fsSearchInputSchema } from "./tools/fs-search";
 import { logWorkout, logWorkoutInputSchema } from "./tools/log-workout";
@@ -197,7 +198,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     {
       title: "Write a memory document",
       description:
-        "Upsert a markdown document at the given path. Full-document writes only — no patch semantics. Standard paths: PROFILE.md, PRINCIPLES.md, GOALS.md, CURRENT.md, HEALTH_LOG.md, NUTRITION.md, EQUIPMENT.md, MEMORY.md. Custom paths allowed (e.g. notes/2026-camp.md).",
+        "Upsert a markdown document at the given path. Full-document writes only — no patch semantics. Paths are slash-separated and end in .md; folders are implicit (writing to 'notes/2026/altitude-camp.md' creates the file directly, no folder record needed). Standard top-level paths: PROFILE.md, PRINCIPLES.md, GOALS.md, CURRENT.md, HEALTH_LOG.md, NUTRITION.md, EQUIPMENT.md, MEMORY.md. Custom paths and nested folders are encouraged for organization — e.g. daily/YYYY-MM-DD.md for per-day vendor data, notes/<topic>.md for thematic notes.",
       inputSchema: fsWriteInputSchema,
     },
     async (input) => jsonResult(await fsWrite(ctx.userId, input)),
@@ -212,6 +213,17 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       inputSchema: fsDeleteInputSchema,
     },
     async (input) => jsonResult(await fsDelete(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "fs_move",
+    {
+      title: "Rename or move a memory document",
+      description:
+        "Atomically rename or relocate a markdown document. Useful for organizing files into folders or renaming on second-glance ('notes/camp.md' → 'notes/2026-altitude-camp.md'). Throws if the source doesn't exist or the destination is already taken (delete the destination first, or pick another path).",
+      inputSchema: fsMoveInputSchema,
+    },
+    async (input) => jsonResult(await fsMove(ctx.userId, input)),
   );
 
   // ---------- read ----------
@@ -230,9 +242,9 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   server.registerTool(
     "fs_list",
     {
-      title: "List memory documents",
+      title: "List memory documents and folders",
       description:
-        "List the user's memory documents (path + updated_at). Optional prefix filter for namespaced paths.",
+        "List the user's virtual filesystem. Returns { files: [{path, updated_at}], folders: [{path, file_count}] }. Folders are derived from the file paths — they're not stored as separate rows. Optional prefix scopes the listing to a subtree (e.g. 'notes/' returns everything below that folder).",
       inputSchema: fsListInputSchema,
     },
     async (input) => jsonResult(await fsList(ctx.userId, input)),

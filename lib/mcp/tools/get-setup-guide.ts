@@ -75,7 +75,21 @@ Eight standard markdown documents per user, seeded on signup:
 - NUTRITION.md  — what works, what wrecks them, dietary preferences
 - EQUIPMENT.md  — gear inventory, mileage, condition
 
-Custom paths are allowed (e.g. 'notes/2026-altitude-camp.md', 'daily/2026-05-11.md').
+The documents table is a virtual filesystem. Paths are slash-separated and end
+in .md. Folders are implicit — you create them by writing to a nested path.
+Use folders liberally to organize the user's memory:
+
+- daily/YYYY-MM-DD.md         — per-day vendor data, body battery, anomalies
+- notes/<topic>.md            — thematic notes ('notes/altitude-camp-2026.md')
+- weekly/YYYY-Www.md          — weekly-review outputs ('weekly/2026-W19.md')
+- races/<race-slug>.md        — per-race planning + post-race debriefs
+- recipes/<name>.md           — meals or fuelling notes the user wants saved
+
+fs_list returns BOTH files (flat list) AND folders (derived from path
+prefixes with file counts), so you can quickly see the user's existing
+structure. Pass a prefix like 'notes/' to scope to a subtree. fs_move
+renames or relocates a single file atomically; bulk reorganization is
+done by enumerating with fs_list + moving each file.
 
 Two format conventions matter because recipes parse them:
 - GOALS.md race blocks: '## Race: <name>' then '- Date: YYYY-MM-DD' + Tier/Distance/Goal/Notes.
