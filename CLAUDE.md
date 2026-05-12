@@ -115,8 +115,11 @@ Update by id:
 Delete:
 - `delete_workout(id)`, `delete_daily_entry(date)`, `delete_meal(id)`, `delete_health_event(id)`, `fs_delete(path)` → hard delete; throws if not found
 
+Filesystem ops:
+- `fs_move(from_path, to_path)` → atomic rename / relocate of a document
+
 Read:
-- `fs_read(path)` / `fs_list(prefix?)` / `fs_search(query)` — virtual filesystem over `documents`
+- `fs_read(path)` / `fs_list(prefix?)` / `fs_search(query)` — virtual filesystem over `documents`. `fs_list` returns both files and derived folders (with file counts).
 - `get_recent(days, kinds=['workouts','daily','meals','health_events'])` — typed bundle (use this to find ids for update/delete)
 - `search_everything(query)` — text search across all entity tables + documents
 
@@ -129,7 +132,13 @@ Full spec: `docs/mcp-tools.md`.
 
 ## Memory file layer
 
-Eight standard markdown documents per user, stored as rows in `documents`. Seeded on user creation from `lib/memory/templates/`. The user (or Claude on their behalf via `fs_write`) edits these over time.
+A virtual filesystem of markdown documents per user, stored as rows in `documents` keyed by `(user_id, path)`. Paths are slash-separated and end in `.md`; folders are implicit, derived from the path. Eight standard top-level files are seeded on user creation from `lib/memory/templates/`; everything else is created on demand. The user (or Claude on their behalf via `fs_write` / `fs_move` / `fs_delete`) maintains them.
+
+Suggested folder layout for organization:
+- `daily/YYYY-MM-DD.md` — per-day vendor scores (Body Battery, Readiness, etc.) and anomalies
+- `weekly/YYYY-Www.md` — weekly-review outputs
+- `notes/<topic>.md` — thematic notes (e.g. `notes/altitude-camp-2026.md`)
+- `races/<race-slug>.md` — per-race planning + post-race debriefs
 
 | Path | Purpose |
 |------|---------|

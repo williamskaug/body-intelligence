@@ -7,7 +7,8 @@ The surface covers full CRUD for every entity:
 - **Capture (insert / upsert):** `log_workout`, `log_daily`, `log_meal`, `log_health_event`, `fs_write`
 - **Update by id:** `update_workout`, `update_meal`, `update_health_event` (no `update_daily_entry` — `log_daily` already serves as both create and update via the `(user, date)` upsert)
 - **Delete:** `delete_workout`, `delete_daily_entry`, `delete_meal`, `delete_health_event`, `fs_delete`
-- **Read:** `fs_read`, `fs_list`, `fs_search`, `get_recent`, `search_everything`
+- **Filesystem ops:** `fs_move` (rename / relocate a document)
+- **Read:** `fs_read`, `fs_list` (files + folders), `fs_search`, `get_recent`, `search_everything`
 - **Onboarding:** `get_setup_guide`
 
 `update_*` and `delete_*` tools take the entity's `id` (find it via `get_recent` or `search_everything`). They both throw if no row matches the id under the calling user — there's no silent no-op. Prefer `update_*` over `delete_*` when correcting bad data, so history stays intact.
@@ -300,7 +301,8 @@ Upsert a memory document.
 
 **Notes:**
 - Full-document writes only in v1. Patch semantics (line-level edits) are a Phase 3 consideration.
-- Path is normalized: trim whitespace, no leading slashes, no path traversal segments. Reject anything containing `..` or `\0`.
+- Paths are slash-separated and must end in `.md`. Folders are implicit — writing to `notes/2026/altitude-camp.md` creates the file directly; no folder record needed. Standard top-level paths are the eight seeded memory files; everything else is freeform (encouraged to use nested folders for organization).
+- Path is normalized: trim whitespace, no leading or trailing slash, no `..`, no empty path segments, no hidden segments starting with `.`.
 
 ---
 
@@ -313,6 +315,29 @@ Hard delete a memory document by path. Irreversible. The eight standard memory f
 **Output:** `{ path, deleted: true }`
 
 **Errors:** throws if no document exists at that path under the calling user.
+
+---
+
+### `fs_move`
+
+Atomically rename or relocate a markdown document. Useful for organizing files into folders or correcting a name after the fact.
+
+**Input:**
+```ts
+{
+  from_path: string;         // existing path
+  to_path: string;           // new path (must not already exist)
+}
+```
+
+**Output:** `{ path, updated_at, moved: boolean }` — `moved: false` if `from_path === to_path` (no-op).
+
+**Errors:**
+- throws if `from_path` doesn't exist
+- throws if `to_path` is already taken (delete the destination first, or pick another name)
+
+**Notes:**
+- v1 moves a single file. Bulk folder rename (`notes/x/` → `notes/y/`) is done by enumerating with `fs_list({ prefix: "notes/x/" })` and moving each file.
 
 ---
 
@@ -333,18 +358,27 @@ Read a memory document.
 
 ### `fs_list`
 
-List documents. Optional prefix filter.
+List the user's virtual filesystem. Returns both files and derived folders.
 
 **Input:**
 ```ts
-{ prefix?: string }
+{ prefix?: string }            // optional path prefix to scope the listing
 ```
 
-**Output:** `Array<{ path, updated_at }>`. Sorted alphabetically by path.
+**Output:**
+```ts
+{
+  files: Array<{ path: string; updated_at: string }>;
+  folders: Array<{ path: string; file_count: number }>;  // ends in /
+}
+```
+
+`files` is sorted alphabetically by path. `folders` lists distinct directory prefixes derived from the file paths (a folder exists iff it contains at least one file, possibly nested). File counts are recursive — `notes/` reports the total number of files under it, including everything in subfolders.
 
 **Notes:**
 - Returns metadata only (no content) to keep responses small.
-- Prefix is matched as `path like '<prefix>%'` — useful if users start namespacing custom docs (e.g. `notes/2026-05-camp.md`).
+- Prefix scopes the result to a subtree. Use `prefix: "notes/"` to list one folder; omit it to list the whole filesystem.
+- Prefix is matched literally — SQL `LIKE` wildcards `%` and `_` are escaped, so users can have files with those characters in their paths.
 
 ---
 
