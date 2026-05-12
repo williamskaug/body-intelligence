@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Calendar } from "@/components/data/calendar";
 import { Documents } from "@/components/data/documents";
 import { Timeline } from "@/components/data/timeline";
 import { Trends } from "@/components/data/trends";
@@ -10,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 type SearchParams = Promise<{ days?: string; view?: string }>;
 
-type ViewKey = "timeline" | "trends";
+type ViewKey = "timeline" | "calendar" | "trends";
 
 const WINDOWS = [7, 30, 90, 365] as const;
 
@@ -124,6 +125,15 @@ export default async function DataPage({
             meals={(meals.data ?? []) as Parameters<typeof Timeline>[0]["meals"]}
             events={events}
           />
+        ) : view === "calendar" ? (
+          <Calendar
+            workouts={(workouts.data ?? []) as Parameters<typeof Calendar>[0]["workouts"]}
+            daily={(daily.data ?? []) as Parameters<typeof Calendar>[0]["daily"]}
+            meals={(meals.data ?? []) as Parameters<typeof Calendar>[0]["meals"]}
+            events={(healthRecent.data ?? []) as Parameters<typeof Calendar>[0]["events"]}
+            startDate={sinceDate}
+            endDate={todayDate}
+          />
         ) : (
           <Trends
             daily={(daily.data ?? []) as Parameters<typeof Trends>[0]["daily"]}
@@ -151,6 +161,7 @@ export default async function DataPage({
 function Tabs({ current, days }: { current: ViewKey; days: number }) {
   const tabs: Array<{ key: ViewKey; label: string }> = [
     { key: "timeline", label: "Timeline" },
+    { key: "calendar", label: "Calendar" },
     { key: "trends", label: "Trends" },
   ];
   return (
@@ -237,7 +248,9 @@ function parseDays(raw: string | undefined): number {
 }
 
 function parseView(raw: string | undefined): ViewKey {
-  return raw === "trends" ? "trends" : "timeline";
+  if (raw === "trends") return "trends";
+  if (raw === "calendar") return "calendar";
+  return "timeline";
 }
 
 function mergeEvents<T extends { id: string }>(a: T[], b: T[]): T[] {
