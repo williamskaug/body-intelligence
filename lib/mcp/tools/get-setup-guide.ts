@@ -35,8 +35,9 @@ decisions to BI — there is no logic on the server side beyond CRUD.
   no authoritative source is available — never skip a meal write to avoid
   estimating). fiber_g optional. Day-level prose lives in daily_entries.meal_notes;
   dietary philosophy lives in NUTRITION.md.
-- health_events — append-only log of injuries / illnesses / symptoms. kind is one of
+- health_events — injuries / illnesses / symptoms. kind is one of
   'injury' | 'illness' | 'symptom'. resolved_date null = still active.
+  Use update_health_event with resolved_date to mark an event as past.
 - documents — virtual filesystem keyed by (user, path). Markdown content. Eight
   standard paths seeded on signup (see Memory layer below).
 
@@ -54,6 +55,12 @@ decisions to BI — there is no logic on the server side beyond CRUD.
 - Dates are stored as DATE in the user's local sense — no timezone conversion on
   the server. eaten_at on meals is the only true timestamp.
 - All writes are user-scoped automatically. Tools never accept a user_id argument.
+- Full CRUD is available through MCP. log_* tools insert/upsert; update_* tools
+  patch existing rows by id; delete_* tools hard-delete. Daily entries don't
+  have an update_* — log_daily already serves as both create and update via
+  the (user, date) upsert. Prefer update over delete when correcting bad
+  data — deletion loses history. Resolve a health event by calling
+  update_health_event with resolved_date, not by deleting it.
 
 # Memory layer
 
