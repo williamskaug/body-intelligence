@@ -96,21 +96,34 @@ Eight Postgres tables. RLS on every user-scoped one, scoped to `auth.uid()`.
 
 Full DDL and RLS policies: `docs/schema.md`.
 
-## MCP surface (eight tools)
+## MCP surface
 
-Capture:
-- `log_workout(date, type, ...)` → upsert into `workouts`
-- `log_daily(date, ...partial)` → upsert into `daily_entries`; partial fields allowed
-- `log_meal(eaten_at, description, ...)` → upsert into `meals`; idempotent via `(source, source_id)` for connector writes
+Full CRUD over every entity, plus a virtual filesystem for the memory layer. All tools authenticated via OAuth bearer token. RLS handles user scoping; tools never accept a `user_id` argument.
+
+Capture (insert / upsert):
+- `log_workout(date, type, ...)` → insert/upsert into `workouts`
+- `log_daily(date, ...partial)` → upsert into `daily_entries`; partial fields allowed (also the update path)
+- `log_meal(eaten_at, description, calories, protein_g, carbs_g, fat_g, ...)` → insert/upsert into `meals`; calories and macros required; idempotent via `(source, source_id)` for connector writes
 - `log_health_event(date, kind, body_part, ...)` → insert into `health_events`
 - `fs_write(path, content)` → upsert into `documents`
 
+Update by id:
+- `update_workout(id, ...partial)` → patch fields on an existing workout
+- `update_meal(id, ...partial)` → patch fields on an existing meal (macros not required here, unlike `log_meal`)
+- `update_health_event(id, ...partial)` → patch fields; pass `resolved_date` to mark an event resolved (or `null` to re-open)
+
+Delete:
+- `delete_workout(id)`, `delete_daily_entry(date)`, `delete_meal(id)`, `delete_health_event(id)`, `fs_delete(path)` → hard delete; throws if not found
+
 Read:
 - `fs_read(path)` / `fs_list(prefix?)` / `fs_search(query)` — virtual filesystem over `documents`
-- `get_recent(days, kinds=['workouts','daily','meals','health_events'])` — typed bundle
+- `get_recent(days, kinds=['workouts','daily','meals','health_events'])` — typed bundle (use this to find ids for update/delete)
 - `search_everything(query)` — text search across all entity tables + documents
 
-All tools authenticated via OAuth bearer token. RLS handles user scoping; tools never accept a `user_id` argument.
+Onboarding:
+- `get_setup_guide()` → returns the usage guide for new MCP sessions
+
+There is no `update_daily_entry` — `log_daily` already serves as both create and update via the `(user, date)` upsert. Prefer `update_*` over `delete_*` when correcting bad data so history stays intact.
 
 Full spec: `docs/mcp-tools.md`.
 

@@ -2,12 +2,29 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { jsonResult } from "./tools/shared";
 import { fsRead, fsReadInputSchema } from "./tools/fs-read";
 import { fsWrite, fsWriteInputSchema } from "./tools/fs-write";
+import { fsDelete, fsDeleteInputSchema } from "./tools/fs-delete";
 import { fsList, fsListInputSchema } from "./tools/fs-list";
 import { fsSearch, fsSearchInputSchema } from "./tools/fs-search";
 import { logWorkout, logWorkoutInputSchema } from "./tools/log-workout";
+import { updateWorkout, updateWorkoutInputSchema } from "./tools/update-workout";
+import { deleteWorkout, deleteWorkoutInputSchema } from "./tools/delete-workout";
 import { logDaily, logDailyInputSchema } from "./tools/log-daily";
+import {
+  deleteDailyEntry,
+  deleteDailyEntryInputSchema,
+} from "./tools/delete-daily-entry";
 import { logMeal, logMealInputSchema } from "./tools/log-meal";
+import { updateMeal, updateMealInputSchema } from "./tools/update-meal";
+import { deleteMeal, deleteMealInputSchema } from "./tools/delete-meal";
 import { logHealthEvent, logHealthEventInputSchema } from "./tools/log-health-event";
+import {
+  updateHealthEvent,
+  updateHealthEventInputSchema,
+} from "./tools/update-health-event";
+import {
+  deleteHealthEvent,
+  deleteHealthEventInputSchema,
+} from "./tools/delete-health-event";
 import { getRecent, getRecentInputSchema } from "./tools/get-recent";
 import { searchEverything, searchEverythingInputSchema } from "./tools/search-everything";
 import {
@@ -67,14 +84,47 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    "update_workout",
+    {
+      title: "Update a workout by id",
+      description:
+        "Patch fields on an existing workout. Only the fields you pass are touched; the rest are preserved. Use this for after-the-fact corrections. Find the id via get_recent or search_everything.",
+      inputSchema: updateWorkoutInputSchema,
+    },
+    async (input) => jsonResult(await updateWorkout(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "delete_workout",
+    {
+      title: "Delete a workout by id",
+      description:
+        "Hard delete a workout row. Irreversible. Use sparingly — prefer update_workout when correcting bad data so historical trends stay intact.",
+      inputSchema: deleteWorkoutInputSchema,
+    },
+    async (input) => jsonResult(await deleteWorkout(ctx.userId, input)),
+  );
+
+  server.registerTool(
     "log_daily",
     {
       title: "Log or update the daily entry",
       description:
-        "Upsert the daily entry for (user, date). Partial fields allowed. All wellness scales follow 5 = best (fatigue/soreness/stress are inverted relative to their natural meaning so 5 is always the good direction).",
+        "Upsert the daily entry for (user, date). Partial fields allowed — this is also the update path: re-call with any subset of fields and only those change. All wellness scales follow 5 = best (fatigue/soreness/stress are inverted relative to their natural meaning so 5 is always the good direction).",
       inputSchema: logDailyInputSchema,
     },
     async (input) => jsonResult(await logDaily(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "delete_daily_entry",
+    {
+      title: "Delete the daily entry for a date",
+      description:
+        "Hard delete the daily_entries row for (user, date). Irreversible. Use sparingly — prefer log_daily with corrected values when fixing bad data.",
+      inputSchema: deleteDailyEntryInputSchema,
+    },
+    async (input) => jsonResult(await deleteDailyEntry(ctx.userId, input)),
   );
 
   server.registerTool(
@@ -89,14 +139,57 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    "update_meal",
+    {
+      title: "Update a meal by id",
+      description:
+        "Patch fields on an existing meal. Pass any subset of fields; only those change. Unlike log_meal, macro fields are NOT required here — this is for fixing existing rows. To clear a stale value, pass null explicitly.",
+      inputSchema: updateMealInputSchema,
+    },
+    async (input) => jsonResult(await updateMeal(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "delete_meal",
+    {
+      title: "Delete a meal by id",
+      description: "Hard delete a meal row. Irreversible.",
+      inputSchema: deleteMealInputSchema,
+    },
+    async (input) => jsonResult(await deleteMeal(ctx.userId, input)),
+  );
+
+  server.registerTool(
     "log_health_event",
     {
       title: "Log a health event",
       description:
-        "Append-only log for injuries, illnesses, and symptoms. severity is 1-5 with 5 = most severe — note this is OPPOSITE direction from the wellness scales.",
+        "Insert a new injury, illness, or symptom. severity is 1-5 with 5 = most severe — note this is OPPOSITE direction from the wellness scales. To mark an event as resolved later, call update_health_event with resolved_date.",
       inputSchema: logHealthEventInputSchema,
     },
     async (input) => jsonResult(await logHealthEvent(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "update_health_event",
+    {
+      title: "Update a health event by id",
+      description:
+        "Patch fields on an existing health event. This is also how you RESOLVE an event — pass resolved_date with the date the issue cleared. Pass resolved_date: null to re-open a previously-resolved event.",
+      inputSchema: updateHealthEventInputSchema,
+    },
+    async (input) => jsonResult(await updateHealthEvent(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "delete_health_event",
+    {
+      title: "Delete a health event by id",
+      description:
+        "Hard delete a health event row. Irreversible. Prefer update_health_event with resolved_date when an event is simply over — deletion loses the history entirely.",
+      inputSchema: deleteHealthEventInputSchema,
+    },
+    async (input) => jsonResult(await deleteHealthEvent(ctx.userId, input)),
   );
 
   server.registerTool(
@@ -108,6 +201,17 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       inputSchema: fsWriteInputSchema,
     },
     async (input) => jsonResult(await fsWrite(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "fs_delete",
+    {
+      title: "Delete a memory document",
+      description:
+        "Hard delete a document at the given path. Irreversible. The eight standard memory files (MEMORY.md, PROFILE.md, etc.) are only seeded once on signup — deleting one will not bring it back. Prefer fs_write with replacement content when the file should keep existing.",
+      inputSchema: fsDeleteInputSchema,
+    },
+    async (input) => jsonResult(await fsDelete(ctx.userId, input)),
   );
 
   // ---------- read ----------

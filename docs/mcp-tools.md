@@ -1,6 +1,16 @@
 # MCP Tools
 
-The eight-tool surface that the BI MCP server exposes. All tools are authenticated via OAuth bearer token. None of them accept a `user_id` argument — RLS handles scoping automatically based on the resolved token.
+The MCP surface the BI server exposes. All tools are authenticated via OAuth bearer token. None of them accept a `user_id` argument — RLS handles scoping automatically based on the resolved token.
+
+The surface covers full CRUD for every entity:
+
+- **Capture (insert / upsert):** `log_workout`, `log_daily`, `log_meal`, `log_health_event`, `fs_write`
+- **Update by id:** `update_workout`, `update_meal`, `update_health_event` (no `update_daily_entry` — `log_daily` already serves as both create and update via the `(user, date)` upsert)
+- **Delete:** `delete_workout`, `delete_daily_entry`, `delete_meal`, `delete_health_event`, `fs_delete`
+- **Read:** `fs_read`, `fs_list`, `fs_search`, `get_recent`, `search_everything`
+- **Onboarding:** `get_setup_guide`
+
+`update_*` and `delete_*` tools take the entity's `id` (find it via `get_recent` or `search_everything`). They both throw if no row matches the id under the calling user — there's no silent no-op. Prefer `update_*` over `delete_*` when correcting bad data, so history stays intact.
 
 ## Tool registry shape
 
@@ -54,6 +64,44 @@ Insert or upsert a workout. Manual writes (no `source_id`) always insert a new r
 
 ---
 
+### `update_workout`
+
+Patch fields on an existing workout by id. Only the fields you pass are touched; the rest are preserved. Use this for after-the-fact corrections (wrong distance logged, RPE filled in later, notes clarified). Find the id via `get_recent` or `search_everything`.
+
+**Input:**
+```ts
+{
+  id: string;                // workout uuid
+  date?: string;
+  type?: string;
+  duration_min?: number | null;
+  distance_km?: number | null;
+  avg_hr?: number | null;
+  max_hr?: number | null;
+  rpe?: number | null;
+  shoes?: string | null;
+  notes?: string | null;
+}
+```
+
+Pass `null` explicitly to clear a previously-set value. Omitting a key leaves it untouched.
+
+**Output:** the updated workout row.
+
+**Errors:** throws `"update_workout: workout <id> not found"` if no row matches the id under the calling user.
+
+---
+
+### `delete_workout`
+
+Hard delete a workout row by id. Irreversible. Prefer `update_workout` over `delete_workout` when correcting bad data — deleting loses the historical trail.
+
+**Input:** `{ id: string }`
+
+**Output:** `{ id, deleted: true }`
+
+---
+
 ### `log_daily`
 
 Upsert the daily entry for `(user_id, date)`. Partial fields are allowed — calling with only `{ date, sleep_h, hrv_ms }` updates those fields and leaves the rest untouched.
@@ -101,6 +149,19 @@ Upsert the daily entry for `(user_id, date)`. Partial fields are allowed — cal
 **Notes:**
 - All wellness scales follow the **5 = best** convention. This is non-negotiable — recipe prompts and `get_recent` synthesis rely on it.
 - If the row exists, `updated_at` is set to `now()`. If it didn't exist, `created_at` and `updated_at` are both `now()`.
+- There is no `update_daily_entry`. `log_daily` is also the update path — call it again with any subset of fields and only those change.
+
+---
+
+### `delete_daily_entry`
+
+Hard delete the `daily_entries` row for a given date. Irreversible. Prefer calling `log_daily` again with corrected values when fixing bad data; reach for delete only when the whole row should be gone (e.g. accidental entry for a future date).
+
+**Input:** `{ date: string }` (YYYY-MM-DD)
+
+**Output:** `{ id, date, deleted: true }`
+
+**Errors:** throws if no daily entry exists for that date.
 
 ---
 
@@ -134,9 +195,43 @@ Insert or upsert a meal. Manual writes (no `source_id`) always insert a new row;
 
 ---
 
+### `update_meal`
+
+Patch fields on an existing meal by id. Pass any subset of fields; only those change. Unlike `log_meal`, macro fields are NOT required here — this tool is for fixing existing rows, so a partial patch can update just the description without re-asserting macros. Pass `null` explicitly to clear a stale value.
+
+**Input:**
+```ts
+{
+  id: string;                // meal uuid
+  eaten_at?: string;
+  meal_type?: string | null;
+  description?: string;
+  calories?: number | null;
+  protein_g?: number | null;
+  carbs_g?: number | null;
+  fat_g?: number | null;
+  fiber_g?: number | null;
+  notes?: string | null;
+}
+```
+
+**Output:** the updated meal row.
+
+---
+
+### `delete_meal`
+
+Hard delete a meal row by id. Irreversible.
+
+**Input:** `{ id: string }`
+
+**Output:** `{ id, deleted: true }`
+
+---
+
 ### `log_health_event`
 
-Insert a row in `health_events`. Append-only.
+Insert a row in `health_events`.
 
 **Input:**
 ```ts
@@ -154,7 +249,38 @@ Insert a row in `health_events`. Append-only.
 
 **Notes:**
 - This is the only entity with a 1–5 scale that doesn't follow the "5 = best" convention. Health events are inherently bad, so 5 = worst makes more sense at the call site.
-- To mark an event resolved later, the user calls this tool again — but **no, they don't**. Resolution happens via a separate flow: either `fs_write` to `HEALTH_LOG.md` (qualitative resolution note) or a future `update_health_event` tool. For Phase 1, resolution is implicit (the user just stops mentioning it) and `HEALTH_LOG.md` carries the qualitative narrative.
+- To mark an event resolved, call `update_health_event` with `resolved_date`. Qualitative narrative still lives in `HEALTH_LOG.md` via `fs_write`.
+
+---
+
+### `update_health_event`
+
+Patch fields on an existing health event by id. This is also the resolution path — pass `resolved_date` with the date the issue cleared. Pass `resolved_date: null` to re-open a previously-resolved event.
+
+**Input:**
+```ts
+{
+  id: string;
+  date?: string;
+  kind?: "injury" | "illness" | "symptom";
+  body_part?: string | null;
+  severity?: number | null;
+  notes?: string | null;
+  resolved_date?: string | null;  // ISO date or null to re-open
+}
+```
+
+**Output:** the updated health_events row.
+
+---
+
+### `delete_health_event`
+
+Hard delete a health event row by id. Irreversible. Prefer `update_health_event` with `resolved_date` when an event is simply over — deletion loses the history entirely. Reach for delete only when the event was logged in error.
+
+**Input:** `{ id: string }`
+
+**Output:** `{ id, deleted: true }`
 
 ---
 
@@ -175,6 +301,18 @@ Upsert a memory document.
 **Notes:**
 - Full-document writes only in v1. Patch semantics (line-level edits) are a Phase 3 consideration.
 - Path is normalized: trim whitespace, no leading slashes, no path traversal segments. Reject anything containing `..` or `\0`.
+
+---
+
+### `fs_delete`
+
+Hard delete a memory document by path. Irreversible. The eight standard memory files are only seeded once on signup — deleting one will not bring it back. Prefer `fs_write` with replacement content when the file should keep existing.
+
+**Input:** `{ path: string }`
+
+**Output:** `{ path, deleted: true }`
+
+**Errors:** throws if no document exists at that path under the calling user.
 
 ---
 
