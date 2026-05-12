@@ -57,7 +57,9 @@ export default async function DataPage({
       .order("date", { ascending: false }),
     sb
       .from("meals")
-      .select("id, eaten_at, meal_type, description, calories, protein_g, carbs_g, fat_g, fiber_g")
+      .select(
+        "id, eaten_at, meal_type, description, calories, protein_g, carbs_g, fat_g, fiber_g, notes, source",
+      )
       .eq("user_id", user.id)
       .gte("eaten_at", sinceIso)
       .order("eaten_at", { ascending: false }),
