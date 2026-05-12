@@ -1,84 +1,19 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Badge } from "@/components/ui/badge";
+import { Calendar } from "@/components/data/calendar";
+import { Documents } from "@/components/data/documents";
+import { Timeline } from "@/components/data/timeline";
+import { Trends } from "@/components/data/trends";
 import { adminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-type SearchParams = Promise<{ days?: string }>;
+type SearchParams = Promise<{ days?: string; view?: string }>;
 
-type Workout = {
-  id: string;
-  date: string;
-  type: string;
-  duration_min: number | null;
-  distance_km: string | null;
-  avg_hr: number | null;
-  max_hr: number | null;
-  rpe: number | null;
-  shoes: string | null;
-  source: string;
-  notes: string | null;
-};
+type ViewKey = "timeline" | "calendar" | "trends";
 
-type DailyEntry = {
-  id: string;
-  date: string;
-  sleep_h: string | null;
-  sleep_deep_min: number | null;
-  sleep_light_min: number | null;
-  sleep_rem_min: number | null;
-  sleep_awake_min: number | null;
-  hrv_ms: number | null;
-  rhr_bpm: number | null;
-  spo2_avg_pct: string | null;
-  respiration_avg_brpm: string | null;
-  weight_kg: string | null;
-  body_fat_pct: string | null;
-  steps: number | null;
-  active_calories: number | null;
-  floors_climbed: number | null;
-  intensity_min_moderate: number | null;
-  intensity_min_vigorous: number | null;
-  fatigue: number | null;
-  soreness: number | null;
-  mood: number | null;
-  stress: number | null;
-  motivation: number | null;
-  sleep_quality: number | null;
-  sleep_notes: string | null;
-  wellness_notes: string | null;
-  meal_notes: string | null;
-};
-
-type Meal = {
-  id: string;
-  eaten_at: string;
-  meal_type: string | null;
-  description: string;
-  calories: number | null;
-  protein_g: string | null;
-  carbs_g: string | null;
-  fat_g: string | null;
-  source: string;
-};
-
-type HealthEvent = {
-  id: string;
-  date: string;
-  kind: string;
-  body_part: string | null;
-  severity: number | null;
-  notes: string | null;
-  resolved_date: string | null;
-};
-
-type Document = {
-  path: string;
-  content: string;
-  updated_at: string;
-};
+const WINDOWS = [7, 30, 90, 365] as const;
 
 export default async function DataPage({
   searchParams,
@@ -93,124 +28,215 @@ export default async function DataPage({
 
   const params = await searchParams;
   const days = parseDays(params.days);
+  const view = parseView(params.view);
 
-  const since = new Date();
-  since.setUTCDate(since.getUTCDate() - days);
+  const today = new Date();
+  const todayDate = today.toISOString().slice(0, 10);
+  const since = new Date(today);
+  since.setUTCDate(since.getUTCDate() - days + 1);
   const sinceDate = since.toISOString().slice(0, 10);
   const sinceIso = since.toISOString();
 
   const sb = adminClient();
-
-  const [workouts, daily, meals, healthRecent, healthOpenOlder, documents] =
-    await Promise.all([
-      sb
-        .from("workouts")
-        .select(
-          "id, date, type, duration_min, distance_km, avg_hr, max_hr, rpe, shoes, source, notes",
-        )
-        .eq("user_id", user.id)
-        .gte("date", sinceDate)
-        .order("date", { ascending: false }),
-      sb
-        .from("daily_entries")
-        .select(
-          "id, date, sleep_h, sleep_deep_min, sleep_light_min, sleep_rem_min, sleep_awake_min, hrv_ms, rhr_bpm, spo2_avg_pct, respiration_avg_brpm, weight_kg, body_fat_pct, steps, active_calories, floors_climbed, intensity_min_moderate, intensity_min_vigorous, fatigue, soreness, mood, stress, motivation, sleep_quality, sleep_notes, wellness_notes, meal_notes",
-        )
-        .eq("user_id", user.id)
-        .gte("date", sinceDate)
-        .order("date", { ascending: false }),
-      sb
-        .from("meals")
-        .select(
-          "id, eaten_at, meal_type, description, calories, protein_g, carbs_g, fat_g, source",
-        )
-        .eq("user_id", user.id)
-        .gte("eaten_at", sinceIso)
-        .order("eaten_at", { ascending: false }),
-      sb
-        .from("health_events")
-        .select("id, date, kind, body_part, severity, notes, resolved_date")
-        .eq("user_id", user.id)
-        .gte("date", sinceDate)
-        .order("date", { ascending: false }),
-      sb
-        .from("health_events")
-        .select("id, date, kind, body_part, severity, notes, resolved_date")
-        .eq("user_id", user.id)
-        .lt("date", sinceDate)
-        .is("resolved_date", null)
-        .order("date", { ascending: false }),
-      sb
-        .from("documents")
-        .select("path, content, updated_at")
-        .eq("user_id", user.id)
-        .order("path", { ascending: true }),
-    ]);
+  const [workouts, daily, meals, healthRecent, healthOpenOlder, documents] = await Promise.all([
+    sb
+      .from("workouts")
+      .select(
+        "id, date, type, duration_min, distance_km, avg_hr, max_hr, rpe, shoes, source, notes",
+      )
+      .eq("user_id", user.id)
+      .gte("date", sinceDate)
+      .order("date", { ascending: false }),
+    sb
+      .from("daily_entries")
+      .select(
+        "id, date, sleep_h, hrv_ms, rhr_bpm, weight_kg, fatigue, soreness, mood, stress, motivation, sleep_quality, sleep_notes, wellness_notes, meal_notes",
+      )
+      .eq("user_id", user.id)
+      .gte("date", sinceDate)
+      .order("date", { ascending: false }),
+    sb
+      .from("meals")
+      .select("id, eaten_at, meal_type, description, calories, protein_g, carbs_g, fat_g")
+      .eq("user_id", user.id)
+      .gte("eaten_at", sinceIso)
+      .order("eaten_at", { ascending: false }),
+    sb
+      .from("health_events")
+      .select("id, date, kind, body_part, severity, notes, resolved_date")
+      .eq("user_id", user.id)
+      .gte("date", sinceDate)
+      .order("date", { ascending: false }),
+    sb
+      .from("health_events")
+      .select("id, date, kind, body_part, severity, notes, resolved_date")
+      .eq("user_id", user.id)
+      .lt("date", sinceDate)
+      .is("resolved_date", null)
+      .order("date", { ascending: false }),
+    sb
+      .from("documents")
+      .select("path, content, updated_at")
+      .eq("user_id", user.id)
+      .order("path", { ascending: true }),
+  ]);
 
   for (const r of [workouts, daily, meals, healthRecent, healthOpenOlder, documents]) {
     if (r.error) throw new Error(r.error.message);
   }
 
-  const events = mergeHealthEvents(
-    (healthRecent.data ?? []) as HealthEvent[],
-    (healthOpenOlder.data ?? []) as HealthEvent[],
+  type EventRow = Parameters<typeof Timeline>[0]["events"][number];
+  const events = mergeEvents(
+    (healthRecent.data ?? []) as EventRow[],
+    (healthOpenOlder.data ?? []) as EventRow[],
   );
 
+  const counts = {
+    workouts: (workouts.data ?? []).length,
+    daily: (daily.data ?? []).length,
+    meals: (meals.data ?? []).length,
+    events: events.length,
+  };
+
   return (
-    <div className="mx-auto w-full max-w-5xl flex-1 px-6 py-12">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-3xl font-semibold tracking-tight">Your data</h1>
-        <p className="text-sm text-muted-foreground">
-          Last {days} {days === 1 ? "day" : "days"} ·{" "}
-          <WindowLink days={7} active={days === 7} />
-          {" · "}
-          <WindowLink days={30} active={days === 30} />
-          {" · "}
-          <WindowLink days={90} active={days === 90} />
-          {" · "}
-          <WindowLink days={365} active={days === 365} />
-        </p>
+    <div className="mx-auto w-full max-w-5xl flex-1 px-6 py-10">
+      <header className="flex flex-col gap-4">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight">Your data</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Visual view of everything Body Intelligence has captured —{" "}
+            day-by-day on the Timeline, summarized over time in Trends.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <Tabs current={view} days={days} />
+          <WindowPicker days={days} view={view} />
+        </div>
+
+        <SummaryStrip counts={counts} days={days} />
       </header>
 
-      <Section
-        title="Workouts"
-        count={(workouts.data ?? []).length}
-        empty="No workouts in this window."
-      >
-        <WorkoutsTable rows={(workouts.data ?? []) as Workout[]} />
-      </Section>
+      <div className="mt-6">
+        {view === "timeline" ? (
+          <Timeline
+            workouts={(workouts.data ?? []) as Parameters<typeof Timeline>[0]["workouts"]}
+            daily={(daily.data ?? []) as Parameters<typeof Timeline>[0]["daily"]}
+            meals={(meals.data ?? []) as Parameters<typeof Timeline>[0]["meals"]}
+            events={events}
+          />
+        ) : view === "calendar" ? (
+          <Calendar
+            workouts={(workouts.data ?? []) as Parameters<typeof Calendar>[0]["workouts"]}
+            daily={(daily.data ?? []) as Parameters<typeof Calendar>[0]["daily"]}
+            meals={(meals.data ?? []) as Parameters<typeof Calendar>[0]["meals"]}
+            events={(healthRecent.data ?? []) as Parameters<typeof Calendar>[0]["events"]}
+            startDate={sinceDate}
+            endDate={todayDate}
+          />
+        ) : (
+          <Trends
+            daily={(daily.data ?? []) as Parameters<typeof Trends>[0]["daily"]}
+            workouts={(workouts.data ?? []) as Parameters<typeof Trends>[0]["workouts"]}
+            meals={(meals.data ?? []) as Parameters<typeof Trends>[0]["meals"]}
+            startDate={sinceDate}
+            endDate={todayDate}
+          />
+        )}
+      </div>
 
-      <Section
-        title="Daily entries"
-        count={(daily.data ?? []).length}
-        empty="No daily entries in this window."
-      >
-        <DailyTable rows={(daily.data ?? []) as DailyEntry[]} />
-      </Section>
+      <section className="mt-10">
+        <div className="mb-3 flex items-baseline justify-between gap-3">
+          <h2 className="text-base font-semibold tracking-tight">Memory documents</h2>
+          <span className="text-xs text-muted-foreground">
+            Markdown notes Claude reads as context — independent of the window above
+          </span>
+        </div>
+        <Documents rows={(documents.data ?? []) as Parameters<typeof Documents>[0]["rows"]} />
+      </section>
+    </div>
+  );
+}
 
-      <Section
-        title="Meals"
-        count={(meals.data ?? []).length}
-        empty="No meals in this window."
-      >
-        <MealsTable rows={(meals.data ?? []) as Meal[]} />
-      </Section>
+function Tabs({ current, days }: { current: ViewKey; days: number }) {
+  const tabs: Array<{ key: ViewKey; label: string }> = [
+    { key: "timeline", label: "Timeline" },
+    { key: "calendar", label: "Calendar" },
+    { key: "trends", label: "Trends" },
+  ];
+  return (
+    <nav className="inline-flex rounded-lg border bg-muted/30 p-1 text-sm">
+      {tabs.map((t) => {
+        const active = t.key === current;
+        return (
+          <Link
+            key={t.key}
+            href={`?view=${t.key}&days=${days}`}
+            className={`rounded-md px-3 py-1.5 transition-colors ${
+              active
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+            aria-current={active ? "page" : undefined}
+          >
+            {t.label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
 
-      <Section
-        title="Health events"
-        count={events.length}
-        empty="No health events. Anything unresolved older than the window would still show up here."
-      >
-        <HealthEventsList rows={events} sinceDate={sinceDate} />
-      </Section>
+function WindowPicker({ days, view }: { days: number; view: ViewKey }) {
+  return (
+    <div className="flex items-center gap-1 text-xs">
+      <span className="mr-1 text-muted-foreground">Window</span>
+      {WINDOWS.map((d) => {
+        const active = d === days;
+        return (
+          <Link
+            key={d}
+            href={`?view=${view}&days=${d}`}
+            className={`rounded-md border px-2 py-1 transition-colors ${
+              active
+                ? "border-foreground bg-foreground text-background"
+                : "border-border text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {d}d
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
 
-      <Section
-        title="Memory documents"
-        count={(documents.data ?? []).length}
-        empty="No documents yet — these are normally seeded on signup."
-      >
-        <DocumentsList rows={(documents.data ?? []) as Document[]} />
-      </Section>
+function SummaryStrip({
+  counts,
+  days,
+}: {
+  counts: { workouts: number; daily: number; meals: number; events: number };
+  days: number;
+}) {
+  const items: Array<{ label: string; n: number; sub: string }> = [
+    { label: "Workouts", n: counts.workouts, sub: perWeek(counts.workouts, days) },
+    { label: "Daily check-ins", n: counts.daily, sub: `${pct(counts.daily, days)}% of days` },
+    { label: "Meals", n: counts.meals, sub: perDay(counts.meals, days) },
+    { label: "Health events", n: counts.events, sub: counts.events === 0 ? "none active" : "in view" },
+  ];
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {items.map((i) => (
+        <div key={i.label} className="rounded-xl border bg-card px-3 py-2 shadow-sm">
+          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            {i.label}
+          </div>
+          <div className="mt-0.5 flex items-baseline gap-2">
+            <span className="font-mono text-xl tabular-nums">{i.n}</span>
+            <span className="text-[10px] text-muted-foreground">{i.sub}</span>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -221,321 +247,36 @@ function parseDays(raw: string | undefined): number {
   return Math.max(1, Math.min(365, Math.floor(n)));
 }
 
-function mergeHealthEvents(recent: HealthEvent[], openOlder: HealthEvent[]): HealthEvent[] {
+function parseView(raw: string | undefined): ViewKey {
+  if (raw === "trends") return "trends";
+  if (raw === "calendar") return "calendar";
+  return "timeline";
+}
+
+function mergeEvents<T extends { id: string }>(a: T[], b: T[]): T[] {
   const seen = new Set<string>();
-  const merged: HealthEvent[] = [];
-  for (const row of [...recent, ...openOlder]) {
-    if (seen.has(row.id)) continue;
-    seen.add(row.id);
-    merged.push(row);
+  const out: T[] = [];
+  for (const r of [...a, ...b]) {
+    if (seen.has(r.id)) continue;
+    seen.add(r.id);
+    out.push(r);
   }
-  return merged;
+  return out;
 }
 
-function WindowLink({ days, active }: { days: number; active: boolean }) {
-  if (active) {
-    return <span className="font-medium text-foreground">{days}d</span>;
-  }
-  return (
-    <Link href={`?days=${days}`} className="underline hover:text-foreground">
-      {days}d
-    </Link>
-  );
+function perWeek(n: number, days: number): string {
+  if (days <= 0) return "—";
+  const per = (n / days) * 7;
+  return `${per.toFixed(per >= 10 ? 0 : 1)} / wk`;
 }
 
-function Section({
-  title,
-  count,
-  empty,
-  children,
-}: {
-  title: string;
-  count: number;
-  empty: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="mt-8 rounded-2xl border bg-card shadow-sm">
-      <div className="flex items-center justify-between px-6 py-4">
-        <h2 className="text-base font-semibold tracking-tight">{title}</h2>
-        <Badge variant="outline">{count}</Badge>
-      </div>
-      {count === 0 ? (
-        <div className="border-t px-6 py-6 text-sm text-muted-foreground">{empty}</div>
-      ) : (
-        <div className="border-t">{children}</div>
-      )}
-    </section>
-  );
+function perDay(n: number, days: number): string {
+  if (days <= 0 || n === 0) return n === 0 ? "—" : "—";
+  const per = n / days;
+  return `${per.toFixed(per >= 10 ? 0 : 1)} / day`;
 }
 
-function WorkoutsTable({ rows }: { rows: Workout[] }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-xs uppercase tracking-wide text-muted-foreground">
-            <Th>Date</Th>
-            <Th>Type</Th>
-            <Th align="right">Min</Th>
-            <Th align="right">Km</Th>
-            <Th align="right">Avg HR</Th>
-            <Th align="right">Max HR</Th>
-            <Th align="right">RPE</Th>
-            <Th>Source</Th>
-            <Th>Notes</Th>
-          </tr>
-        </thead>
-        <tbody className="divide-y">
-          {rows.map((r) => (
-            <tr key={r.id} className="text-sm">
-              <Td mono>{r.date}</Td>
-              <Td>{r.type}</Td>
-              <Td align="right">{r.duration_min ?? "—"}</Td>
-              <Td align="right">{r.distance_km ?? "—"}</Td>
-              <Td align="right">{r.avg_hr ?? "—"}</Td>
-              <Td align="right">{r.max_hr ?? "—"}</Td>
-              <Td align="right">{r.rpe ?? "—"}</Td>
-              <Td mono>{r.source}</Td>
-              <Td truncate>{r.notes ?? ""}</Td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function DailyTable({ rows }: { rows: DailyEntry[] }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-xs uppercase tracking-wide text-muted-foreground">
-            <Th>Date</Th>
-            <Th align="right">Sleep h</Th>
-            <Th align="right" title="Deep sleep (min)">Deep</Th>
-            <Th align="right" title="Light sleep (min)">Light</Th>
-            <Th align="right" title="REM sleep (min)">REM</Th>
-            <Th align="right" title="Awake (min)">Awk</Th>
-            <Th align="right">HRV</Th>
-            <Th align="right">RHR</Th>
-            <Th align="right" title="Overnight SpO2 avg (%)">SpO2</Th>
-            <Th align="right" title="Overnight respiration (breaths/min)">Resp</Th>
-            <Th align="right">Kg</Th>
-            <Th align="right" title="Body fat %">BF%</Th>
-            <Th align="right">Steps</Th>
-            <Th align="right" title="Active kcal">Act kcal</Th>
-            <Th align="right" title="Floors climbed">Flr</Th>
-            <Th align="right" title="Moderate-intensity minutes (WHO)">Mod min</Th>
-            <Th align="right" title="Vigorous-intensity minutes (WHO)">Vig min</Th>
-            <Th align="right" title="Fatigue (5 = freshest)">Ftg</Th>
-            <Th align="right" title="Soreness (5 = least sore)">Sor</Th>
-            <Th align="right" title="Mood (5 = best)">Mood</Th>
-            <Th align="right" title="Stress (5 = least stressed)">Strs</Th>
-            <Th align="right" title="Motivation (5 = highest)">Mtv</Th>
-            <Th align="right" title="Sleep quality (5 = best)">SlQ</Th>
-            <Th>Notes</Th>
-          </tr>
-        </thead>
-        <tbody className="divide-y">
-          {rows.map((r) => (
-            <tr key={r.id} className="text-sm">
-              <Td mono>{r.date}</Td>
-              <Td align="right">{r.sleep_h ?? "—"}</Td>
-              <Td align="right">{r.sleep_deep_min ?? "—"}</Td>
-              <Td align="right">{r.sleep_light_min ?? "—"}</Td>
-              <Td align="right">{r.sleep_rem_min ?? "—"}</Td>
-              <Td align="right">{r.sleep_awake_min ?? "—"}</Td>
-              <Td align="right">{r.hrv_ms ?? "—"}</Td>
-              <Td align="right">{r.rhr_bpm ?? "—"}</Td>
-              <Td align="right">{r.spo2_avg_pct ?? "—"}</Td>
-              <Td align="right">{r.respiration_avg_brpm ?? "—"}</Td>
-              <Td align="right">{r.weight_kg ?? "—"}</Td>
-              <Td align="right">{r.body_fat_pct ?? "—"}</Td>
-              <Td align="right">{r.steps ?? "—"}</Td>
-              <Td align="right">{r.active_calories ?? "—"}</Td>
-              <Td align="right">{r.floors_climbed ?? "—"}</Td>
-              <Td align="right">{r.intensity_min_moderate ?? "—"}</Td>
-              <Td align="right">{r.intensity_min_vigorous ?? "—"}</Td>
-              <Td align="right">{r.fatigue ?? "—"}</Td>
-              <Td align="right">{r.soreness ?? "—"}</Td>
-              <Td align="right">{r.mood ?? "—"}</Td>
-              <Td align="right">{r.stress ?? "—"}</Td>
-              <Td align="right">{r.motivation ?? "—"}</Td>
-              <Td align="right">{r.sleep_quality ?? "—"}</Td>
-              <Td truncate>{[r.sleep_notes, r.wellness_notes, r.meal_notes].filter(Boolean).join(" · ")}</Td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function MealsTable({ rows }: { rows: Meal[] }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-xs uppercase tracking-wide text-muted-foreground">
-            <Th>Eaten at</Th>
-            <Th>Type</Th>
-            <Th>Description</Th>
-            <Th align="right">Cal</Th>
-            <Th align="right">P</Th>
-            <Th align="right">C</Th>
-            <Th align="right">F</Th>
-            <Th>Source</Th>
-          </tr>
-        </thead>
-        <tbody className="divide-y">
-          {rows.map((r) => (
-            <tr key={r.id} className="text-sm">
-              <Td mono>{formatTimestamp(r.eaten_at)}</Td>
-              <Td>{r.meal_type ?? "—"}</Td>
-              <Td truncate>{r.description}</Td>
-              <Td align="right">{r.calories ?? "—"}</Td>
-              <Td align="right">{r.protein_g ?? "—"}</Td>
-              <Td align="right">{r.carbs_g ?? "—"}</Td>
-              <Td align="right">{r.fat_g ?? "—"}</Td>
-              <Td mono>{r.source}</Td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function HealthEventsList({
-  rows,
-  sinceDate,
-}: {
-  rows: HealthEvent[];
-  sinceDate: string;
-}) {
-  return (
-    <ul className="divide-y">
-      {rows.map((r) => {
-        const olderThanWindow = r.date < sinceDate;
-        return (
-          <li key={r.id} className="flex items-start gap-3 px-6 py-4 text-sm">
-            <div className="flex flex-1 flex-col">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-mono text-xs">{r.date}</span>
-                <Badge variant={r.resolved_date ? "secondary" : "default"}>
-                  {r.kind}
-                </Badge>
-                {r.body_part ? (
-                  <span className="text-muted-foreground">· {r.body_part}</span>
-                ) : null}
-                {r.severity ? (
-                  <span className="text-muted-foreground">
-                    · severity {r.severity}/5
-                  </span>
-                ) : null}
-                {r.resolved_date ? (
-                  <Badge variant="outline">resolved {r.resolved_date}</Badge>
-                ) : olderThanWindow ? (
-                  <Badge variant="outline">unresolved · outside window</Badge>
-                ) : null}
-              </div>
-              {r.notes ? (
-                <p className="mt-1 text-muted-foreground">{r.notes}</p>
-              ) : null}
-            </div>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-function DocumentsList({ rows }: { rows: Document[] }) {
-  return (
-    <ul className="divide-y">
-      {rows.map((doc) => (
-        <li key={doc.path} className="px-6 py-3">
-          <details>
-            <summary className="flex cursor-pointer items-center justify-between gap-3 text-sm">
-              <span className="font-mono">{doc.path}</span>
-              <span className="text-xs text-muted-foreground">
-                {timeAgo(doc.updated_at)}
-              </span>
-            </summary>
-            <pre className="mt-3 max-h-96 overflow-y-auto whitespace-pre-wrap rounded-md border bg-muted/30 p-3 font-mono text-xs leading-relaxed">
-              {doc.content}
-            </pre>
-          </details>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function Th({
-  children,
-  align = "left",
-  title,
-}: {
-  children: React.ReactNode;
-  align?: "left" | "right";
-  title?: string;
-}) {
-  return (
-    <th
-      title={title}
-      className={`px-4 py-2 font-medium ${
-        align === "right" ? "text-right tabular-nums" : "text-left"
-      }`}
-    >
-      {children}
-    </th>
-  );
-}
-
-function Td({
-  children,
-  align = "left",
-  mono,
-  truncate,
-}: {
-  children: React.ReactNode;
-  align?: "left" | "right";
-  mono?: boolean;
-  truncate?: boolean;
-}) {
-  return (
-    <td
-      className={`px-4 py-2 ${align === "right" ? "text-right tabular-nums" : "text-left"} ${
-        mono ? "font-mono text-xs" : ""
-      } ${truncate ? "max-w-[16rem] truncate" : ""}`}
-      title={truncate && typeof children === "string" ? children : undefined}
-    >
-      {children}
-    </td>
-  );
-}
-
-function formatTimestamp(iso: string): string {
-  // Display in a compact, human-readable shape; we leave timezone alone here
-  // because everything in the DB is already timestamptz-correct.
-  const d = new Date(iso);
-  const ymd = d.toISOString().slice(0, 10);
-  const hm = d.toISOString().slice(11, 16);
-  return `${ymd} ${hm}`;
-}
-
-function timeAgo(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime();
-  const min = Math.floor(ms / 60_000);
-  if (min < 1) return "just now";
-  if (min < 60) return `${min}m ago`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h ago`;
-  const day = Math.floor(hr / 24);
-  if (day < 30) return `${day}d ago`;
-  const mo = Math.floor(day / 30);
-  return `${mo}mo ago`;
+function pct(n: number, total: number): number {
+  if (total <= 0) return 0;
+  return Math.min(100, Math.round((n / total) * 100));
 }
