@@ -25,9 +25,21 @@ export type TimelineDaily = {
   id: string;
   date: string;
   sleep_h: string | null;
+  sleep_deep_min: number | null;
+  sleep_light_min: number | null;
+  sleep_rem_min: number | null;
+  sleep_awake_min: number | null;
   hrv_ms: number | null;
   rhr_bpm: number | null;
+  spo2_avg_pct: string | null;
+  respiration_avg_brpm: string | null;
   weight_kg: string | null;
+  body_fat_pct: string | null;
+  steps: number | null;
+  active_calories: number | null;
+  floors_climbed: number | null;
+  intensity_min_moderate: number | null;
+  intensity_min_vigorous: number | null;
   fatigue: number | null;
   soreness: number | null;
   mood: number | null;
@@ -48,6 +60,7 @@ export type TimelineMeal = {
   protein_g: string | null;
   carbs_g: string | null;
   fat_g: string | null;
+  fiber_g: string | null;
 };
 
 export type TimelineEvent = {
@@ -94,6 +107,14 @@ export function Timeline({ workouts, daily, meals, events }: Props) {
     sleep_h: computeBaseline(daily.map((d) => num(d.sleep_h))),
     hrv_ms: computeBaseline(daily.map((d) => d.hrv_ms)),
     rhr_bpm: computeBaseline(daily.map((d) => d.rhr_bpm)),
+    spo2_avg_pct: computeBaseline(daily.map((d) => num(d.spo2_avg_pct))),
+    respiration_avg_brpm: computeBaseline(daily.map((d) => num(d.respiration_avg_brpm))),
+    body_fat_pct: computeBaseline(daily.map((d) => num(d.body_fat_pct))),
+    steps: computeBaseline(daily.map((d) => d.steps)),
+    active_calories: computeBaseline(daily.map((d) => d.active_calories)),
+    floors_climbed: computeBaseline(daily.map((d) => d.floors_climbed)),
+    intensity_min_moderate: computeBaseline(daily.map((d) => d.intensity_min_moderate)),
+    intensity_min_vigorous: computeBaseline(daily.map((d) => d.intensity_min_vigorous)),
     fatigue: computeBaseline(daily.map((d) => d.fatigue)),
     soreness: computeBaseline(daily.map((d) => d.soreness)),
     mood: computeBaseline(daily.map((d) => d.mood)),
@@ -227,6 +248,86 @@ function DayCard({
               </span>
             );
           })}
+        </div>
+      ) : null}
+
+      {daily && hasSleepStages(daily) ? (
+        <div className="mt-3 px-5">
+          <SleepStagesBar daily={daily} />
+        </div>
+      ) : null}
+
+      {daily && hasVitals(daily) ? (
+        <div className="mt-3 flex flex-wrap items-center gap-1.5 px-5 text-xs">
+          <ContinuousChip
+            label="SpO₂"
+            value={daily.spo2_avg_pct}
+            unit="%"
+            decimals={1}
+            baseline={baselines.spo2_avg_pct}
+            higherIsBetter={true}
+          />
+          <ContinuousChip
+            label="Resp"
+            value={daily.respiration_avg_brpm}
+            unit="brpm"
+            decimals={1}
+            baseline={baselines.respiration_avg_brpm}
+            higherIsBetter={null}
+          />
+          <ContinuousChip
+            label="BF"
+            value={daily.body_fat_pct}
+            unit="%"
+            decimals={1}
+            baseline={baselines.body_fat_pct}
+            higherIsBetter={null}
+          />
+        </div>
+      ) : null}
+
+      {daily && hasActivity(daily) ? (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 px-5 text-xs">
+          <ContinuousChip
+            label="Steps"
+            value={daily.steps}
+            unit=""
+            decimals={0}
+            baseline={baselines.steps}
+            higherIsBetter={true}
+          />
+          <ContinuousChip
+            label="Act"
+            value={daily.active_calories}
+            unit="kcal"
+            decimals={0}
+            baseline={baselines.active_calories}
+            higherIsBetter={true}
+          />
+          <ContinuousChip
+            label="Floors"
+            value={daily.floors_climbed}
+            unit=""
+            decimals={0}
+            baseline={baselines.floors_climbed}
+            higherIsBetter={true}
+          />
+          <ContinuousChip
+            label="Mod"
+            value={daily.intensity_min_moderate}
+            unit="min"
+            decimals={0}
+            baseline={baselines.intensity_min_moderate}
+            higherIsBetter={true}
+          />
+          <ContinuousChip
+            label="Vig"
+            value={daily.intensity_min_vigorous}
+            unit="min"
+            decimals={0}
+            baseline={baselines.intensity_min_vigorous}
+            higherIsBetter={true}
+          />
         </div>
       ) : null}
 
@@ -367,7 +468,8 @@ function MealsRow({ meals }: { meals: TimelineMeal[] }) {
           m.calories != null ||
           m.protein_g != null ||
           m.carbs_g != null ||
-          m.fat_g != null;
+          m.fat_g != null ||
+          m.fiber_g != null;
         return (
           <span
             key={m.id}
@@ -392,10 +494,80 @@ function MealsRow({ meals }: { meals: TimelineMeal[] }) {
                 no macros
               </span>
             ) : null}
+            {m.fiber_g != null ? (
+              <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+                · {Number(m.fiber_g).toFixed(0)}g fiber
+              </span>
+            ) : null}
           </span>
         );
       })}
     </div>
+  );
+}
+
+function SleepStagesBar({ daily }: { daily: TimelineDaily }) {
+  const stages = [
+    { key: "deep", label: "Deep", min: daily.sleep_deep_min, color: "bg-indigo-600/70" },
+    { key: "rem", label: "REM", min: daily.sleep_rem_min, color: "bg-violet-500/70" },
+    { key: "light", label: "Light", min: daily.sleep_light_min, color: "bg-sky-400/60" },
+    { key: "awake", label: "Awake", min: daily.sleep_awake_min, color: "bg-amber-500/50" },
+  ] as const;
+  const total = stages.reduce((a, s) => a + (s.min ?? 0), 0);
+  if (total <= 0) return null;
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+        Sleep stages
+      </span>
+      <div
+        className="flex h-2 flex-1 overflow-hidden rounded-full bg-muted"
+        title={stages
+          .filter((s) => (s.min ?? 0) > 0)
+          .map((s) => `${s.label}: ${s.min}min`)
+          .join(" · ")}
+      >
+        {stages.map((s) =>
+          s.min && s.min > 0 ? (
+            <div
+              key={s.key}
+              className={s.color}
+              style={{ width: `${(s.min / total) * 100}%` }}
+            />
+          ) : null,
+        )}
+      </div>
+      <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+        {Math.round(total)} min
+      </span>
+    </div>
+  );
+}
+
+function hasSleepStages(d: TimelineDaily): boolean {
+  return (
+    d.sleep_deep_min != null ||
+    d.sleep_light_min != null ||
+    d.sleep_rem_min != null ||
+    d.sleep_awake_min != null
+  );
+}
+
+function hasVitals(d: TimelineDaily): boolean {
+  return (
+    d.spo2_avg_pct != null ||
+    d.respiration_avg_brpm != null ||
+    d.body_fat_pct != null
+  );
+}
+
+function hasActivity(d: TimelineDaily): boolean {
+  return (
+    d.steps != null ||
+    d.active_calories != null ||
+    d.floors_climbed != null ||
+    d.intensity_min_moderate != null ||
+    d.intensity_min_vigorous != null
   );
 }
 

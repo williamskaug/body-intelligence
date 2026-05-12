@@ -16,9 +16,21 @@ import { chartColorForType } from "@/lib/data-display/workout-types";
 export type TrendsDaily = {
   date: string;
   sleep_h: string | null;
+  sleep_deep_min: number | null;
+  sleep_light_min: number | null;
+  sleep_rem_min: number | null;
+  sleep_awake_min: number | null;
   hrv_ms: number | null;
   rhr_bpm: number | null;
+  spo2_avg_pct: string | null;
+  respiration_avg_brpm: string | null;
   weight_kg: string | null;
+  body_fat_pct: string | null;
+  steps: number | null;
+  active_calories: number | null;
+  floors_climbed: number | null;
+  intensity_min_moderate: number | null;
+  intensity_min_vigorous: number | null;
   fatigue: number | null;
   soreness: number | null;
   mood: number | null;
@@ -60,6 +72,10 @@ export function Trends({ daily, workouts, meals, startDate, endDate }: Props) {
     rhr_bpm: dates.map((d) => dailyByDate.get(d)?.[0]?.rhr_bpm ?? null),
     weight_kg: dates.map((d) => num(dailyByDate.get(d)?.[0]?.weight_kg)),
     wellness: dates.map((d) => wellnessComposite(dailyByDate.get(d)?.[0])),
+    steps: dates.map((d) => dailyByDate.get(d)?.[0]?.steps ?? null),
+    active_calories: dates.map((d) => dailyByDate.get(d)?.[0]?.active_calories ?? null),
+    spo2_avg_pct: dates.map((d) => num(dailyByDate.get(d)?.[0]?.spo2_avg_pct)),
+    body_fat_pct: dates.map((d) => num(dailyByDate.get(d)?.[0]?.body_fat_pct)),
   };
 
   const baselines = {
@@ -68,6 +84,10 @@ export function Trends({ daily, workouts, meals, startDate, endDate }: Props) {
     rhr_bpm: computeBaseline(series.rhr_bpm),
     weight_kg: computeBaseline(series.weight_kg),
     wellness: computeBaseline(series.wellness),
+    steps: computeBaseline(series.steps),
+    active_calories: computeBaseline(series.active_calories),
+    spo2_avg_pct: computeBaseline(series.spo2_avg_pct),
+    body_fat_pct: computeBaseline(series.body_fat_pct),
   };
 
   const metrics = [
@@ -76,6 +96,10 @@ export function Trends({ daily, workouts, meals, startDate, endDate }: Props) {
     { key: "rhr_bpm", label: "RHR", unit: "bpm", decimals: 0, higher: false },
     { key: "weight_kg", label: "Weight", unit: "kg", decimals: 1, higher: null },
     { key: "wellness", label: "Wellness avg", unit: "/5", decimals: 2, higher: true },
+    { key: "steps", label: "Steps", unit: "", decimals: 0, higher: true },
+    { key: "active_calories", label: "Active kcal", unit: "kcal", decimals: 0, higher: true },
+    { key: "spo2_avg_pct", label: "SpO₂", unit: "%", decimals: 1, higher: true },
+    { key: "body_fat_pct", label: "Body fat", unit: "%", decimals: 1, higher: null },
   ] as const;
 
   const totals = macroTotals(meals);
@@ -101,18 +125,20 @@ export function Trends({ daily, workouts, meals, startDate, endDate }: Props) {
           Daily metrics
         </h3>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {metrics.map((m) => (
-            <MetricCard
-              key={m.key}
-              label={m.label}
-              unit={m.unit}
-              decimals={m.decimals}
-              values={series[m.key]}
-              baseline={baselines[m.key]}
-              higherIsBetter={m.higher}
-              latest={latestNonNull(series[m.key])}
-            />
-          ))}
+          {metrics
+            .filter((m) => series[m.key].some((v) => v != null))
+            .map((m) => (
+              <MetricCard
+                key={m.key}
+                label={m.label}
+                unit={m.unit}
+                decimals={m.decimals}
+                values={series[m.key]}
+                baseline={baselines[m.key]}
+                higherIsBetter={m.higher}
+                latest={latestNonNull(series[m.key])}
+              />
+            ))}
         </div>
       </section>
 
