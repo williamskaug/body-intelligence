@@ -1,0 +1,59 @@
+# Apply Drizzle-generated migrations to the production Supabase project on
+# every push to main that touches supabase/migrations/. Replaces the
+# Dashboard GitHub integration that previously auto-applied migrations
+# silently — when it stopped firing in May 2026, the /data page broke and
+# nobody knew until a query hit a missing column. With a workflow, failures
+# show up in commit checks.
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   SUPABASE_ACCESS_TOKEN  — Personal access token from
+#                            https://supabase.com/dashboard/account/tokens
+#   SUPABASE_DB_PASSWORD   — Project DB password (Dashboard → Project →
+#                            Settings → Database → Connection string)
+#
+# Project ref is hardcoded below — it's not secret (it's in the public
+# NEXT_PUBLIC_SUPABASE_URL) and pinning it here makes the workflow
+# self-contained.
+
+name: Migrate production database
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/migrations/**"
+  workflow_dispatch: {}
+
+# One migration run at a time. Lets a long migration finish before the next
+# push tries to apply on top of it.
+concurrency:
+  group: supabase-migrate-production
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: nbebxykoektbshsvxxpm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Show pending migrations
+        run: supabase migration list
+
+      - name: Apply migrations
+        run: supabase db push
+
+      - name: Verify migration history
+        run: supabase migration list

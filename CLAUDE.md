@@ -76,7 +76,7 @@ body-intelligence/
 │   ├── settings.json
 │   └── commands/
 ├── supabase/
-│   └── migrations/                    Drizzle-generated SQL; auto-applied on push to main
+│   └── migrations/                    Drizzle-generated SQL; auto-applied to prod by .github/workflows/migrate.yml on push to main
 └── (config: .env.example, .gitignore, README.md, package.json, tsconfig.json,
    next.config.ts, drizzle.config.ts, tailwind.config.ts)
 ```
@@ -202,7 +202,7 @@ The first time a user adds the BI MCP URL to Cowork, Cowork's MCP client runs DC
 - File naming: kebab-case for files, PascalCase for React components, camelCase for functions and variables.
 - No default exports for React components or library functions — named exports only.
 - Server Components by default. Client components mark `"use client"` and live in the same directory as their server parent.
-- All DB access through Drizzle. Raw SQL only inside `supabase/migrations/` (Drizzle-generated, auto-applied by Supabase on push to main).
+- All DB access through Drizzle. Raw SQL only inside `supabase/migrations/` (Drizzle-generated). `.github/workflows/migrate.yml` runs `supabase db push` against production on any push to `main` that touches `supabase/migrations/**`; failures show up in commit checks. Requires `SUPABASE_ACCESS_TOKEN` and `SUPABASE_DB_PASSWORD` as repo secrets.
 - Zod schemas in `lib/schemas/` mirror Drizzle types — input validation at the MCP boundary; output types come from Drizzle's inferred types.
 - One MCP tool per file under `lib/mcp/tools/`. Tools are pure functions: `(input, ctx) => result`. Side effects (DB writes) happen through `ctx.db`.
 - Tests via `vitest`. Each tool ships with at least one happy-path test and one validation-failure test.
