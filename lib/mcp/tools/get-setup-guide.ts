@@ -22,9 +22,14 @@ decisions to BI — there is no logic on the server side beyond CRUD.
 
 - workouts — one row per workout. Free-form type (run / lift / ride / yoga / …).
   Optional duration_min, distance_km, avg_hr, max_hr, rpe (1–10), shoes, notes.
-- daily_entries — one row per (user, date). Sleep, HRV, RHR, weight, six 1–5
-  wellness scales, plus three free-text blocks (sleep_notes, wellness_notes,
-  meal_notes). Partial updates allowed.
+- daily_entries — one row per (user, date). Universal vitals (sleep_h, four
+  sleep-stage minutes, hrv_ms, rhr_bpm, spo2_avg_pct, respiration_avg_brpm),
+  body composition (weight_kg, body_fat_pct), movement totals (steps,
+  active_calories, floors_climbed, intensity_min_moderate, intensity_min_vigorous),
+  six 1–5 wellness scales, and three free-text blocks (sleep_notes,
+  wellness_notes, meal_notes). Partial updates allowed — write whatever the
+  source has, leave the rest. Vendor-proprietary scores (Body Battery,
+  Readiness, Recovery) do NOT belong here — they go in daily/YYYY-MM-DD.md.
 - meals — one row per meal. eaten_at (timestamp), meal_type, required description,
   REQUIRED calories + protein_g + carbs_g + fat_g (estimate from the description if
   no authoritative source is available — never skip a meal write to avoid

@@ -225,7 +225,7 @@ These compose external Claude connectors (Garmin, Strava, etc.) with the BI MCP.
   title: "Garmin sync",
   category: "connector",
   schedule: "0 7 * * *",                    // daily 7am
-  description: "Pulls yesterday's sleep, HRV, RHR, and activities from Garmin and persists them to BI.",
+  description: "Pulls yesterday's sleep, vitals, body composition, movement totals, and activities from Garmin and persists them to BI.",
   required_tools: ["log_daily", "log_workout", "fs_write", "fs_read", "get_recent"],
   required_connectors: ["garmin"],
   prompt: `Sync yesterday's Garmin data into Body Intelligence.
@@ -235,13 +235,17 @@ You have access to two MCPs: a Garmin connector and the Body Intelligence (BI) M
 1. Determine yesterday's date in the user's timezone (read PROFILE.md via fs_read for their timezone if you don't know it).
 
 2. From the Garmin connector, fetch yesterday's:
-   - Sleep summary (duration, deep/REM/light minutes if available, sleep score)
+   - Sleep summary: total duration AND deep/light/REM/awake minutes, plus sleep score
    - Morning HRV
    - Resting heart rate
+   - Overnight SpO2 average and respiration rate average
+   - Daily steps, active calories, floors climbed
+   - Weekly intensity minutes (extract yesterday's moderate + vigorous slice)
+   - Latest weigh-in (weight + body fat % if smart scale connected)
    - All activities (one entry per activity)
    - Vendor-specific scores: training readiness, training status, body battery range, VO2 max, race predictions
 
-3. Call BI's log_daily with yesterday's date and the canonical fields (sleep_h, hrv_ms, rhr_bpm, weight_kg if logged). log_daily upserts on (user_id, date), so this is safe to re-run; manually-logged fields like fatigue/mood will not be overwritten because log_daily preserves untouched fields.
+3. Call BI's log_daily with yesterday's date and all the universal fields fetched in step 2 — sleep_h, sleep_deep_min, sleep_light_min, sleep_rem_min, sleep_awake_min, hrv_ms, rhr_bpm, spo2_avg_pct, respiration_avg_brpm, weight_kg, body_fat_pct, steps, active_calories, floors_climbed, intensity_min_moderate, intensity_min_vigorous. Skip fields Garmin didn't return; log_daily accepts partial input. The upsert is on (user_id, date), so this is safe to re-run, and manually-logged fields like fatigue/mood will not be overwritten because log_daily preserves untouched fields.
 
 4. For each Garmin activity, call BI's log_workout with:
    - source: "garmin"
