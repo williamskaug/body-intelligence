@@ -5,9 +5,21 @@ import { dateString, wellnessScale } from "./shared";
 export const logDailyInputSchema = {
   date: dateString,
   sleep_h: z.number().min(0).max(24).optional(),
+  sleep_deep_min: z.number().int().min(0).max(1440).optional(),
+  sleep_light_min: z.number().int().min(0).max(1440).optional(),
+  sleep_rem_min: z.number().int().min(0).max(1440).optional(),
+  sleep_awake_min: z.number().int().min(0).max(1440).optional(),
   hrv_ms: z.number().int().min(0).max(500).optional(),
   rhr_bpm: z.number().int().min(20).max(200).optional(),
+  spo2_avg_pct: z.number().min(50).max(100).optional(),
+  respiration_avg_brpm: z.number().min(4).max(40).optional(),
   weight_kg: z.number().min(20).max(400).optional(),
+  body_fat_pct: z.number().min(2).max(70).optional(),
+  steps: z.number().int().min(0).max(200_000).optional(),
+  active_calories: z.number().int().min(0).max(20_000).optional(),
+  floors_climbed: z.number().int().min(0).max(2000).optional(),
+  intensity_min_moderate: z.number().int().min(0).max(1440).optional(),
+  intensity_min_vigorous: z.number().int().min(0).max(1440).optional(),
   fatigue: wellnessScale.optional(),
   soreness: wellnessScale.optional(),
   mood: wellnessScale.optional(),
@@ -22,9 +34,21 @@ export const logDailyInputSchema = {
 export type LogDailyInput = {
   date: string;
   sleep_h?: number;
+  sleep_deep_min?: number;
+  sleep_light_min?: number;
+  sleep_rem_min?: number;
+  sleep_awake_min?: number;
   hrv_ms?: number;
   rhr_bpm?: number;
+  spo2_avg_pct?: number;
+  respiration_avg_brpm?: number;
   weight_kg?: number;
+  body_fat_pct?: number;
+  steps?: number;
+  active_calories?: number;
+  floors_climbed?: number;
+  intensity_min_moderate?: number;
+  intensity_min_vigorous?: number;
   fatigue?: number;
   soreness?: number;
   mood?: number;
@@ -44,9 +68,21 @@ export async function logDaily(userId: string, input: LogDailyInput) {
   const partial: Record<string, unknown> = { updated_at: new Date().toISOString() };
   for (const key of [
     "sleep_h",
+    "sleep_deep_min",
+    "sleep_light_min",
+    "sleep_rem_min",
+    "sleep_awake_min",
     "hrv_ms",
     "rhr_bpm",
+    "spo2_avg_pct",
+    "respiration_avg_brpm",
     "weight_kg",
+    "body_fat_pct",
+    "steps",
+    "active_calories",
+    "floors_climbed",
+    "intensity_min_moderate",
+    "intensity_min_vigorous",
     "fatigue",
     "soreness",
     "mood",

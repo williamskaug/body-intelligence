@@ -62,16 +62,34 @@ Upsert the daily entry for `(user_id, date)`. Partial fields are allowed — cal
 ```ts
 {
   date: string;              // ISO date
-  sleep_h?: number;
-  hrv_ms?: number;
-  rhr_bpm?: number;
+  // Sleep
+  sleep_h?: number;          // total sleep hours
+  sleep_deep_min?: number;   // minutes in deep stage
+  sleep_light_min?: number;
+  sleep_rem_min?: number;
+  sleep_awake_min?: number;
+  // Cardio vitals
+  hrv_ms?: number;           // overnight HRV (rMSSD) in ms
+  rhr_bpm?: number;          // resting heart rate
+  spo2_avg_pct?: number;     // overnight blood-oxygen avg
+  respiration_avg_brpm?: number; // overnight respiration avg
+  // Body composition
   weight_kg?: number;
+  body_fat_pct?: number;     // smart-scale body fat %
+  // Movement totals (the day's accumulated activity)
+  steps?: number;
+  active_calories?: number;  // kcal above BMR
+  floors_climbed?: number;
+  intensity_min_moderate?: number; // WHO-standard moderate-intensity minutes
+  intensity_min_vigorous?: number; // WHO-standard vigorous-intensity minutes
+  // Subjective wellness (5 = best, always)
   fatigue?: 1|2|3|4|5;       // 5 = freshest
   soreness?: 1|2|3|4|5;      // 5 = least sore
   mood?: 1|2|3|4|5;          // 5 = best
   stress?: 1|2|3|4|5;        // 5 = least stressed
   motivation?: 1|2|3|4|5;    // 5 = highest
   sleep_quality?: 1|2|3|4|5; // 5 = best
+  // Free-text
   sleep_notes?: string;
   wellness_notes?: string;
   meal_notes?: string;
@@ -96,11 +114,11 @@ Insert or upsert a meal. Manual writes (no `source_id`) always insert a new row;
   eaten_at: string;          // ISO timestamp. With offset (`2026-05-08T08:30:00+02:00`) preferred; bare `YYYY-MM-DDTHH:mm:ss` is resolved against the user's timezone.
   meal_type?: string;        // free-form: "breakfast", "lunch", "snack", "pre-run", "post-workout"
   description: string;       // required: what was eaten, in prose
-  calories?: number;
-  protein_g?: number;
-  carbs_g?: number;
-  fat_g?: number;
-  fiber_g?: number;
+  calories: number;          // REQUIRED — estimate from description if no authoritative source
+  protein_g: number;         // REQUIRED — estimate if not known
+  carbs_g: number;           // REQUIRED — estimate if not known
+  fat_g: number;             // REQUIRED — estimate if not known
+  fiber_g?: number;          // optional
   notes?: string;
   source?: string;           // default "manual". Connector recipes pass "mfp", "cronometer", "apple_health", etc.
   source_id?: string;        // optional. When provided, makes the write idempotent.
@@ -110,7 +128,7 @@ Insert or upsert a meal. Manual writes (no `source_id`) always insert a new row;
 **Output:** the created or updated meal row, plus a flag indicating which: `{ row, action: "inserted" | "updated" }`.
 
 **Notes:**
-- `description` is the only required field. A user logging "ate ramen" with no macros is a valid call — macros are nice-to-have, not required.
+- `description`, `calories`, `protein_g`, `carbs_g`, and `fat_g` are all required. When the caller does not have authoritative numbers (food label, connector payload, weighed portion), it MUST estimate from the description before writing. Skipping the write because macros are uncertain is wrong — an estimate is the expected behaviour. `fiber_g` stays optional.
 - Manual logging is high-friction; expect this tool to fill mostly via Phase 2 connector recipes (MyFitnessPal, Cronometer, Apple Health). The `source` + `source_id` pattern matches `log_workout` exactly so connector authoring stays consistent across both.
 - BI does not split a meal into per-food rows. If a connector source has food-level granularity, the recipe is responsible for flattening to per-meal totals before calling this tool. Per-food modeling would require a foods catalog and adds schema-vs-payoff debt that v1 explicitly avoids.
 

@@ -26,9 +26,21 @@ type DailyEntry = {
   id: string;
   date: string;
   sleep_h: string | null;
+  sleep_deep_min: number | null;
+  sleep_light_min: number | null;
+  sleep_rem_min: number | null;
+  sleep_awake_min: number | null;
   hrv_ms: number | null;
   rhr_bpm: number | null;
+  spo2_avg_pct: string | null;
+  respiration_avg_brpm: string | null;
   weight_kg: string | null;
+  body_fat_pct: string | null;
+  steps: number | null;
+  active_calories: number | null;
+  floors_climbed: number | null;
+  intensity_min_moderate: number | null;
+  intensity_min_vigorous: number | null;
   fatigue: number | null;
   soreness: number | null;
   mood: number | null;
@@ -102,7 +114,7 @@ export default async function DataPage({
       sb
         .from("daily_entries")
         .select(
-          "id, date, sleep_h, hrv_ms, rhr_bpm, weight_kg, fatigue, soreness, mood, stress, motivation, sleep_quality, sleep_notes, wellness_notes, meal_notes",
+          "id, date, sleep_h, sleep_deep_min, sleep_light_min, sleep_rem_min, sleep_awake_min, hrv_ms, rhr_bpm, spo2_avg_pct, respiration_avg_brpm, weight_kg, body_fat_pct, steps, active_calories, floors_climbed, intensity_min_moderate, intensity_min_vigorous, fatigue, soreness, mood, stress, motivation, sleep_quality, sleep_notes, wellness_notes, meal_notes",
         )
         .eq("user_id", user.id)
         .gte("date", sinceDate)
@@ -302,9 +314,21 @@ function DailyTable({ rows }: { rows: DailyEntry[] }) {
           <tr className="text-xs uppercase tracking-wide text-muted-foreground">
             <Th>Date</Th>
             <Th align="right">Sleep h</Th>
+            <Th align="right" title="Deep sleep (min)">Deep</Th>
+            <Th align="right" title="Light sleep (min)">Light</Th>
+            <Th align="right" title="REM sleep (min)">REM</Th>
+            <Th align="right" title="Awake (min)">Awk</Th>
             <Th align="right">HRV</Th>
             <Th align="right">RHR</Th>
+            <Th align="right" title="Overnight SpO2 avg (%)">SpO2</Th>
+            <Th align="right" title="Overnight respiration (breaths/min)">Resp</Th>
             <Th align="right">Kg</Th>
+            <Th align="right" title="Body fat %">BF%</Th>
+            <Th align="right">Steps</Th>
+            <Th align="right" title="Active kcal">Act kcal</Th>
+            <Th align="right" title="Floors climbed">Flr</Th>
+            <Th align="right" title="Moderate-intensity minutes (WHO)">Mod min</Th>
+            <Th align="right" title="Vigorous-intensity minutes (WHO)">Vig min</Th>
             <Th align="right" title="Fatigue (5 = freshest)">Ftg</Th>
             <Th align="right" title="Soreness (5 = least sore)">Sor</Th>
             <Th align="right" title="Mood (5 = best)">Mood</Th>
@@ -319,9 +343,21 @@ function DailyTable({ rows }: { rows: DailyEntry[] }) {
             <tr key={r.id} className="text-sm">
               <Td mono>{r.date}</Td>
               <Td align="right">{r.sleep_h ?? "—"}</Td>
+              <Td align="right">{r.sleep_deep_min ?? "—"}</Td>
+              <Td align="right">{r.sleep_light_min ?? "—"}</Td>
+              <Td align="right">{r.sleep_rem_min ?? "—"}</Td>
+              <Td align="right">{r.sleep_awake_min ?? "—"}</Td>
               <Td align="right">{r.hrv_ms ?? "—"}</Td>
               <Td align="right">{r.rhr_bpm ?? "—"}</Td>
+              <Td align="right">{r.spo2_avg_pct ?? "—"}</Td>
+              <Td align="right">{r.respiration_avg_brpm ?? "—"}</Td>
               <Td align="right">{r.weight_kg ?? "—"}</Td>
+              <Td align="right">{r.body_fat_pct ?? "—"}</Td>
+              <Td align="right">{r.steps ?? "—"}</Td>
+              <Td align="right">{r.active_calories ?? "—"}</Td>
+              <Td align="right">{r.floors_climbed ?? "—"}</Td>
+              <Td align="right">{r.intensity_min_moderate ?? "—"}</Td>
+              <Td align="right">{r.intensity_min_vigorous ?? "—"}</Td>
               <Td align="right">{r.fatigue ?? "—"}</Td>
               <Td align="right">{r.soreness ?? "—"}</Td>
               <Td align="right">{r.mood ?? "—"}</Td>

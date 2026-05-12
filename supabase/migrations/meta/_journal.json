@@ -15,6 +15,13 @@
       "when": 1778238869019,
       "tag": "20260508111458_add_oauth_codes",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778618254883,
+      "tag": "20260512203734_daily_entries_vitals",
+      "breakpoints": true
     }
   ]
 }

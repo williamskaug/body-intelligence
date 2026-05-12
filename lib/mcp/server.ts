@@ -82,7 +82,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     {
       title: "Log a meal",
       description:
-        "Insert or upsert a meal at a specific timestamp. Description is required; macros are optional and typically arrive via Phase-2 connector recipes (MFP, Cronometer, Apple Health).",
+        "Insert or upsert a meal at a specific timestamp. calories, protein_g, carbs_g, and fat_g are REQUIRED — every meal row must carry full energy + macro data. If the caller does not have authoritative values (food label, connector payload, weighed portion), it MUST estimate them from the description before writing. Do not skip the write to avoid estimating; an estimate is the expected behaviour. Fiber_g is optional. Connector writes (with source_id) upsert by (source, source_id); manual writes always insert.",
       inputSchema: logMealInputSchema,
     },
     async (input) => jsonResult(await logMeal(ctx.userId, input)),

@@ -65,10 +65,22 @@ One row per (user, date).
 | `id` | `uuid pk` | |
 | `user_id` | `uuid not null` | FK `auth.users(id)` |
 | `date` | `date not null` | unique with `user_id` |
-| `sleep_h` | `numeric(4,2)` | hours |
-| `hrv_ms` | `integer` | morning HRV |
+| `sleep_h` | `numeric(4,2)` | total sleep hours |
+| `sleep_deep_min` | `integer` | minutes in deep stage |
+| `sleep_light_min` | `integer` | minutes in light stage |
+| `sleep_rem_min` | `integer` | minutes in REM |
+| `sleep_awake_min` | `integer` | minutes awake during sleep window |
+| `hrv_ms` | `integer` | morning HRV (rMSSD) |
 | `rhr_bpm` | `integer` | resting heart rate |
+| `spo2_avg_pct` | `numeric(4,1)` | overnight blood-oxygen average |
+| `respiration_avg_brpm` | `numeric(4,1)` | overnight respiration (breaths/min) |
 | `weight_kg` | `numeric(5,2)` | |
+| `body_fat_pct` | `numeric(4,1)` | smart-scale body fat % |
+| `steps` | `integer` | daily total |
+| `active_calories` | `integer` | kcal above BMR |
+| `floors_climbed` | `integer` | |
+| `intensity_min_moderate` | `integer` | WHO-standard moderate minutes |
+| `intensity_min_vigorous` | `integer` | WHO-standard vigorous minutes |
 | `fatigue` | `smallint` | 1–5, **5 = freshest** |
 | `soreness` | `smallint` | 1–5, **5 = least sore** |
 | `mood` | `smallint` | 1–5, **5 = best** |
