@@ -96,11 +96,11 @@ Insert or upsert a meal. Manual writes (no `source_id`) always insert a new row;
   eaten_at: string;          // ISO timestamp. With offset (`2026-05-08T08:30:00+02:00`) preferred; bare `YYYY-MM-DDTHH:mm:ss` is resolved against the user's timezone.
   meal_type?: string;        // free-form: "breakfast", "lunch", "snack", "pre-run", "post-workout"
   description: string;       // required: what was eaten, in prose
-  calories?: number;
-  protein_g?: number;
-  carbs_g?: number;
-  fat_g?: number;
-  fiber_g?: number;
+  calories: number;          // REQUIRED — estimate from description if no authoritative source
+  protein_g: number;         // REQUIRED — estimate if not known
+  carbs_g: number;           // REQUIRED — estimate if not known
+  fat_g: number;             // REQUIRED — estimate if not known
+  fiber_g?: number;          // optional
   notes?: string;
   source?: string;           // default "manual". Connector recipes pass "mfp", "cronometer", "apple_health", etc.
   source_id?: string;        // optional. When provided, makes the write idempotent.
@@ -110,7 +110,7 @@ Insert or upsert a meal. Manual writes (no `source_id`) always insert a new row;
 **Output:** the created or updated meal row, plus a flag indicating which: `{ row, action: "inserted" | "updated" }`.
 
 **Notes:**
-- `description` is the only required field. A user logging "ate ramen" with no macros is a valid call — macros are nice-to-have, not required.
+- `description`, `calories`, `protein_g`, `carbs_g`, and `fat_g` are all required. When the caller does not have authoritative numbers (food label, connector payload, weighed portion), it MUST estimate from the description before writing. Skipping the write because macros are uncertain is wrong — an estimate is the expected behaviour. `fiber_g` stays optional.
 - Manual logging is high-friction; expect this tool to fill mostly via Phase 2 connector recipes (MyFitnessPal, Cronometer, Apple Health). The `source` + `source_id` pattern matches `log_workout` exactly so connector authoring stays consistent across both.
 - BI does not split a meal into per-food rows. If a connector source has food-level granularity, the recipe is responsible for flattening to per-meal totals before calling this tool. Per-food modeling would require a foods catalog and adds schema-vs-payoff debt that v1 explicitly avoids.
 

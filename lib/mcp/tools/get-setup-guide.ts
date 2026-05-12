@@ -26,7 +26,9 @@ decisions to BI — there is no logic on the server side beyond CRUD.
   wellness scales, plus three free-text blocks (sleep_notes, wellness_notes,
   meal_notes). Partial updates allowed.
 - meals — one row per meal. eaten_at (timestamp), meal_type, required description,
-  optional calories + macros. Day-level prose lives in daily_entries.meal_notes;
+  REQUIRED calories + protein_g + carbs_g + fat_g (estimate from the description if
+  no authoritative source is available — never skip a meal write to avoid
+  estimating). fiber_g optional. Day-level prose lives in daily_entries.meal_notes;
   dietary philosophy lives in NUTRITION.md.
 - health_events — append-only log of injuries / illnesses / symptoms. kind is one of
   'injury' | 'illness' | 'symptom'. resolved_date null = still active.
