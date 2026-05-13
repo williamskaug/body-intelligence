@@ -357,30 +357,46 @@ function DayCard({
       ) : null}
 
       {daily && (daily.sleep_notes || daily.wellness_notes || daily.meal_notes) ? (
-        <div className="mt-4 space-y-1 border-t bg-muted/20 px-5 py-3 text-xs text-muted-foreground">
+        <div className="mt-4 space-y-2 border-t bg-muted/20 px-5 py-3 text-xs leading-relaxed text-muted-foreground">
           {daily.sleep_notes ? (
-            <div>
-              <span className="font-medium text-foreground/80">Sleep:</span>{" "}
-              {daily.sleep_notes}
-            </div>
+            <NoteRow accent="bg-indigo-500/70" label="Sleep" body={daily.sleep_notes} />
           ) : null}
           {daily.wellness_notes ? (
-            <div>
-              <span className="font-medium text-foreground/80">Wellness:</span>{" "}
-              {daily.wellness_notes}
-            </div>
+            <NoteRow accent="bg-emerald-500/70" label="Wellness" body={daily.wellness_notes} />
           ) : null}
           {daily.meal_notes ? (
-            <div>
-              <span className="font-medium text-foreground/80">Meals:</span>{" "}
-              {daily.meal_notes}
-            </div>
+            <NoteRow accent="bg-amber-500/70" label="Meals" body={daily.meal_notes} />
           ) : null}
         </div>
       ) : (
         <div className="h-4" />
       )}
     </article>
+  );
+}
+
+function NoteRow({
+  accent,
+  label,
+  body,
+}: {
+  accent: string;
+  label: string;
+  body: string;
+}) {
+  return (
+    <div className="flex gap-2">
+      <span
+        aria-hidden
+        className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${accent}`}
+      />
+      <div className="min-w-0">
+        <span className="text-[10px] font-medium uppercase tracking-wide text-foreground/70">
+          {label}
+        </span>
+        <p className="mt-0.5">{body}</p>
+      </div>
+    </div>
   );
 }
 
@@ -569,38 +585,52 @@ function MealChip({ meal: m }: { meal: TimelineMeal }) {
 
 function SleepStagesBar({ daily }: { daily: TimelineDaily }) {
   const stages = [
-    { key: "deep", label: "Deep", min: daily.sleep_deep_min, color: "bg-indigo-600/70" },
-    { key: "rem", label: "REM", min: daily.sleep_rem_min, color: "bg-violet-500/70" },
-    { key: "light", label: "Light", min: daily.sleep_light_min, color: "bg-sky-400/60" },
-    { key: "awake", label: "Awake", min: daily.sleep_awake_min, color: "bg-amber-500/50" },
+    { key: "deep", label: "Deep", min: daily.sleep_deep_min, color: "bg-indigo-600/80", dot: "bg-indigo-600" },
+    { key: "rem", label: "REM", min: daily.sleep_rem_min, color: "bg-violet-500/80", dot: "bg-violet-500" },
+    { key: "light", label: "Light", min: daily.sleep_light_min, color: "bg-sky-400/70", dot: "bg-sky-400" },
+    { key: "awake", label: "Awake", min: daily.sleep_awake_min, color: "bg-amber-500/60", dot: "bg-amber-500" },
   ] as const;
   const total = stages.reduce((a, s) => a + (s.min ?? 0), 0);
   if (total <= 0) return null;
+  const present = stages.filter((s) => (s.min ?? 0) > 0);
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-        Sleep stages
-      </span>
-      <div
-        className="flex h-2 flex-1 overflow-hidden rounded-full bg-muted"
-        title={stages
-          .filter((s) => (s.min ?? 0) > 0)
-          .map((s) => `${s.label}: ${s.min}min`)
-          .join(" · ")}
-      >
-        {stages.map((s) =>
-          s.min && s.min > 0 ? (
-            <div
-              key={s.key}
-              className={s.color}
-              style={{ width: `${(s.min / total) * 100}%` }}
-            />
-          ) : null,
-        )}
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          Sleep stages
+        </span>
+        <div
+          className="flex h-2 flex-1 overflow-hidden rounded-full bg-muted"
+          title={present.map((s) => `${s.label}: ${s.min}min`).join(" · ")}
+        >
+          {stages.map((s) =>
+            s.min && s.min > 0 ? (
+              <div
+                key={s.key}
+                className={s.color}
+                style={{ width: `${(s.min / total) * 100}%` }}
+              />
+            ) : null,
+          )}
+        </div>
+        <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+          {Math.round(total)} min
+        </span>
       </div>
-      <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
-        {Math.round(total)} min
-      </span>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-[5.25rem] text-[10px] text-muted-foreground">
+        {present.map((s) => {
+          const pct = ((s.min ?? 0) / total) * 100;
+          return (
+            <span key={s.key} className="inline-flex items-center gap-1">
+              <span aria-hidden className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
+              <span>{s.label}</span>
+              <span className="font-mono tabular-nums opacity-70">
+                {Math.round(pct)}%
+              </span>
+            </span>
+          );
+        })}
+      </div>
     </div>
   );
 }
