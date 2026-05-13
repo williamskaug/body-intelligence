@@ -517,8 +517,8 @@ function WorkoutRow({ workout: w }: { workout: TimelineWorkout }) {
         </span>
       ))}
       {w.source !== "manual" ? (
-        <Badge variant="outline" className="text-[10px]">
-          {w.source}
+        <Badge variant="outline" className="text-[10px] capitalize">
+          {sourceLabel(w.source)}
         </Badge>
       ) : null}
       {w.notes ? (
@@ -528,6 +528,11 @@ function WorkoutRow({ workout: w }: { workout: TimelineWorkout }) {
       ) : null}
     </div>
   );
+}
+
+function sourceLabel(source: string): string {
+  const idx = source.indexOf("_");
+  return idx === -1 ? source : source.slice(0, idx);
 }
 
 function MealsRow({ meals }: { meals: TimelineMeal[] }) {
@@ -566,8 +571,8 @@ function MealChip({ meal: m }: { meal: TimelineMeal }) {
           {m.description}
         </span>
         {m.source !== "manual" ? (
-          <Badge variant="outline" className="ml-auto text-[10px]">
-            {m.source}
+          <Badge variant="outline" className="ml-auto text-[10px] capitalize">
+            {sourceLabel(m.source)}
           </Badge>
         ) : null}
       </div>
