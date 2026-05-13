@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { Calendar } from "@/components/data/calendar";
 import { Documents } from "@/components/data/documents";
+import { EmptyDataState } from "@/components/data/empty-state";
 import { Timeline } from "@/components/data/timeline";
 import { Trends } from "@/components/data/trends";
 import { adminClient } from "@/lib/supabase/admin";
@@ -20,11 +20,13 @@ export default async function DataPage({
 }: {
   searchParams: SearchParams;
 }) {
+  // Auth is enforced by the parent layout — no need to re-check here.
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect("/login?next=%2Fdata");
+  // Layout guarantees this, but TS narrowing wants it.
+  if (!user) return null;
 
   const params = await searchParams;
   const days = parseDays(params.days);
@@ -100,18 +102,32 @@ export default async function DataPage({
     events: events.length,
   };
 
+  const hasAnyData =
+    counts.workouts > 0 ||
+    counts.daily > 0 ||
+    counts.meals > 0 ||
+    counts.events > 0;
+
+  if (!hasAnyData) {
+    return (
+      <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-10 sm:px-6 sm:py-14">
+        <EmptyDataState email={user.email ?? ""} />
+      </div>
+    );
+  }
+
   return (
-    <div className="mx-auto w-full max-w-5xl flex-1 px-6 py-10">
+    <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6 sm:py-10">
       <header className="flex flex-col gap-4">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">Your data</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Visual view of everything Body Intelligence has captured —{" "}
-            day-by-day on the Timeline, summarized over time in Trends.
+            Everything Body Intelligence has captured — day-by-day on the
+            Timeline, by month on the Calendar, summarized over time in Trends.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <Tabs current={view} days={days} />
           <WindowPicker days={days} view={view} />
         </div>
@@ -191,21 +207,26 @@ function Tabs({ current, days }: { current: ViewKey; days: number }) {
 
 function WindowPicker({ days, view }: { days: number; view: ViewKey }) {
   return (
-    <div className="flex items-center gap-1 text-xs">
-      <span className="mr-1 text-muted-foreground">Window</span>
+    <div
+      role="group"
+      aria-label="Time range"
+      className="flex items-center gap-1 text-xs"
+    >
+      <span className="mr-1 text-muted-foreground">Range</span>
       {WINDOWS.map((d) => {
         const active = d === days;
         return (
           <Link
             key={d}
             href={`?view=${view}&days=${d}`}
+            aria-current={active ? "true" : undefined}
             className={`rounded-md border px-2 py-1 transition-colors ${
               active
                 ? "border-foreground bg-foreground text-background"
-                : "border-border text-muted-foreground hover:text-foreground"
+                : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
             }`}
           >
-            {d}d
+            {d === 365 ? "1y" : `${d}d`}
           </Link>
         );
       })}

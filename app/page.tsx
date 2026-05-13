@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { buttonVariants } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
 
@@ -8,104 +9,70 @@ export default async function HomePage() {
     data: { user },
   } = await supabase.auth.getUser();
 
+  if (user) {
+    redirect("/data");
+  }
+
   return (
-    <main className="flex flex-1 flex-col">
+    <div className="flex flex-1 flex-col">
       <header className="border-b">
         <div className="mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-5">
-          <Link href="/" className="text-sm font-semibold tracking-tight">
+          <Link
+            href="/"
+            className="flex items-center gap-2 text-sm font-semibold tracking-tight"
+          >
+            <span
+              aria-hidden
+              className="inline-block size-2 rounded-full bg-foreground"
+            />
             Body Intelligence
           </Link>
-          <nav className="flex items-center gap-3 text-sm">
-            {user ? (
-              <>
-                <Link
-                  href="/agents"
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  Agents
-                </Link>
-                <Link
-                  href="/settings"
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  Settings
-                </Link>
-                <span className="ml-2 hidden text-muted-foreground sm:inline">
-                  {user.email}
-                </span>
-                <form action="/auth/signout" method="post">
-                  <button
-                    type="submit"
-                    className={buttonVariants({ variant: "ghost", size: "sm" })}
-                  >
-                    Sign out
-                  </button>
-                </form>
-              </>
-            ) : (
-              <>
-                <Link
-                  href="/legal/privacy"
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  Privacy
-                </Link>
-                <Link
-                  href="/legal/terms"
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  Terms
-                </Link>
-                <Link
-                  href="/login"
-                  className={buttonVariants({ size: "sm", className: "ml-2" })}
-                >
-                  Sign in
-                </Link>
-              </>
-            )}
+          <nav className="flex items-center gap-2 text-sm">
+            <Link
+              href="/legal/privacy"
+              className="hidden text-muted-foreground transition-colors hover:text-foreground sm:inline"
+            >
+              Privacy
+            </Link>
+            <Link
+              href="/legal/terms"
+              className="hidden text-muted-foreground transition-colors hover:text-foreground sm:inline"
+            >
+              Terms
+            </Link>
+            <Link
+              href="/login"
+              className={buttonVariants({ size: "sm", className: "ml-2" })}
+            >
+              Sign in
+            </Link>
           </nav>
         </div>
       </header>
 
       <section className="mx-auto flex w-full max-w-5xl flex-1 flex-col justify-center px-6 py-20">
-        <p className="text-sm font-medium uppercase tracking-widest text-muted-foreground">
+        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
           Personal health intelligence for athletes
         </p>
-        <h1 className="mt-4 max-w-3xl text-balance text-4xl font-semibold tracking-tight md:text-5xl">
-          {user ? `Welcome, ${user.email?.split("@")[0]}.` : "Capture the data. Let Claude do the reasoning."}
+        <h1 className="mt-5 max-w-3xl text-balance text-4xl font-semibold tracking-tight md:text-5xl">
+          Capture the data. Let Claude do the reasoning.
         </h1>
         <p className="mt-6 max-w-2xl text-balance text-lg text-muted-foreground">
-          {user
-            ? "You're signed in. The eight standard memory files are seeded for your account; settings, recipe library, and MCP endpoint come next."
-            : "Body Intelligence stores your workouts, sleep, meals, and wellness check-ins as structured rows plus a markdown memory layer. The app has no internal AI — Claude reads your data through MCP and reasons against your own training principles."}
+          Body Intelligence stores your workouts, sleep, meals, and wellness
+          check-ins as structured rows plus a markdown memory layer. The app
+          has no internal AI — Claude reads your data through MCP and reasons
+          against your own training principles.
         </p>
-        <div className="mt-10 flex items-center gap-3">
-          {user ? (
-            <>
-              <Link href="/agents" className={buttonVariants({ size: "lg" })}>
-                Open recipe library
-              </Link>
-              <Link
-                href="/settings"
-                className={buttonVariants({ variant: "ghost", size: "lg" })}
-              >
-                Settings
-              </Link>
-            </>
-          ) : (
-            <>
-              <Link href="/login" className={buttonVariants({ size: "lg" })}>
-                Get started
-              </Link>
-              <Link
-                href="#how-it-works"
-                className={buttonVariants({ variant: "ghost", size: "lg" })}
-              >
-                How it works
-              </Link>
-            </>
-          )}
+        <div className="mt-10 flex flex-wrap items-center gap-3">
+          <Link href="/login" className={buttonVariants({ size: "lg" })}>
+            Get started
+          </Link>
+          <Link
+            href="#how-it-works"
+            className={buttonVariants({ variant: "ghost", size: "lg" })}
+          >
+            How it works ↓
+          </Link>
         </div>
       </section>
 
@@ -130,18 +97,29 @@ export default async function HomePage() {
       </section>
 
       <footer className="border-t">
-        <div className="mx-auto w-full max-w-5xl px-6 py-8 text-sm text-muted-foreground">
-          Built on Supabase, Next.js, and the Model Context Protocol.
+        <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-3 px-6 py-8 text-xs text-muted-foreground">
+          <span>Built on Supabase, Next.js, and the Model Context Protocol.</span>
+          <nav className="flex items-center gap-4">
+            <Link href="/legal/privacy" className="hover:text-foreground">
+              Privacy
+            </Link>
+            <Link href="/legal/terms" className="hover:text-foreground">
+              Terms
+            </Link>
+            <Link href="/login" className="hover:text-foreground">
+              Sign in
+            </Link>
+          </nav>
         </div>
       </footer>
-    </main>
+    </div>
   );
 }
 
 function Step({ n, title, body }: { n: number; title: string; body: string }) {
   return (
     <div>
-      <div className="text-xs font-mono text-muted-foreground">0{n}</div>
+      <div className="font-mono text-xs text-muted-foreground">0{n}</div>
       <h3 className="mt-2 text-lg font-semibold tracking-tight">{title}</h3>
       <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{body}</p>
     </div>
