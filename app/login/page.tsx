@@ -53,13 +53,17 @@ export default async function LoginPage({
 
       <main className="flex flex-1 items-center justify-center px-6 py-16">
         <div className="w-full max-w-sm">
+          <span
+            aria-hidden
+            className="mb-6 inline-block size-2 rounded-full bg-foreground"
+          />
           <h1 className="text-2xl font-semibold tracking-tight">
             {sent ? "Check your inbox" : "Sign in"}
           </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
             {sent
               ? "We sent a one-time sign-in link to your email."
-              : "Enter your email and we'll send a magic link."}
+              : "Enter your email and we'll send a magic link. No password, no third-party redirect."}
           </p>
 
           {sent ? (

@@ -241,22 +241,48 @@ function SummaryStrip({
   counts: { workouts: number; daily: number; meals: number; events: number };
   days: number;
 }) {
-  const items: Array<{ label: string; n: number; sub: string }> = [
-    { label: "Workouts", n: counts.workouts, sub: perWeek(counts.workouts, days) },
-    { label: "Daily check-ins", n: counts.daily, sub: `${pct(counts.daily, days)}% of days` },
-    { label: "Meals", n: counts.meals, sub: perDay(counts.meals, days) },
-    { label: "Health events", n: counts.events, sub: counts.events === 0 ? "none active" : "in view" },
+  const items: Array<{ label: string; n: number; sub: string; accent: string }> = [
+    {
+      label: "Workouts",
+      n: counts.workouts,
+      sub: perWeek(counts.workouts, days),
+      accent: "bg-sky-500/70",
+    },
+    {
+      label: "Daily check-ins",
+      n: counts.daily,
+      sub: `${pct(counts.daily, days)}% of days`,
+      accent: "bg-emerald-500/70",
+    },
+    {
+      label: "Meals",
+      n: counts.meals,
+      sub: perDay(counts.meals, days),
+      accent: "bg-amber-500/70",
+    },
+    {
+      label: "Health events",
+      n: counts.events,
+      sub: counts.events === 0 ? "none active" : "in view",
+      accent: counts.events === 0 ? "bg-foreground/30" : "bg-rose-500/70",
+    },
   ];
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       {items.map((i) => (
-        <div key={i.label} className="rounded-xl border bg-card px-3 py-2 shadow-sm">
-          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            {i.label}
-          </div>
-          <div className="mt-0.5 flex items-baseline gap-2">
-            <span className="font-mono text-xl tabular-nums">{i.n}</span>
-            <span className="text-[10px] text-muted-foreground">{i.sub}</span>
+        <div
+          key={i.label}
+          className="relative overflow-hidden rounded-xl border bg-card px-3 py-2.5 shadow-sm"
+        >
+          <span aria-hidden className={`absolute left-0 top-0 h-full w-[3px] ${i.accent}`} />
+          <div className="pl-1">
+            <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              {i.label}
+            </div>
+            <div className="mt-0.5 flex items-baseline gap-2">
+              <span className="font-mono text-xl tabular-nums">{i.n}</span>
+              <span className="text-[10px] text-muted-foreground">{i.sub}</span>
+            </div>
           </div>
         </div>
       ))}

@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
 import { adminClient } from "@/lib/supabase/admin";
 import { recipes } from "@/lib/agents/recipe-data";
@@ -49,145 +49,152 @@ export default async function SettingsPage() {
         </p>
       </header>
 
-      <section
-        aria-labelledby="mcp-heading"
-        className="rounded-2xl border bg-card p-6 shadow-sm"
-      >
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 id="mcp-heading" className="text-base font-semibold tracking-tight">
-            MCP endpoint
+      <div className="space-y-6">
+        <section
+          aria-labelledby="mcp-heading"
+          className="rounded-2xl border bg-gradient-to-br from-card to-card/60 p-6 shadow-sm ring-1 ring-foreground/[0.03]"
+        >
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 id="mcp-heading" className="text-base font-semibold tracking-tight">
+              MCP endpoint
+            </h2>
+            <Badge variant="outline" className="font-mono text-[10px]">
+              OAuth 2.1 · DCR
+            </Badge>
+          </div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Add this URL to Cowork (or any MCP-compatible Claude client). The
+            first connection runs OAuth — approve once and Claude has scoped
+            read/write access to your data.
+          </p>
+          <div className="mt-4">
+            <McpUrl url={mcpUrl} />
+          </div>
+        </section>
+
+        <section
+          aria-labelledby="profile-heading"
+          className="rounded-2xl border bg-card p-6 shadow-sm"
+        >
+          <h2 id="profile-heading" className="text-base font-semibold tracking-tight">
+            Profile
           </h2>
-          <Badge variant="outline" className="font-mono text-[10px]">
-            OAuth 2.1 · DCR
-          </Badge>
-        </div>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Add this URL to Cowork (or any MCP-compatible Claude client). The
-          first connection runs OAuth — approve once and Claude has scoped
-          read/write access to your data.
-        </p>
-        <div className="mt-4">
-          <McpUrl url={mcpUrl} />
-        </div>
-      </section>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Used by capture recipes for date boundaries and unit conversion.
+            Reasoning recipes pull deeper context from{" "}
+            <span className="font-mono">PROFILE.md</span>.
+          </p>
+          <ProfileForm
+            email={user.email ?? ""}
+            defaults={{
+              display_name: profile?.display_name ?? "",
+              timezone: profile?.timezone ?? "",
+              units_system:
+                (profile?.units_system === "imperial" ? "imperial" : "metric") as
+                  | "metric"
+                  | "imperial",
+              locale: profile?.locale ?? "",
+            }}
+          />
+        </section>
 
-      <section
-        aria-labelledby="profile-heading"
-        className="mt-8 rounded-2xl border bg-card p-6 shadow-sm"
-      >
-        <h2 id="profile-heading" className="text-base font-semibold tracking-tight">
-          Profile
-        </h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Used by capture recipes for date boundaries and unit conversion.
-          Reasoning recipes pull deeper context from{" "}
-          <span className="font-mono">PROFILE.md</span>.
-        </p>
-        <ProfileForm
-          email={user.email ?? ""}
-          defaults={{
-            display_name: profile?.display_name ?? "",
-            timezone: profile?.timezone ?? "",
-            units_system:
-              (profile?.units_system === "imperial" ? "imperial" : "metric") as
-                | "metric"
-                | "imperial",
-            locale: profile?.locale ?? "",
-          }}
-        />
-      </section>
+        <section
+          aria-labelledby="apps-heading"
+          className="rounded-2xl border bg-card p-6 shadow-sm"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <h2 id="apps-heading" className="text-base font-semibold tracking-tight">
+              Connected applications
+            </h2>
+            <Badge variant="outline">{apps.length}</Badge>
+          </div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            MCP clients (typically a Cowork install) that hold an active access
+            token to your data.
+          </p>
 
-      <section
-        aria-labelledby="apps-heading"
-        className="mt-8 rounded-2xl border bg-card p-6 shadow-sm"
-      >
-        <div className="flex items-center justify-between gap-3">
-          <h2 id="apps-heading" className="text-base font-semibold tracking-tight">
-            Connected applications
-          </h2>
-          <Badge variant="outline">{apps.length}</Badge>
-        </div>
-        <p className="mt-2 text-sm text-muted-foreground">
-          MCP clients (typically a Cowork install) that hold an active access
-          token to your data.
-        </p>
+          {apps.length === 0 ? (
+            <div className="mt-6 rounded-lg border border-dashed bg-muted/20 p-5 text-sm text-muted-foreground">
+              <p className="font-medium text-foreground">No applications yet</p>
+              <p className="mt-1">
+                Add the MCP URL above to Cowork to authorize one. New tokens
+                will appear here automatically.
+              </p>
+            </div>
+          ) : (
+            <ul className="mt-6 divide-y">
+              {apps.map((app) => (
+                <li
+                  key={app.client_id}
+                  className="flex flex-col items-start gap-3 py-4 sm:flex-row sm:items-start sm:justify-between"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium">{app.name}</p>
+                    <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
+                      {app.client_id}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {app.active_tokens} active token
+                      {app.active_tokens === 1 ? "" : "s"}
+                      {" · "}
+                      issued {timeAgo(app.earliest_issued_at)}
+                      {app.last_used_at
+                        ? ` · last used ${timeAgo(app.last_used_at)}`
+                        : " · never used"}
+                    </p>
+                  </div>
+                  <RevokeClientButton clientId={app.client_id} clientName={app.name} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
 
-        {apps.length === 0 ? (
-          <div className="mt-6 rounded-lg border border-dashed bg-muted/20 p-5 text-sm text-muted-foreground">
-            <p className="font-medium text-foreground">No applications yet</p>
-            <p className="mt-1">
-              Add the MCP URL above to Cowork to authorize one. New tokens will
-              appear here automatically.
+        <section
+          aria-labelledby="onboarding-heading"
+          className="rounded-2xl border border-dashed bg-card/40 p-5"
+        >
+          <div className="flex items-baseline justify-between gap-3">
+            <h2
+              id="onboarding-heading"
+              className="text-sm font-semibold tracking-tight"
+            >
+              Re-run onboarding
+            </h2>
+            {onboarding ? <InstallRecipeButton recipe={onboarding} /> : null}
+          </div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Walk through PROFILE.md, GOALS.md, and PRINCIPLES.md so your future
+            Claude conversations have real context to reason against.{" "}
+            <a href="/agents" className="underline underline-offset-4 hover:text-foreground">
+              Browse all recipes →
+            </a>
+          </p>
+        </section>
+
+        <section
+          aria-labelledby="session-heading"
+          className="flex flex-col gap-3 border-t pt-6 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div>
+            <h2
+              id="session-heading"
+              className="text-sm font-medium tracking-tight"
+            >
+              Browser session
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Connected applications above continue to have MCP access until you
+              revoke them.
             </p>
           </div>
-        ) : (
-          <ul className="mt-6 divide-y">
-            {apps.map((app) => (
-              <li
-                key={app.client_id}
-                className="flex flex-col items-start gap-3 py-4 sm:flex-row sm:items-start sm:justify-between"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">{app.name}</p>
-                  <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
-                    {app.client_id}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {app.active_tokens} active token
-                    {app.active_tokens === 1 ? "" : "s"}
-                    {" · "}
-                    issued {timeAgo(app.earliest_issued_at)}
-                    {app.last_used_at
-                      ? ` · last used ${timeAgo(app.last_used_at)}`
-                      : " · never used"}
-                  </p>
-                </div>
-                <RevokeClientButton clientId={app.client_id} clientName={app.name} />
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section
-        aria-labelledby="onboarding-heading"
-        className="mt-8 rounded-2xl border bg-card p-6 shadow-sm"
-      >
-        <h2 id="onboarding-heading" className="text-base font-semibold tracking-tight">
-          Onboarding
-        </h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Walk through filling in PROFILE.md, GOALS.md, and PRINCIPLES.md so
-          your future Claude conversations have real context to reason against.
-        </p>
-        <div className="mt-4 flex flex-wrap gap-2">
-          {onboarding ? <InstallRecipeButton recipe={onboarding} /> : null}
-          <a
-            href="/agents"
-            className={buttonVariants({ size: "sm", variant: "ghost" })}
-          >
-            Browse all recipes →
-          </a>
-        </div>
-      </section>
-
-      <section
-        aria-labelledby="session-heading"
-        className="mt-8 rounded-2xl border bg-card p-6 shadow-sm"
-      >
-        <h2 id="session-heading" className="text-base font-semibold tracking-tight">
-          Browser session
-        </h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Sign out of this browser. Connected applications above continue to
-          have MCP access until you revoke them.
-        </p>
-        <form action="/auth/signout" method="post" className="mt-4">
-          <Button type="submit" variant="outline" size="sm">
-            Sign out of this browser
-          </Button>
-        </form>
-      </section>
+          <form action="/auth/signout" method="post">
+            <Button type="submit" variant="outline" size="sm">
+              Sign out of this browser
+            </Button>
+          </form>
+        </section>
+      </div>
     </div>
   );
 }

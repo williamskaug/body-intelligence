@@ -73,7 +73,6 @@ export function Calendar({
 
   return (
     <div className="flex flex-col gap-8">
-      <Legend />
       {!anyData ? (
         <div className="rounded-2xl border bg-card px-6 py-10 text-center text-sm text-muted-foreground shadow-sm">
           No data in this window. Cells will fill in once you log workouts or
@@ -95,6 +94,7 @@ export function Calendar({
           wellnessBaseline={wellnessBaseline}
         />
       ))}
+      <Legend />
     </div>
   );
 }
@@ -151,9 +151,14 @@ function MonthGrid({
 
   return (
     <section>
-      <h3 className="mb-3 text-sm font-semibold tracking-tight">{monthLabel}</h3>
+      <h3 className="mb-3 flex items-baseline gap-2 text-sm font-semibold tracking-tight">
+        <span>{monthLabel}</span>
+        <span className="text-[10px] font-normal uppercase tracking-wide text-muted-foreground">
+          Wk starts Mon
+        </span>
+      </h3>
       <div
-        className="grid grid-cols-7 gap-1.5 text-xs"
+        className="grid grid-cols-7 gap-1 text-xs sm:gap-1.5"
         role="grid"
         aria-label={`Calendar for ${monthLabel}`}
       >
@@ -209,12 +214,12 @@ function DayCell({
 
   if (!inMonth) {
     return (
-      <div className="aspect-square min-h-[68px] rounded-md border border-transparent" />
+      <div className="aspect-square min-h-[64px] rounded-md border border-transparent" />
     );
   }
   if (!inWindow) {
     return (
-      <div className="aspect-square min-h-[68px] rounded-md border border-dashed border-border/60 bg-muted/10 p-1 text-muted-foreground/40">
+      <div className="aspect-square min-h-[64px] rounded-md border border-dashed border-border/40 p-1 text-muted-foreground/40">
         <span className="font-mono text-[11px] tabular-nums">{dayNum}</span>
       </div>
     );
@@ -247,15 +252,15 @@ function DayCell({
 
   return (
     <div
-      className={`relative flex aspect-square min-h-[68px] flex-col rounded-md border p-1 ${bg} ${
-        isToday ? "ring-2 ring-foreground/40 ring-offset-1 ring-offset-background" : ""
+      className={`relative flex aspect-square min-h-[64px] flex-col rounded-md border p-1 transition-colors ${bg} ${
+        isToday ? "ring-2 ring-foreground ring-offset-2 ring-offset-background" : ""
       }`}
       title={titleLines.join("\n")}
     >
       <div className="flex items-start justify-between">
         <span
           className={`font-mono text-[11px] tabular-nums ${
-            isToday ? "font-semibold text-foreground" : "text-foreground/80"
+            isToday ? "font-bold text-foreground" : "text-foreground/80"
           }`}
         >
           {dayNum}
@@ -274,7 +279,7 @@ function DayCell({
           ) : null}
           {meals.length > 0 ? (
             <span
-              className="h-1.5 w-1.5 rounded-full bg-foreground/30"
+              className="h-1.5 w-1.5 rounded-full bg-foreground/40"
               aria-label={`${meals.length} meals logged`}
             />
           ) : null}
@@ -282,7 +287,7 @@ function DayCell({
       </div>
 
       {workouts.length > 0 ? (
-        <div className="mt-1 flex flex-1 flex-col justify-end gap-0.5">
+        <div className="mt-auto flex flex-col gap-[2px]">
           {workouts.slice(0, 3).map((w) => (
             <WorkoutBar key={w.id} workout={w} />
           ))}
@@ -302,9 +307,9 @@ function WorkoutBar({ workout: w }: { workout: CalendarWorkout }) {
   const label = shortTypeLabel(w.type);
   return (
     <div
-      className={`flex items-center gap-1 truncate rounded-sm border px-1 py-0.5 text-[9px] leading-none ${tone}`}
+      className={`flex items-center gap-1 truncate rounded-sm px-1 py-[2px] text-[10px] leading-none ${tone}`}
     >
-      <span className="truncate font-medium uppercase tracking-wide">{label}</span>
+      <span className="truncate font-semibold uppercase tracking-wide">{label}</span>
       {w.duration_min != null ? (
         <span className="ml-auto font-mono tabular-nums opacity-80">
           {w.duration_min}′
@@ -316,18 +321,26 @@ function WorkoutBar({ workout: w }: { workout: CalendarWorkout }) {
 
 function Legend() {
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-muted-foreground">
-      <LegendItem swatch="bg-emerald-500/40" label="Wellness above baseline" />
-      <LegendItem swatch="bg-muted" label="In baseline" />
-      <LegendItem swatch="bg-amber-500/40" label="Below baseline" />
-      <span className="mx-2 hidden h-3 w-px bg-border sm:inline-block" />
-      <LegendItem swatch="bg-emerald-500/30 border border-emerald-500/40" label="Easy workout (RPE 1–3)" />
-      <LegendItem swatch="bg-amber-500/30 border border-amber-500/40" label="Moderate (4–6)" />
-      <LegendItem swatch="bg-rose-500/30 border border-rose-500/40" label="Hard (7–10)" />
-      <span className="mx-2 hidden h-3 w-px bg-border sm:inline-block" />
-      <LegendItem swatch="rounded-full h-1.5 w-1.5 bg-amber-500" label="Active health event" inline />
-      <LegendItem swatch="rounded-full h-1.5 w-1.5 bg-foreground/30" label="Meals logged" inline />
-    </div>
+    <details className="group rounded-lg border bg-card/50 px-3 py-2 text-[11px] text-muted-foreground">
+      <summary className="flex cursor-pointer select-none items-center justify-between gap-2 text-[10px] font-medium uppercase tracking-wide">
+        <span>Legend</span>
+        <span className="transition-transform group-open:rotate-90" aria-hidden>
+          ›
+        </span>
+      </summary>
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <LegendItem swatch="bg-emerald-500/30 border-emerald-500/40" label="Wellness above baseline" />
+        <LegendItem swatch="bg-card border-border" label="In baseline" />
+        <LegendItem swatch="bg-amber-500/30 border-amber-500/40" label="Below baseline" />
+        <span className="mx-2 hidden h-3 w-px bg-border sm:inline-block" />
+        <LegendItem swatch="bg-emerald-500/20 border-emerald-500/40" label="Easy (RPE 1–3)" />
+        <LegendItem swatch="bg-amber-500/20 border-amber-500/40" label="Moderate (4–6)" />
+        <LegendItem swatch="bg-rose-500/20 border-rose-500/40" label="Hard (7–10)" />
+        <span className="mx-2 hidden h-3 w-px bg-border sm:inline-block" />
+        <LegendItem swatch="rounded-full h-1.5 w-1.5 bg-amber-500" label="Active event" inline />
+        <LegendItem swatch="rounded-full h-1.5 w-1.5 bg-foreground/40" label="Meals logged" inline />
+      </div>
+    </details>
   );
 }
 
@@ -342,7 +355,7 @@ function LegendItem({
 }) {
   return (
     <span className="inline-flex items-center gap-1.5">
-      <span className={inline ? swatch : `inline-block h-3 w-3 rounded-sm ${swatch}`} />
+      <span className={inline ? swatch : `inline-block h-3 w-3 rounded-sm border ${swatch}`} />
       <span>{label}</span>
     </span>
   );

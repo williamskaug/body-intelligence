@@ -47,6 +47,7 @@ export type TrendsWorkout = {
 };
 
 export type TrendsMeal = {
+  eaten_at: string;
   calories: number | null;
   protein_g: string | null;
   carbs_g: string | null;
@@ -105,6 +106,7 @@ export function Trends({ daily, workouts, meals, startDate, endDate }: Props) {
   const totals = macroTotals(meals);
   const weeks = weeklyBuckets(workouts as TrendsWorkout[], 12, endDate);
   const typeCounts = countByType(workouts);
+  const distinctMealDays = new Set(meals.map((m) => m.eaten_at.slice(0, 10))).size;
 
   const anyData =
     daily.length > 0 || workouts.length > 0 || meals.length > 0;
@@ -157,7 +159,7 @@ export function Trends({ daily, workouts, meals, startDate, endDate }: Props) {
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Nutrition
         </h3>
-        <MacroCard totals={totals} dayCount={dates.length} />
+        <MacroCard totals={totals} dayCount={distinctMealDays} />
       </section>
     </div>
   );
@@ -209,13 +211,19 @@ function MetricCard({
         ) : null}
       </div>
       <div className="mt-3 text-foreground/80">
-        <Sparkline
-          values={values}
-          baseline={baseline}
-          width={260}
-          height={56}
-          ariaLabel={`${label} trend`}
-        />
+        {samples >= 3 ? (
+          <Sparkline
+            values={values}
+            baseline={baseline}
+            width={260}
+            height={56}
+            ariaLabel={`${label} trend`}
+          />
+        ) : (
+          <div className="flex h-14 items-center justify-center text-[10px] uppercase tracking-wide text-muted-foreground/70">
+            Need ≥3 days for trend
+          </div>
+        )}
       </div>
     </div>
   );
@@ -363,7 +371,7 @@ function ConsistencyCard({
         <span className="text-xs text-muted-foreground">% days logged</span>
       </div>
       <div
-        className="mt-3 grid grid-cols-14 gap-0.5"
+        className="mt-3 grid gap-1"
         style={{ gridTemplateColumns: `repeat(${Math.min(recent.length, 14)}, minmax(0, 1fr))` }}
         role="img"
         aria-label="Daily check-in pattern, last 28 days"
@@ -371,10 +379,10 @@ function ConsistencyCard({
         {recent.map((d) => (
           <div
             key={d}
-            className={`aspect-square rounded-sm ${
-              filled.has(d) ? "bg-foreground/80" : "bg-muted"
+            className={`aspect-square rounded-[3px] ${
+              filled.has(d) ? "bg-emerald-500/70" : "bg-muted"
             }`}
-            title={d}
+            title={`${d}${filled.has(d) ? " · logged" : ""}`}
           />
         ))}
       </div>
@@ -405,18 +413,18 @@ function MacroCard({
     <div className="grid gap-3 lg:grid-cols-3">
       <div className="rounded-xl border bg-card p-4 shadow-sm">
         <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Avg daily kcal
+          Avg kcal / logged day
         </span>
         <div className="mt-1 flex items-baseline gap-1">
           <span className="font-mono text-2xl tabular-nums">
-            {totals.mealsWithMacros > 0 ? Math.round(avgKcal) : "—"}
+            {dayCount > 0 && totals.mealsWithMacros > 0 ? Math.round(avgKcal) : "—"}
           </span>
-          <span className="text-xs text-muted-foreground">kcal / day</span>
+          <span className="text-xs text-muted-foreground">kcal</span>
         </div>
         <div className="mt-3 text-xs text-muted-foreground">
           {totalMeals === 0
             ? "No meals logged."
-            : `${totalMeals} meal${totalMeals === 1 ? "" : "s"} · ${totals.mealsWithMacros} with macros · ${totals.mealsDescriptionOnly} description-only`}
+            : `${totalMeals} meal${totalMeals === 1 ? "" : "s"} on ${dayCount} day${dayCount === 1 ? "" : "s"} · ${totals.mealsWithMacros} with macros`}
         </div>
       </div>
 

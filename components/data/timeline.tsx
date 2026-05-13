@@ -192,64 +192,65 @@ function DayCard({
   events: TimelineEvent[];
   baselines: Record<string, ReturnType<typeof computeBaseline>>;
 }) {
+  const headerVitals: Array<{
+    label: string;
+    value: string | number | null | undefined;
+    unit: string;
+    decimals: number;
+    baseline: ReturnType<typeof computeBaseline>;
+    higherIsBetter: boolean | null;
+  }> = [
+    { label: "Sleep", value: daily?.sleep_h, unit: "h", decimals: 1, baseline: baselines.sleep_h, higherIsBetter: true },
+    { label: "HRV", value: daily?.hrv_ms, unit: "ms", decimals: 0, baseline: baselines.hrv_ms, higherIsBetter: true },
+    { label: "RHR", value: daily?.rhr_bpm, unit: "bpm", decimals: 0, baseline: baselines.rhr_bpm, higherIsBetter: false },
+    { label: "Wt", value: daily?.weight_kg, unit: "kg", decimals: 1, baseline: null, higherIsBetter: null },
+  ];
+
+  const wellnessValues = daily
+    ? WELLNESS_KEYS.map((w) => ({ ...w, value: daily[w.key] as number | null }))
+    : [];
+  const hasWellness = wellnessValues.some((w) => w.value != null);
+
   return (
     <article className="rounded-2xl border bg-card shadow-sm">
-      <header className="flex flex-wrap items-baseline justify-between gap-3 px-5 pt-4">
-        <div className="flex items-baseline gap-3">
-          <h3 className="font-mono text-sm font-medium">{date}</h3>
-          <span className="text-xs text-muted-foreground">{weekdayName(date)}</span>
+      <header className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 px-5 pt-4">
+        <div className="flex flex-col gap-0.5">
+          <h3 className="text-base font-semibold tracking-tight">
+            {weekdayLong(date)}
+            <span className="text-muted-foreground">, {monthDay(date)}</span>
+          </h3>
+          <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground/70">
+            {date}
+          </span>
         </div>
-        <div className="flex flex-wrap items-center gap-3 text-xs">
-          <ContinuousChip
-            label="Sleep"
-            value={daily?.sleep_h}
-            unit="h"
-            decimals={1}
-            baseline={baselines.sleep_h}
-            higherIsBetter={true}
-          />
-          <ContinuousChip
-            label="HRV"
-            value={daily?.hrv_ms}
-            unit="ms"
-            decimals={0}
-            baseline={baselines.hrv_ms}
-            higherIsBetter={true}
-          />
-          <ContinuousChip
-            label="RHR"
-            value={daily?.rhr_bpm}
-            unit="bpm"
-            decimals={0}
-            baseline={baselines.rhr_bpm}
-            higherIsBetter={false}
-          />
-          <ContinuousChip
-            label="Wt"
-            value={daily?.weight_kg}
-            unit="kg"
-            decimals={1}
-            baseline={null}
-            higherIsBetter={null}
-          />
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          {headerVitals.map((v) => (
+            <ContinuousChip
+              key={v.label}
+              label={v.label}
+              value={v.value}
+              unit={v.unit}
+              decimals={v.decimals}
+              baseline={v.baseline}
+              higherIsBetter={v.higherIsBetter}
+            />
+          ))}
         </div>
       </header>
 
-      {daily ? (
-        <div className="mt-3 flex flex-wrap items-center gap-1.5 px-5">
-          {WELLNESS_KEYS.map((w) => {
-            const v = daily[w.key] as number | null;
-            const cls = classify(v, baselines[w.key] ?? null, true);
-            return (
-              <span
+      {hasWellness ? (
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 px-5">
+          {wellnessValues.map((w) =>
+            w.value == null ? null : (
+              <WellnessGauge
                 key={w.key}
-                title={`${w.long}: ${v ?? "—"}/5`}
-                className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${bandClass(cls.direction)}`}
-              >
-                {w.short} <span className="tabular-nums">{v ?? "—"}</span>
-              </span>
-            );
-          })}
+                label={w.short}
+                title={w.long}
+                value={w.value}
+                baseline={baselines[w.key] ?? null}
+              />
+            ),
+          )}
         </div>
       ) : null}
 
@@ -289,7 +290,7 @@ function DayCard({
       ) : null}
 
       {daily && hasActivity(daily) ? (
-        <div className="mt-2 flex flex-wrap items-center gap-1.5 px-5 text-xs">
+        <div className="mt-3 flex flex-wrap items-center gap-1.5 px-5 text-xs">
           <ContinuousChip
             label="Steps"
             value={daily.steps}
@@ -356,30 +357,46 @@ function DayCard({
       ) : null}
 
       {daily && (daily.sleep_notes || daily.wellness_notes || daily.meal_notes) ? (
-        <div className="mt-3 space-y-1 border-t bg-muted/20 px-5 py-3 text-xs text-muted-foreground">
+        <div className="mt-4 space-y-2 border-t bg-muted/20 px-5 py-3 text-xs leading-relaxed text-muted-foreground">
           {daily.sleep_notes ? (
-            <div>
-              <span className="font-medium text-foreground/80">Sleep:</span>{" "}
-              {daily.sleep_notes}
-            </div>
+            <NoteRow accent="bg-indigo-500/70" label="Sleep" body={daily.sleep_notes} />
           ) : null}
           {daily.wellness_notes ? (
-            <div>
-              <span className="font-medium text-foreground/80">Wellness:</span>{" "}
-              {daily.wellness_notes}
-            </div>
+            <NoteRow accent="bg-emerald-500/70" label="Wellness" body={daily.wellness_notes} />
           ) : null}
           {daily.meal_notes ? (
-            <div>
-              <span className="font-medium text-foreground/80">Meals:</span>{" "}
-              {daily.meal_notes}
-            </div>
+            <NoteRow accent="bg-amber-500/70" label="Meals" body={daily.meal_notes} />
           ) : null}
         </div>
       ) : (
         <div className="h-4" />
       )}
     </article>
+  );
+}
+
+function NoteRow({
+  accent,
+  label,
+  body,
+}: {
+  accent: string;
+  label: string;
+  body: string;
+}) {
+  return (
+    <div className="flex gap-2">
+      <span
+        aria-hidden
+        className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${accent}`}
+      />
+      <div className="min-w-0">
+        <span className="text-[10px] font-medium uppercase tracking-wide text-foreground/70">
+          {label}
+        </span>
+        <p className="mt-0.5">{body}</p>
+      </div>
+    </div>
   );
 }
 
@@ -399,14 +416,7 @@ function ContinuousChip({
   higherIsBetter: boolean | null;
 }) {
   const v = value == null ? null : Number(value);
-  if (v == null || !Number.isFinite(v)) {
-    return (
-      <span className="inline-flex items-baseline gap-1 text-muted-foreground">
-        <span className="text-[10px] uppercase tracking-wide">{label}</span>
-        <span className="font-mono tabular-nums">—</span>
-      </span>
-    );
-  }
+  if (v == null || !Number.isFinite(v)) return null;
   const cls = classify(v, baseline ?? null, higherIsBetter);
   const delta = deltaString(v, baseline ?? null, decimals);
   return (
@@ -416,12 +426,58 @@ function ContinuousChip({
     >
       <span className="text-[10px] uppercase tracking-wide opacity-80">{label}</span>
       <span className="font-mono tabular-nums">{v.toFixed(decimals)}</span>
-      <span className="text-[10px] opacity-70">{unit}</span>
+      {unit ? <span className="text-[10px] opacity-70">{unit}</span> : null}
       {delta ? (
         <span className="ml-0.5 text-[10px] tabular-nums opacity-70">{delta}</span>
       ) : null}
     </span>
   );
+}
+
+function WellnessGauge({
+  label,
+  title,
+  value,
+  baseline,
+}: {
+  label: string;
+  title: string;
+  value: number;
+  baseline: ReturnType<typeof computeBaseline>;
+}) {
+  const cls = classify(value, baseline ?? null, true);
+  const filled = gaugeBarColor(cls.direction);
+  const empty = "bg-foreground/15";
+  const baselineLabel = baseline ? ` (baseline ${baseline.mean.toFixed(1)})` : "";
+  return (
+    <span
+      className="inline-flex items-center gap-1.5"
+      title={`${title}: ${value}/5${baselineLabel}`}
+    >
+      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
+      <span className="flex gap-[2px]">
+        {[1, 2, 3, 4, 5].map((level) => (
+          <span
+            key={level}
+            className={`h-3 w-[3px] rounded-[1px] ${level <= value ? filled : empty}`}
+          />
+        ))}
+      </span>
+    </span>
+  );
+}
+
+function gaugeBarColor(direction: "good" | "warn" | "neutral"): string {
+  switch (direction) {
+    case "good":
+      return "bg-emerald-500";
+    case "warn":
+      return "bg-amber-500";
+    case "neutral":
+      return "bg-foreground/60";
+  }
 }
 
 function WorkoutRow({ workout: w }: { workout: TimelineWorkout }) {
@@ -461,8 +517,8 @@ function WorkoutRow({ workout: w }: { workout: TimelineWorkout }) {
         </span>
       ))}
       {w.source !== "manual" ? (
-        <Badge variant="outline" className="text-[10px]">
-          {w.source}
+        <Badge variant="outline" className="text-[10px] capitalize">
+          {sourceLabel(w.source)}
         </Badge>
       ) : null}
       {w.notes ? (
@@ -472,6 +528,11 @@ function WorkoutRow({ workout: w }: { workout: TimelineWorkout }) {
       ) : null}
     </div>
   );
+}
+
+function sourceLabel(source: string): string {
+  const idx = source.indexOf("_");
+  return idx === -1 ? source : source.slice(0, idx);
 }
 
 function MealsRow({ meals }: { meals: TimelineMeal[] }) {
@@ -489,51 +550,38 @@ function MealsRow({ meals }: { meals: TimelineMeal[] }) {
 }
 
 function MealChip({ meal: m }: { meal: TimelineMeal }) {
-  const hasMacros =
-    m.calories != null ||
-    m.protein_g != null ||
-    m.carbs_g != null ||
-    m.fat_g != null ||
-    m.fiber_g != null;
   const macroParts: string[] = [];
+  if (m.calories != null) macroParts.push(`${m.calories} kcal`);
   if (m.protein_g != null) macroParts.push(`${Number(m.protein_g).toFixed(0)}P`);
   if (m.carbs_g != null) macroParts.push(`${Number(m.carbs_g).toFixed(0)}C`);
   if (m.fat_g != null) macroParts.push(`${Number(m.fat_g).toFixed(0)}F`);
   if (m.fiber_g != null) macroParts.push(`${Number(m.fiber_g).toFixed(0)}g fiber`);
-  const hasSecondaryLine = macroParts.length > 0 || !!m.notes;
   return (
     <div className="flex max-w-[22rem] flex-col gap-0.5 rounded-md border bg-muted/30 px-2 py-1 text-xs">
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-baseline gap-1.5">
         <span className="font-mono text-[10px] text-muted-foreground">
           {m.eaten_at.slice(11, 16)}
         </span>
         {m.meal_type ? (
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          <span className="text-[10px] capitalize text-muted-foreground">
             {m.meal_type}
           </span>
         ) : null}
-        <span className="truncate">{m.description}</span>
-        {hasMacros && m.calories != null ? (
-          <span className="ml-auto font-mono tabular-nums text-muted-foreground">
-            {m.calories}kcal
-          </span>
-        ) : !hasMacros ? (
-          <span className="ml-auto text-[10px] italic text-muted-foreground">
-            no macros
-          </span>
-        ) : null}
+        <span className="truncate" title={m.description}>
+          {m.description}
+        </span>
         {m.source !== "manual" ? (
-          <Badge variant="outline" className="text-[10px]">
-            {m.source}
+          <Badge variant="outline" className="ml-auto text-[10px] capitalize">
+            {sourceLabel(m.source)}
           </Badge>
         ) : null}
       </div>
-      {hasSecondaryLine ? (
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 pl-[2.75rem] text-[10px] text-muted-foreground">
+      {macroParts.length > 0 || m.notes ? (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground">
           {macroParts.length > 0 ? (
             <span className="font-mono tabular-nums">{macroParts.join(" · ")}</span>
           ) : null}
-          {m.notes ? <span className="italic">· {m.notes}</span> : null}
+          {m.notes ? <span className="italic">{m.notes}</span> : null}
         </div>
       ) : null}
     </div>
@@ -542,38 +590,52 @@ function MealChip({ meal: m }: { meal: TimelineMeal }) {
 
 function SleepStagesBar({ daily }: { daily: TimelineDaily }) {
   const stages = [
-    { key: "deep", label: "Deep", min: daily.sleep_deep_min, color: "bg-indigo-600/70" },
-    { key: "rem", label: "REM", min: daily.sleep_rem_min, color: "bg-violet-500/70" },
-    { key: "light", label: "Light", min: daily.sleep_light_min, color: "bg-sky-400/60" },
-    { key: "awake", label: "Awake", min: daily.sleep_awake_min, color: "bg-amber-500/50" },
+    { key: "deep", label: "Deep", min: daily.sleep_deep_min, color: "bg-indigo-600/80", dot: "bg-indigo-600" },
+    { key: "rem", label: "REM", min: daily.sleep_rem_min, color: "bg-violet-500/80", dot: "bg-violet-500" },
+    { key: "light", label: "Light", min: daily.sleep_light_min, color: "bg-sky-400/70", dot: "bg-sky-400" },
+    { key: "awake", label: "Awake", min: daily.sleep_awake_min, color: "bg-amber-500/60", dot: "bg-amber-500" },
   ] as const;
   const total = stages.reduce((a, s) => a + (s.min ?? 0), 0);
   if (total <= 0) return null;
+  const present = stages.filter((s) => (s.min ?? 0) > 0);
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-        Sleep stages
-      </span>
-      <div
-        className="flex h-2 flex-1 overflow-hidden rounded-full bg-muted"
-        title={stages
-          .filter((s) => (s.min ?? 0) > 0)
-          .map((s) => `${s.label}: ${s.min}min`)
-          .join(" · ")}
-      >
-        {stages.map((s) =>
-          s.min && s.min > 0 ? (
-            <div
-              key={s.key}
-              className={s.color}
-              style={{ width: `${(s.min / total) * 100}%` }}
-            />
-          ) : null,
-        )}
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          Sleep stages
+        </span>
+        <div
+          className="flex h-2 flex-1 overflow-hidden rounded-full bg-muted"
+          title={present.map((s) => `${s.label}: ${s.min}min`).join(" · ")}
+        >
+          {stages.map((s) =>
+            s.min && s.min > 0 ? (
+              <div
+                key={s.key}
+                className={s.color}
+                style={{ width: `${(s.min / total) * 100}%` }}
+              />
+            ) : null,
+          )}
+        </div>
+        <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+          {Math.round(total)} min
+        </span>
       </div>
-      <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
-        {Math.round(total)} min
-      </span>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-[5.25rem] text-[10px] text-muted-foreground">
+        {present.map((s) => {
+          const pct = ((s.min ?? 0) / total) * 100;
+          return (
+            <span key={s.key} className="inline-flex items-center gap-1">
+              <span aria-hidden className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
+              <span>{s.label}</span>
+              <span className="font-mono tabular-nums opacity-70">
+                {Math.round(pct)}%
+              </span>
+            </span>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -663,7 +725,16 @@ function num(s: string | null): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function weekdayName(date: string): string {
+function weekdayLong(date: string): string {
   const d = new Date(`${date}T00:00:00Z`);
-  return d.toLocaleDateString(undefined, { weekday: "short", timeZone: "UTC" });
+  return d.toLocaleDateString(undefined, { weekday: "long", timeZone: "UTC" });
+}
+
+function monthDay(date: string): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  return d.toLocaleDateString(undefined, {
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  });
 }
