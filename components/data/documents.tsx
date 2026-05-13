@@ -4,6 +4,42 @@ export type DocumentRow = {
   updated_at: string;
 };
 
+type Role = "index" | "foundation" | "plan" | "log" | "reference";
+
+type StandardMeta = {
+  role: Role;
+  description: string;
+};
+
+const STANDARD_DOCS: Record<string, StandardMeta> = {
+  "MEMORY.md": { role: "index", description: "One-liner index over the other files." },
+  "PROFILE.md": { role: "foundation", description: "Anthropometrics, training history, baseline." },
+  "PRINCIPLES.md": { role: "foundation", description: "Training philosophy and decision rules." },
+  "GOALS.md": { role: "plan", description: "A/B/C races and performance benchmarks." },
+  "CURRENT.md": { role: "plan", description: "This week's plan and active training block." },
+  "HEALTH_LOG.md": { role: "log", description: "Injuries, illnesses, niggles. Append-only." },
+  "NUTRITION.md": { role: "reference", description: "What works, what wrecks you. Dietary notes." },
+  "EQUIPMENT.md": { role: "reference", description: "Gear inventory, mileage, and condition." },
+};
+
+const ROLE_ORDER: Role[] = ["index", "foundation", "plan", "log", "reference"];
+
+const ROLE_LABELS: Record<Role, string> = {
+  index: "Index",
+  foundation: "Foundation",
+  plan: "Plan",
+  log: "Log",
+  reference: "Reference",
+};
+
+const ROLE_ACCENT: Record<Role, string> = {
+  index: "bg-foreground/40",
+  foundation: "bg-sky-500/60",
+  plan: "bg-emerald-500/60",
+  log: "bg-amber-500/60",
+  reference: "bg-violet-500/50",
+};
+
 export function Documents({ rows }: { rows: ReadonlyArray<DocumentRow> }) {
   if (rows.length === 0) {
     return (
@@ -12,32 +48,119 @@ export function Documents({ rows }: { rows: ReadonlyArray<DocumentRow> }) {
       </div>
     );
   }
+
+  const { topLevel, folders } = splitByFolder(rows);
+  const sortedTop = sortByRole(topLevel);
+  const folderEntries = Array.from(folders.entries()).sort((a, b) =>
+    a[0].localeCompare(b[0]),
+  );
+
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      {rows.map((doc) => (
-        <details
-          key={doc.path}
-          className="group rounded-xl border bg-card shadow-sm transition-shadow open:shadow-md"
-        >
-          <summary className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm">
-            <div className="flex flex-col">
-              <span className="font-mono text-sm font-medium">{doc.path}</span>
-              <span className="text-xs text-muted-foreground">
-                {previewFirstLine(doc.content)}
-              </span>
-            </div>
-            <div className="flex flex-col items-end gap-0.5 text-[10px] text-muted-foreground">
-              <span>{timeAgo(doc.updated_at)}</span>
-              <span>{wordCount(doc.content)} words</span>
-            </div>
-          </summary>
-          <pre className="max-h-96 overflow-y-auto whitespace-pre-wrap rounded-b-xl border-t bg-muted/20 px-4 py-3 font-mono text-xs leading-relaxed">
-            {doc.content}
-          </pre>
-        </details>
+    <div className="flex flex-col gap-6">
+      <div className="grid gap-3 sm:grid-cols-2">
+        {sortedTop.map((doc) => (
+          <DocCard key={doc.path} doc={doc} />
+        ))}
+      </div>
+      {folderEntries.map(([folder, docs]) => (
+        <FolderSection key={folder} folder={folder} docs={docs} />
       ))}
     </div>
   );
+}
+
+function DocCard({ doc }: { doc: DocumentRow }) {
+  const meta = STANDARD_DOCS[doc.path];
+  const role = meta?.role ?? "reference";
+  const subtitle = meta?.description ?? previewFirstLine(doc.content);
+  return (
+    <details className="group rounded-xl border bg-card shadow-sm transition-shadow open:shadow-md">
+      <summary className="flex cursor-pointer items-stretch gap-3 py-3 pr-4 text-sm">
+        <span aria-hidden className={`w-[3px] rounded-r-sm ${ROLE_ACCENT[role]}`} />
+        <div className="flex flex-1 items-center justify-between gap-3 pl-1">
+          <div className="min-w-0">
+            <div className="flex items-baseline gap-2">
+              <span className="font-mono text-sm font-medium">{doc.path}</span>
+              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                {ROLE_LABELS[role]}
+              </span>
+            </div>
+            <span className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
+              {subtitle}
+            </span>
+          </div>
+          <div className="flex shrink-0 flex-col items-end gap-0.5 text-[10px] text-muted-foreground">
+            <span>{timeAgo(doc.updated_at)}</span>
+            <span>{wordCount(doc.content)} words</span>
+          </div>
+        </div>
+      </summary>
+      <pre className="max-h-96 overflow-y-auto whitespace-pre-wrap rounded-b-xl border-t bg-muted/20 px-4 py-3 font-mono text-xs leading-relaxed">
+        {doc.content}
+      </pre>
+    </details>
+  );
+}
+
+function FolderSection({
+  folder,
+  docs,
+}: {
+  folder: string;
+  docs: DocumentRow[];
+}) {
+  const sorted = [...docs].sort((a, b) => b.path.localeCompare(a.path));
+  return (
+    <details className="group rounded-xl border bg-card/60 shadow-sm">
+      <summary className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm">
+        <div className="flex items-baseline gap-2">
+          <span className="font-mono font-medium">{folder}/</span>
+          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            {sorted.length} file{sorted.length === 1 ? "" : "s"}
+          </span>
+        </div>
+        <span className="text-[10px] text-muted-foreground transition-transform group-open:rotate-90">
+          ›
+        </span>
+      </summary>
+      <div className="grid gap-2 px-3 pb-3 pt-1 sm:grid-cols-2">
+        {sorted.map((doc) => (
+          <DocCard key={doc.path} doc={doc} />
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function splitByFolder(rows: ReadonlyArray<DocumentRow>): {
+  topLevel: DocumentRow[];
+  folders: Map<string, DocumentRow[]>;
+} {
+  const topLevel: DocumentRow[] = [];
+  const folders = new Map<string, DocumentRow[]>();
+  for (const r of rows) {
+    const slash = r.path.indexOf("/");
+    if (slash === -1) {
+      topLevel.push(r);
+      continue;
+    }
+    const folder = r.path.slice(0, slash);
+    const arr = folders.get(folder);
+    if (arr) arr.push(r);
+    else folders.set(folder, [r]);
+  }
+  return { topLevel, folders };
+}
+
+function sortByRole(rows: DocumentRow[]): DocumentRow[] {
+  return [...rows].sort((a, b) => {
+    const ra = STANDARD_DOCS[a.path]?.role;
+    const rb = STANDARD_DOCS[b.path]?.role;
+    const ia = ra ? ROLE_ORDER.indexOf(ra) : ROLE_ORDER.length;
+    const ib = rb ? ROLE_ORDER.indexOf(rb) : ROLE_ORDER.length;
+    if (ia !== ib) return ia - ib;
+    return a.path.localeCompare(b.path);
+  });
 }
 
 function previewFirstLine(content: string): string {
