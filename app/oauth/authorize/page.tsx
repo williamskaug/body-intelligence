@@ -61,9 +61,10 @@ export default async function AuthorizePage({
       <div className="w-full rounded-2xl border bg-card p-6 shadow-sm sm:p-8">
         <Link
           href="/"
-          className="text-xs text-muted-foreground hover:text-foreground"
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
         >
-          ← Body Intelligence
+          <span aria-hidden className="inline-block size-1.5 rounded-full bg-foreground/60" />
+          Body Intelligence
         </Link>
         <p className="mt-6 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
           Authorize access
@@ -79,21 +80,18 @@ export default async function AuthorizePage({
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Approving grants this application permission to
           </p>
-          <ul className="mt-3 space-y-2 text-sm">
-            <li className="flex gap-2">
-              <span aria-hidden className="text-foreground/60">·</span>
+          <ul className="mt-3 space-y-2.5 text-sm">
+            <PermissionRow>
               Read and write your workouts, daily entries, meals, and health
               events
-            </li>
-            <li className="flex gap-2">
-              <span aria-hidden className="text-foreground/60">·</span>
-              Read and write your memory documents (PROFILE, GOALS,
-              PRINCIPLES, etc.)
-            </li>
-            <li className="flex gap-2">
-              <span aria-hidden className="text-foreground/60">·</span>
+            </PermissionRow>
+            <PermissionRow>
+              Read and write your memory documents (PROFILE, GOALS, PRINCIPLES,
+              etc.)
+            </PermissionRow>
+            <PermissionRow>
               Operate on behalf of your account through the MCP endpoint
-            </li>
+            </PermissionRow>
           </ul>
         </div>
 
@@ -206,6 +204,24 @@ function validateRequest(params: Awaited<SearchParams>): Validation {
       scope,
     },
   };
+}
+
+function PermissionRow({ children }: { children: React.ReactNode }) {
+  return (
+    <li className="flex items-start gap-2">
+      <svg
+        viewBox="0 0 16 16"
+        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2}
+        aria-hidden
+      >
+        <path d="M3 8.5l3 3 7-7" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      <span>{children}</span>
+    </li>
+  );
 }
 
 function ErrorScreen({ title, message }: { title: string; message: string }) {
