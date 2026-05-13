@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -5,7 +6,9 @@ import { createClient } from "@/lib/supabase/server";
 import { adminClient } from "@/lib/supabase/admin";
 import { recipes } from "@/lib/agents/recipe-data";
 import { InstallRecipeButton } from "../agents/install-button";
-import { revokeClientAction } from "./actions";
+import { McpUrl } from "./mcp-url";
+import { ProfileForm } from "./profile-form";
+import { RevokeClientButton } from "./revoke-button";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +28,6 @@ export default async function SettingsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Profile
   const profileRes = await supabase
     .from("user_profiles")
     .select("display_name, timezone, units_system, locale")
@@ -33,36 +35,74 @@ export default async function SettingsPage() {
     .maybeSingle();
   const profile = profileRes.data;
 
-  // Connected applications: tokens grouped by client.
   const apps = await loadConnectedApps(user.id);
-
   const onboarding = recipes.find((r) => r.id === "onboarding");
+  const mcpUrl = await resolveMcpUrl();
 
   return (
-    <div className="mx-auto w-full max-w-3xl flex-1 px-6 py-12">
-      <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
-
-      <section className="mt-10 rounded-2xl border bg-card p-6 shadow-sm">
-        <h2 className="text-base font-semibold tracking-tight">Profile</h2>
-        <dl className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-          <Field label="Email" value={user.email ?? "—"} mono />
-          <Field label="Display name" value={profile?.display_name ?? "—"} />
-          <Field label="Timezone" value={profile?.timezone ?? "—"} mono />
-          <Field
-            label="Units"
-            value={profile?.units_system === "imperial" ? "Imperial" : "Metric"}
-          />
-          <Field label="Locale" value={profile?.locale ?? "—"} mono />
-        </dl>
-        <p className="mt-4 text-xs text-muted-foreground">
-          Profile editing is coming. For now, ask Claude to update PROFILE.md
-          via fs_write — that file is what your reasoning recipes actually use.
+    <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-8 sm:px-6 sm:py-12">
+      <header className="mb-8">
+        <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Profile, MCP endpoint, connected applications, and account
+          maintenance.
         </p>
+      </header>
+
+      <section
+        aria-labelledby="mcp-heading"
+        className="rounded-2xl border bg-card p-6 shadow-sm"
+      >
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 id="mcp-heading" className="text-base font-semibold tracking-tight">
+            MCP endpoint
+          </h2>
+          <Badge variant="outline" className="font-mono text-[10px]">
+            OAuth 2.1 · DCR
+          </Badge>
+        </div>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Add this URL to Cowork (or any MCP-compatible Claude client). The
+          first connection runs OAuth — approve once and Claude has scoped
+          read/write access to your data.
+        </p>
+        <div className="mt-4">
+          <McpUrl url={mcpUrl} />
+        </div>
       </section>
 
-      <section className="mt-8 rounded-2xl border bg-card p-6 shadow-sm">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold tracking-tight">
+      <section
+        aria-labelledby="profile-heading"
+        className="mt-8 rounded-2xl border bg-card p-6 shadow-sm"
+      >
+        <h2 id="profile-heading" className="text-base font-semibold tracking-tight">
+          Profile
+        </h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Used by capture recipes for date boundaries and unit conversion.
+          Reasoning recipes pull deeper context from{" "}
+          <span className="font-mono">PROFILE.md</span>.
+        </p>
+        <ProfileForm
+          email={user.email ?? ""}
+          defaults={{
+            display_name: profile?.display_name ?? "",
+            timezone: profile?.timezone ?? "",
+            units_system:
+              (profile?.units_system === "imperial" ? "imperial" : "metric") as
+                | "metric"
+                | "imperial",
+            locale: profile?.locale ?? "",
+          }}
+        />
+      </section>
+
+      <section
+        aria-labelledby="apps-heading"
+        className="mt-8 rounded-2xl border bg-card p-6 shadow-sm"
+      >
+        <div className="flex items-center justify-between gap-3">
+          <h2 id="apps-heading" className="text-base font-semibold tracking-tight">
             Connected applications
           </h2>
           <Badge variant="outline">{apps.length}</Badge>
@@ -73,49 +113,54 @@ export default async function SettingsPage() {
         </p>
 
         {apps.length === 0 ? (
-          <p className="mt-6 rounded-md border bg-muted/30 p-4 text-sm text-muted-foreground">
-            No connected applications yet. Add the BI MCP URL to Cowork to
-            authorize one.
-          </p>
+          <div className="mt-6 rounded-lg border border-dashed bg-muted/20 p-5 text-sm text-muted-foreground">
+            <p className="font-medium text-foreground">No applications yet</p>
+            <p className="mt-1">
+              Add the MCP URL above to Cowork to authorize one. New tokens will
+              appear here automatically.
+            </p>
+          </div>
         ) : (
           <ul className="mt-6 divide-y">
             {apps.map((app) => (
-              <li key={app.client_id} className="flex items-start justify-between gap-4 py-4">
+              <li
+                key={app.client_id}
+                className="flex flex-col items-start gap-3 py-4 sm:flex-row sm:items-start sm:justify-between"
+              >
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium">{app.name}</p>
                   <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
                     {app.client_id}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {app.active_tokens} active token{app.active_tokens === 1 ? "" : "s"}
+                    {app.active_tokens} active token
+                    {app.active_tokens === 1 ? "" : "s"}
                     {" · "}
                     issued {timeAgo(app.earliest_issued_at)}
-                    {app.last_used_at ? ` · last used ${timeAgo(app.last_used_at)}` : null}
+                    {app.last_used_at
+                      ? ` · last used ${timeAgo(app.last_used_at)}`
+                      : " · never used"}
                   </p>
                 </div>
-                <form action={revokeClientAction}>
-                  <input type="hidden" name="client_id" value={app.client_id} />
-                  <Button
-                    type="submit"
-                    size="sm"
-                    variant="destructive"
-                  >
-                    Revoke
-                  </Button>
-                </form>
+                <RevokeClientButton clientId={app.client_id} clientName={app.name} />
               </li>
             ))}
           </ul>
         )}
       </section>
 
-      <section className="mt-8 rounded-2xl border bg-card p-6 shadow-sm">
-        <h2 className="text-base font-semibold tracking-tight">Onboarding</h2>
+      <section
+        aria-labelledby="onboarding-heading"
+        className="mt-8 rounded-2xl border bg-card p-6 shadow-sm"
+      >
+        <h2 id="onboarding-heading" className="text-base font-semibold tracking-tight">
+          Onboarding
+        </h2>
         <p className="mt-2 text-sm text-muted-foreground">
           Walk through filling in PROFILE.md, GOALS.md, and PRINCIPLES.md so
           your future Claude conversations have real context to reason against.
         </p>
-        <div className="mt-4 flex gap-2">
+        <div className="mt-4 flex flex-wrap gap-2">
           {onboarding ? <InstallRecipeButton recipe={onboarding} /> : null}
           <a
             href="/agents"
@@ -126,14 +171,19 @@ export default async function SettingsPage() {
         </div>
       </section>
 
-      <section className="mt-8 rounded-2xl border bg-card p-6 shadow-sm">
-        <h2 className="text-base font-semibold tracking-tight">Sign out</h2>
+      <section
+        aria-labelledby="session-heading"
+        className="mt-8 rounded-2xl border bg-card p-6 shadow-sm"
+      >
+        <h2 id="session-heading" className="text-base font-semibold tracking-tight">
+          Browser session
+        </h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          End this browser session. Connected applications are unaffected — use
-          Revoke above to cut MCP access.
+          Sign out of this browser. Connected applications above continue to
+          have MCP access until you revoke them.
         </p>
         <form action="/auth/signout" method="post" className="mt-4">
-          <Button type="submit" variant="destructive" size="sm">
+          <Button type="submit" variant="outline" size="sm">
             Sign out of this browser
           </Button>
         </form>
@@ -142,23 +192,12 @@ export default async function SettingsPage() {
   );
 }
 
-function Field({
-  label,
-  value,
-  mono,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
-  return (
-    <div>
-      <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
-      </dt>
-      <dd className={`mt-1 text-sm ${mono ? "font-mono" : ""}`}>{value}</dd>
-    </div>
-  );
+async function resolveMcpUrl(): Promise<string> {
+  const h = await headers();
+  const proto = h.get("x-forwarded-proto") ?? "https";
+  const host = h.get("x-forwarded-host") ?? h.get("host");
+  if (host) return `${proto}://${host}/api/mcp`;
+  return `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/api/mcp`;
 }
 
 async function loadConnectedApps(userId: string): Promise<ConnectedApp[]> {

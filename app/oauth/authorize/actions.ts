@@ -50,3 +50,26 @@ export async function approveAuthorization(formData: FormData) {
   if (state) target.searchParams.set("state", state);
   redirect(target.toString());
 }
+
+export async function denyAuthorization(formData: FormData) {
+  const redirectUri = String(formData.get("redirect_uri") ?? "");
+  const state = formData.get("state") ? String(formData.get("state")) : "";
+
+  // OAuth 2.1 spec: bounce back to the client with `error=access_denied` so
+  // the client can surface a clean cancellation rather than hanging.
+  if (redirectUri) {
+    try {
+      const target = new URL(redirectUri);
+      target.searchParams.set("error", "access_denied");
+      target.searchParams.set(
+        "error_description",
+        "The user denied the authorization request.",
+      );
+      if (state) target.searchParams.set("state", state);
+      redirect(target.toString());
+    } catch {
+      // Fall through to the local cancellation screen.
+    }
+  }
+  redirect("/?denied=1");
+}
