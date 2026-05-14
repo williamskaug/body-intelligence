@@ -120,7 +120,7 @@ Use fs_write to save. Don't ask for permission — this is a scheduled review, n
     required_connectors: [],
     prompt: `Check whether the user is within 14 days of a race.
 
-1. fs_read GOALS.md and look for race dates. If no race is within 14 days, exit silently.
+1. fs_read GOALS.md and look for race dates. **Sanity guard:** if the only race in GOALS.md is dated more than 5 years from today, treat the file as un-edited (the user kept the example placeholder) and exit silently. If no race is within 14 days, also exit silently.
 2. fs_read PRINCIPLES.md for the user's tapering philosophy.
 3. Call get_recent({days: 7}) for current state.
 

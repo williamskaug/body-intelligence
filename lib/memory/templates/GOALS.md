@@ -39,11 +39,16 @@ A-races are the targets that bend training around them (the recipe surfaces 14-d
 
 ## Upcoming races
 
-<!-- Add race blocks here, ordered by date. Delete the example below once you've added your own. -->
+<!-- Add race blocks below this line, ordered by date. Follow the "Race format convention" at the top of this file — recipes parse it strictly. -->
+
+<!--
+Example block (kept commented so the race-countdown recipe doesn't parse it):
 
 ## Race: Example Half
 - Date: 2099-01-01
 - Tier: A
 - Distance: 21.1 km
-- Goal: <fill in>
-- Notes: <fill in>
+- Goal: sub-1:30
+- Notes: example only; replace this whole block with your real race(s)
+-->
+

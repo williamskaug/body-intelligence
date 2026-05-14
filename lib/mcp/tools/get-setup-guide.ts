@@ -43,6 +43,17 @@ decisions to BI — there is no logic on the server side beyond CRUD.
 
 # Conventions — read these before writing
 
+- **NEVER dump a structured field into a prose field.** If the source has
+  deep/light/REM/awake sleep minutes, write them to sleep_deep_min /
+  sleep_light_min / sleep_rem_min / sleep_awake_min — NOT into sleep_notes
+  prose. Same for HRV, RHR, weight, body fat, steps, active calories, every
+  vital. sleep_notes / wellness_notes / meal_notes are for QUALITATIVE
+  commentary only ("woke once at 3am", "knee felt tight the first mile"),
+  not as a dump zone for values that have homes.
+- Vendor-proprietary scores (Garmin Body Battery, Whoop Recovery, Oura
+  Readiness) belong in daily/YYYY-MM-DD.md via fs_write — not in
+  sleep_notes, not as new columns. Universal vitals (sleep_h, hrv_ms,
+  rhr_bpm, sleep_deep_min, etc.) still go in daily_entries.
 - Wellness scales (fatigue, soreness, mood, stress, motivation, sleep_quality) use
   5 = best, ALWAYS. Even for fatigue / soreness / stress — 5 means "no fatigue",
   "no soreness", "no stress". The naming is inverted relative to natural reading.
