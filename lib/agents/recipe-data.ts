@@ -132,6 +132,106 @@ Send the user a brief message:
 Keep it under 100 words. This runs daily for two weeks — if it gets noisy, the user disables it.`,
   },
   {
+    id: "garmin-sync",
+    title: "Garmin sync",
+    category: "connector",
+    schedule: "0 7 * * *",
+    description:
+      "Daily ingest of Garmin sleep, vitals, and movement into BI's structured tables; vendor scores go into daily/YYYY-MM-DD.md.",
+    required_tools: ["log_daily", "log_workout", "fs_write", "fs_read"],
+    required_connectors: ["garmin"],
+    prompt: `Sync yesterday's Garmin Connect data into Body Intelligence.
+
+Call get_setup_guide once at the start so the field conventions are fresh — especially the rule that structured fields NEVER go into sleep_notes / wellness_notes prose.
+
+**Decide the date.** Run for yesterday in the user's timezone (fs_read PROFILE.md if you need it). Call this DATE.
+
+**1. Pull Garmin data for DATE.** From the Garmin connector MCP, fetch:
+- Sleep: total hours + deep/light/REM/awake minutes
+- HRV, RHR, SpO2 avg, respiration avg
+- Weight (if a weigh-in exists)
+- Steps, active calories, floors climbed, intensity minutes (moderate + vigorous)
+- Body Battery morning / max / min / charged / drained
+- Training Readiness score + key contributors (sleep, HRV status, recovery time, training load focus)
+- Activities (workouts) for the day
+
+**2. Write the structured row.** Call log_daily(date=DATE, ...) with EVERY universal vital that has a value:
+- sleep_h, sleep_deep_min, sleep_light_min, sleep_rem_min, sleep_awake_min
+- hrv_ms, rhr_bpm, spo2_avg_pct, respiration_avg_brpm
+- weight_kg (only if a weigh-in exists)
+- steps, active_calories, floors_climbed, intensity_min_moderate, intensity_min_vigorous
+
+Do NOT put sleep stages into sleep_notes. Do NOT put HRV/RHR into prose. Each of those has a column.
+
+**3. Write the vendor scores to daily/YYYY-MM-DD.md.** Compose a markdown file with sections for Body Battery, Training Readiness, and any other Garmin-proprietary scores. Use fs_read first to see if a file already exists (e.g. from a prior partial sync); if it does, preserve any non-Garmin content and update the Garmin block in place. Example shape:
+
+\`\`\`
+# Vendor scores · DATE
+
+## Garmin
+
+### Body Battery
+- Morning: 56
+- Day max: 72
+- Day min: 14
+- Charged: 41
+- Drained: 49
+
+### Training Readiness
+- Score: 64 / Status: Moderate
+- Sleep score: 80
+- HRV status: Balanced
+- Recovery time: 18 h
+- Training load focus: Aerobic base
+\`\`\`
+
+Then fs_write that path. If a prior sync exists for the same date, overwrite the Garmin section but keep other vendor sections.
+
+**4. Workouts.** For each activity Garmin reports for DATE, call log_workout(date=DATE, type=<lowercased activity type>, duration_min, distance_km if applicable, avg_hr, max_hr, source='garmin', source_id=<Garmin activity id>). The source_id makes the write idempotent — re-runs upsert.
+
+**5. Confirm.** Send the user one short line summarising what was synced. No editorialising on the numbers — that's the morning check-in's job.`,
+  },
+  {
+    id: "strava-sync",
+    title: "Strava sync",
+    category: "connector",
+    schedule: "30 7 * * *",
+    description:
+      "Daily ingest of Strava activities as workouts. Idempotent via source_id.",
+    required_tools: ["log_workout"],
+    required_connectors: ["strava"],
+    prompt: `Sync yesterday's Strava activities into Body Intelligence.
+
+Call get_setup_guide once at the start.
+
+**Decide the date.** Run for yesterday in the user's timezone. Call this DATE.
+
+**1. Pull Strava activities for DATE.** From the Strava connector MCP, fetch every activity whose local start date is DATE.
+
+**2. For each activity, call log_workout** with:
+- date = DATE
+- type = Strava activity type, lowercased, normalised to BI vocabulary:
+  - 'Run' → 'run'
+  - 'TrailRun' → 'trail_run'
+  - 'Ride' / 'VirtualRide' → 'ride'
+  - 'Swim' → 'swim'
+  - 'Walk' / 'Hike' → 'walk' or 'hike'
+  - 'WeightTraining' → 'lift'
+  - others: lowercase and snake_case
+- duration_min = elapsed_time / 60 (rounded)
+- distance_km = distance_meters / 1000 (only if > 0)
+- avg_hr, max_hr (if recorded)
+- source = 'strava'
+- source_id = Strava activity id
+- notes = ONLY qualitative commentary the user wrote on Strava (the activity description). Do NOT dump distance / pace / HR into notes — those have columns.
+
+**3. RPE.** Strava doesn't expose RPE. Leave it null unless the activity description includes an explicit "RPE N" hint, in which case parse it out.
+
+**4. Detect misclassifications.** If duration_min < 5 AND type == 'run' (or trail_run), flag it — these are almost always walking gaps mis-tagged. Log it with type='walk' instead and mention the reclassification in the confirmation line. (The user can fix individual ones via update_workout later.)
+
+**5. Confirm.** One short line summarising activity count and total minutes.`,
+  },
+  {
     id: "health-log-audit",
     title: "Health-log audit",
     category: "review",
