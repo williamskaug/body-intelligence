@@ -4,12 +4,13 @@ import { Documents } from "@/components/data/documents";
 import { EmptyDataState } from "@/components/data/empty-state";
 import { Timeline } from "@/components/data/timeline";
 import { Trends } from "@/components/data/trends";
+import { hoursByType } from "@/lib/data-display/aggregate";
 import { adminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-type SearchParams = Promise<{ days?: string; view?: string }>;
+type SearchParams = Promise<{ days?: string; view?: string; nogolf?: string }>;
 
 type ViewKey = "timeline" | "calendar" | "trends";
 
@@ -31,6 +32,7 @@ export default async function DataPage({
   const params = await searchParams;
   const days = parseDays(params.days);
   const view = parseView(params.view);
+  const trainingOnly = params.nogolf === "1";
 
   const today = new Date();
   const todayDate = today.toISOString().slice(0, 10);
@@ -95,8 +97,30 @@ export default async function DataPage({
     (healthOpenOlder.data ?? []) as EventRow[],
   );
 
+  const allWorkouts = (workouts.data ?? []) as Array<{
+    id: string;
+    date: string;
+    type: string;
+    duration_min: number | null;
+    distance_km: string | null;
+    avg_hr: number | null;
+    max_hr: number | null;
+    rpe: number | null;
+    shoes: string | null;
+    source: string;
+    notes: string | null;
+  }>;
+  // "Training-only" filter: drop golf and very short sessions when ?nogolf=1.
+  const filteredWorkouts = trainingOnly
+    ? allWorkouts.filter(
+        (w) => w.type.trim().toLowerCase() !== "golf" && (w.duration_min ?? 0) >= 15,
+      )
+    : allWorkouts;
+
+  const workoutMix = hoursByType(filteredWorkouts, 3);
+
   const counts = {
-    workouts: (workouts.data ?? []).length,
+    workouts: filteredWorkouts.length,
     daily: (daily.data ?? []).length,
     meals: (meals.data ?? []).length,
     events: events.length,
@@ -132,20 +156,26 @@ export default async function DataPage({
           <WindowPicker days={days} view={view} />
         </div>
 
-        <SummaryStrip counts={counts} days={days} />
+        <SummaryStrip
+          counts={counts}
+          days={days}
+          workoutMix={workoutMix}
+          trainingOnly={trainingOnly}
+          view={view}
+        />
       </header>
 
       <div className="mt-6">
         {view === "timeline" ? (
           <Timeline
-            workouts={(workouts.data ?? []) as Parameters<typeof Timeline>[0]["workouts"]}
+            workouts={filteredWorkouts as Parameters<typeof Timeline>[0]["workouts"]}
             daily={(daily.data ?? []) as Parameters<typeof Timeline>[0]["daily"]}
             meals={(meals.data ?? []) as Parameters<typeof Timeline>[0]["meals"]}
             events={events}
           />
         ) : view === "calendar" ? (
           <Calendar
-            workouts={(workouts.data ?? []) as Parameters<typeof Calendar>[0]["workouts"]}
+            workouts={filteredWorkouts as Parameters<typeof Calendar>[0]["workouts"]}
             daily={(daily.data ?? []) as Parameters<typeof Calendar>[0]["daily"]}
             meals={(meals.data ?? []) as Parameters<typeof Calendar>[0]["meals"]}
             events={(healthRecent.data ?? []) as Parameters<typeof Calendar>[0]["events"]}
@@ -155,7 +185,7 @@ export default async function DataPage({
         ) : (
           <Trends
             daily={(daily.data ?? []) as Parameters<typeof Trends>[0]["daily"]}
-            workouts={(workouts.data ?? []) as Parameters<typeof Trends>[0]["workouts"]}
+            workouts={filteredWorkouts as Parameters<typeof Trends>[0]["workouts"]}
             meals={(meals.data ?? []) as Parameters<typeof Trends>[0]["meals"]}
             startDate={sinceDate}
             endDate={todayDate}
@@ -237,15 +267,34 @@ function WindowPicker({ days, view }: { days: number; view: ViewKey }) {
 function SummaryStrip({
   counts,
   days,
+  workoutMix,
+  trainingOnly,
+  view,
 }: {
   counts: { workouts: number; daily: number; meals: number; events: number };
   days: number;
+  workoutMix: { entries: Array<{ type: string; hours: number }>; totalHours: number };
+  trainingOnly: boolean;
+  view: ViewKey;
 }) {
-  const items: Array<{ label: string; n: number; sub: string; accent: string }> = [
+  const workoutSub =
+    workoutMix.totalHours > 0
+      ? workoutMix.entries
+          .map((e) => `${capitalize(e.type)} ${formatHours(e.hours)}h`)
+          .join(" · ")
+      : counts.workouts === 0
+        ? "none in view"
+        : `${counts.workouts} session${counts.workouts === 1 ? "" : "s"}`;
+  const items: Array<{
+    label: string;
+    n: string | number;
+    sub: string;
+    accent: string;
+  }> = [
     {
-      label: "Workouts",
-      n: counts.workouts,
-      sub: perWeek(counts.workouts, days),
+      label: "Training hours",
+      n: workoutMix.totalHours > 0 ? formatHours(workoutMix.totalHours) : counts.workouts,
+      sub: workoutSub,
       accent: "bg-sky-500/70",
     },
     {
@@ -268,26 +317,52 @@ function SummaryStrip({
     },
   ];
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-      {items.map((i) => (
-        <div
-          key={i.label}
-          className="relative overflow-hidden rounded-xl border bg-card px-3 py-2.5 shadow-sm"
-        >
-          <span aria-hidden className={`absolute left-0 top-0 h-full w-[3px] ${i.accent}`} />
-          <div className="pl-1">
-            <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-              {i.label}
-            </div>
-            <div className="mt-0.5 flex items-baseline gap-2">
-              <span className="font-mono text-xl tabular-nums">{i.n}</span>
-              <span className="text-[10px] text-muted-foreground">{i.sub}</span>
+    <div className="flex flex-col gap-2">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {items.map((i) => (
+          <div
+            key={i.label}
+            className="relative overflow-hidden rounded-xl border bg-card px-3 py-2.5 shadow-sm"
+          >
+            <span aria-hidden className={`absolute left-0 top-0 h-full w-[3px] ${i.accent}`} />
+            <div className="pl-1">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                {i.label}
+              </div>
+              <div className="mt-0.5 flex items-baseline gap-2">
+                <span className="font-mono text-xl tabular-nums">{i.n}</span>
+                <span className="line-clamp-1 text-[10px] text-muted-foreground">
+                  {i.sub}
+                </span>
+              </div>
             </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
+      <div className="flex items-center justify-end gap-2 text-[10px] text-muted-foreground">
+        <Link
+          href={`?view=${view}&days=${days}${trainingOnly ? "" : "&nogolf=1"}`}
+          className={`rounded-md border px-2 py-0.5 transition-colors ${
+            trainingOnly
+              ? "border-foreground bg-foreground text-background"
+              : "border-border hover:bg-muted hover:text-foreground"
+          }`}
+        >
+          {trainingOnly ? "Showing training-only (exclude golf & <15m)" : "Show training-only"}
+        </Link>
+      </div>
     </div>
   );
+}
+
+function capitalize(s: string): string {
+  if (!s) return s;
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function formatHours(h: number): string {
+  if (h >= 10) return Math.round(h).toString();
+  return h.toFixed(1);
 }
 
 function parseDays(raw: string | undefined): number {

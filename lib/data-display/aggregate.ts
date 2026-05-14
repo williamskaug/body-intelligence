@@ -97,6 +97,28 @@ export function macroTotals(
   return out;
 }
 
+// Sum workout duration by type, returning the top-N descending by hours.
+// Used by the summary strip to replace a misleading raw count tile.
+export function hoursByType(
+  workouts: ReadonlyArray<{ type: string; duration_min: number | null }>,
+  topN = 3,
+): { entries: Array<{ type: string; hours: number }>; totalHours: number } {
+  const map = new Map<string, number>();
+  let total = 0;
+  for (const w of workouts) {
+    const min = w.duration_min ?? 0;
+    if (min <= 0) continue;
+    const key = w.type.trim().toLowerCase() || "other";
+    map.set(key, (map.get(key) ?? 0) + min);
+    total += min;
+  }
+  const entries = Array.from(map.entries())
+    .map(([type, min]) => ({ type, hours: min / 60 }))
+    .sort((a, b) => b.hours - a.hours)
+    .slice(0, topN);
+  return { entries, totalHours: total / 60 };
+}
+
 // Build a contiguous date array (ascending) for the window. Used to render
 // timeline days even when no entries exist that day.
 export function datesInRange(startDate: string, endDate: string): string[] {
