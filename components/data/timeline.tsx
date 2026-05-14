@@ -486,6 +486,20 @@ function DayCard({
       ) : (
         <div className="h-4" />
       )}
+
+      <details className="border-t bg-muted/10">
+        <summary className="cursor-pointer px-5 py-2 text-[11px] text-muted-foreground hover:text-foreground">
+          Edit wellness for {date}
+        </summary>
+        <div className="px-5 pb-4">
+          <WellnessForm
+            date={date}
+            initial={daily ?? undefined}
+            title={`Edit ${date}`}
+            subtitle="Updates upsert into the daily entry; omitted fields are preserved."
+          />
+        </div>
+      </details>
     </article>
   );
 }
