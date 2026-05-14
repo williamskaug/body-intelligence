@@ -33,6 +33,14 @@ import { getStreak, getStreakInputSchema } from "./tools/get-streak";
 import { markRecipeRun, markRecipeRunInputSchema } from "./tools/mark-recipe-run";
 import { listRecipes, listRecipesInputSchema } from "./tools/list-recipes";
 import { getRecipeStatus, getRecipeStatusInputSchema } from "./tools/get-recipe-status";
+import { getWorkout, getWorkoutInputSchema } from "./tools/get-workout";
+import { getMeal, getMealInputSchema } from "./tools/get-meal";
+import { getDaily, getDailyInputSchema } from "./tools/get-daily";
+import { getHealthEvent, getHealthEventInputSchema } from "./tools/get-health-event";
+import { listWorkouts, listWorkoutsInputSchema } from "./tools/list-workouts";
+import { listMeals, listMealsInputSchema } from "./tools/list-meals";
+import { listDaily, listDailyInputSchema } from "./tools/list-daily";
+import { listHealthEvents, listHealthEventsInputSchema } from "./tools/list-health-events";
 import { searchEverything, searchEverythingInputSchema } from "./tools/search-everything";
 import {
   getSetupGuide,
@@ -233,6 +241,94 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   );
 
   // ---------- read ----------
+
+  server.registerTool(
+    "get_workout",
+    {
+      title: "Get a workout by id",
+      description:
+        "Fetch one workout row by uuid. Returns null if not found or owned by a different user. Use after a log_workout / update_workout to confirm the persisted state, or to refresh a row whose id you got from get_recent / search_everything.",
+      inputSchema: getWorkoutInputSchema,
+    },
+    async (input) => jsonResult(await getWorkout(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "get_meal",
+    {
+      title: "Get a meal by id",
+      description:
+        "Fetch one meal row by uuid. Returns null if not found.",
+      inputSchema: getMealInputSchema,
+    },
+    async (input) => jsonResult(await getMeal(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "get_daily",
+    {
+      title: "Get the daily entry for a date",
+      description:
+        "Fetch the daily_entries row for (user, date). Keyed by date — not by uuid — because (user_id, date) is unique. Returns null if no entry exists for that day.",
+      inputSchema: getDailyInputSchema,
+    },
+    async (input) => jsonResult(await getDaily(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "get_health_event",
+    {
+      title: "Get a health event by id",
+      description:
+        "Fetch one health_events row by uuid. Returns null if not found.",
+      inputSchema: getHealthEventInputSchema,
+    },
+    async (input) => jsonResult(await getHealthEvent(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "list_workouts",
+    {
+      title: "List workouts in a date range",
+      description:
+        "Range-query workouts between from_date and to_date inclusive. Cursor-paginated (max 200/page) — pass next_cursor back as cursor to continue. Optional case-insensitive type filter. Use when you need a specific month or block, not 'last N days' (use get_recent for that).",
+      inputSchema: listWorkoutsInputSchema,
+    },
+    async (input) => jsonResult(await listWorkouts(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "list_meals",
+    {
+      title: "List meals in a date range",
+      description:
+        "Range-query meals between from_date and to_date inclusive (dates accepted as YYYY-MM-DD or ISO timestamps). Cursor-paginated. Optional meal_type filter (case-insensitive).",
+      inputSchema: listMealsInputSchema,
+    },
+    async (input) => jsonResult(await listMeals(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "list_daily",
+    {
+      title: "List daily entries in a date range",
+      description:
+        "Range-query daily_entries between from_date and to_date inclusive, newest first. Cursor-paginated.",
+      inputSchema: listDailyInputSchema,
+    },
+    async (input) => jsonResult(await listDaily(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "list_health_events",
+    {
+      title: "List health events",
+      description:
+        "Returns health_events rows, newest first. Defaults to active_only=true (unresolved). Set false to include resolved history. Optional kind filter ('injury'|'illness'|'symptom').",
+      inputSchema: listHealthEventsInputSchema,
+    },
+    async (input) => jsonResult(await listHealthEvents(ctx.userId, input)),
+  );
 
   server.registerTool(
     "fs_read",
