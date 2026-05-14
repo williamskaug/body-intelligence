@@ -29,6 +29,7 @@ import {
 import { getRecent, getRecentInputSchema } from "./tools/get-recent";
 import { getBaseline, getBaselineInputSchema } from "./tools/get-baseline";
 import { getStats, getStatsInputSchema } from "./tools/get-stats";
+import { getStreak, getStreakInputSchema } from "./tools/get-streak";
 import { searchEverything, searchEverythingInputSchema } from "./tools/search-everything";
 import {
   getSetupGuide,
@@ -307,6 +308,17 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       inputSchema: getStatsInputSchema,
     },
     async (input) => jsonResult(await getStats(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "get_streak",
+    {
+      title: "Compute habit streak for a kind",
+      description:
+        "Return current_streak_days, best_streak_days (over the past 365 days), and a 30-element boolean sparkline. Kinds: 'daily_entry' (any row in daily_entries that day), 'meal_logged' (≥3 meals that day), 'workout' (any workout that day). Use to power streak surfaces and to detect streak-loss events for the attention panel.",
+      inputSchema: getStreakInputSchema,
+    },
+    async (input) => jsonResult(await getStreak(ctx.userId, input)),
   );
 
   return server;

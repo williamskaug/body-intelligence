@@ -129,6 +129,25 @@ export default async function DataPage({
     events: events.length,
   };
 
+  // Quick daily-entry streak — computed from rows we already fetched. For
+  // longer historical streaks (best, etc.) callers use the get_streak MCP
+  // tool. This is just the "are you on a roll right now?" surface.
+  const dailyDates = new Set(
+    (daily.data ?? []).map((d) => (d as { date: string }).date),
+  );
+  const dailyStreak = (() => {
+    let n = 0;
+    const cursor = new Date(today);
+    while (true) {
+      const iso = cursor.toISOString().slice(0, 10);
+      if (dailyDates.has(iso)) {
+        n++;
+        cursor.setUTCDate(cursor.getUTCDate() - 1);
+      } else break;
+    }
+    return n;
+  })();
+
   const hasAnyData =
     counts.workouts > 0 ||
     counts.daily > 0 ||
@@ -206,6 +225,7 @@ export default async function DataPage({
           workoutMix={workoutMix}
           trainingOnly={trainingOnly}
           view={view}
+          dailyStreak={dailyStreak}
         />
       </header>
 
@@ -318,12 +338,14 @@ function SummaryStrip({
   workoutMix,
   trainingOnly,
   view,
+  dailyStreak,
 }: {
   counts: { workouts: number; daily: number; meals: number; events: number };
   days: number;
   workoutMix: { entries: Array<{ type: string; hours: number }>; totalHours: number };
   trainingOnly: boolean;
   view: ViewKey;
+  dailyStreak: number;
 }) {
   const workoutSub =
     workoutMix.totalHours > 0
@@ -348,7 +370,10 @@ function SummaryStrip({
     {
       label: "Daily check-ins",
       n: counts.daily,
-      sub: `${pct(counts.daily, days)}% of days`,
+      sub:
+        dailyStreak > 0
+          ? `${pct(counts.daily, days)}% · streak ${dailyStreak}d`
+          : `${pct(counts.daily, days)}% of days · no streak`,
       accent: "bg-emerald-500/70",
     },
     {
