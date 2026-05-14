@@ -36,6 +36,7 @@ export default async function SettingsPage() {
   const profile = profileRes.data;
 
   const apps = await loadConnectedApps(user.id);
+  const dataSources = await loadDataSources(user.id);
   const onboarding = recipes.find((r) => r.id === "onboarding");
   const mcpUrl = await resolveMcpUrl();
 
@@ -96,6 +97,69 @@ export default async function SettingsPage() {
               locale: profile?.locale ?? "",
             }}
           />
+        </section>
+
+        <section
+          aria-labelledby="sources-heading"
+          className="rounded-2xl border bg-card p-6 shadow-sm"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <h2 id="sources-heading" className="text-base font-semibold tracking-tight">
+              Connected data sources
+            </h2>
+            <Badge variant="outline">{dataSources.length}</Badge>
+          </div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Derived from the <span className="font-mono">source</span> column on
+            workouts and meals — which connectors have been writing into BI.
+            Green = wrote within 2 days, yellow = within a week, red = stale.
+          </p>
+
+          {dataSources.length === 0 ? (
+            <div className="mt-6 rounded-lg border border-dashed bg-muted/20 p-5 text-sm text-muted-foreground">
+              <p className="font-medium text-foreground">No data sources yet</p>
+              <p className="mt-1">
+                Install the Garmin or Strava sync recipe from{" "}
+                <a href="/agents" className="underline underline-offset-4 hover:text-foreground">
+                  the Agents page
+                </a>{" "}
+                to start piping data into BI.
+              </p>
+            </div>
+          ) : (
+            <ul className="mt-6 divide-y">
+              {dataSources.map((src) => {
+                const tone = freshnessTone(src.last_write_at);
+                return (
+                  <li
+                    key={src.source}
+                    className="flex flex-col items-start gap-2 py-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-sm font-medium">{prettyName(src.source)}</span>
+                        <span
+                          className={`rounded-md border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${tone.classes}`}
+                        >
+                          {tone.label}
+                        </span>
+                      </div>
+                      <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+                        source = {src.source}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {src.last_write_at
+                          ? `last write ${timeAgo(src.last_write_at)}`
+                          : "no writes yet"}
+                        {" · "}
+                        {src.records_30d} record{src.records_30d === 1 ? "" : "s"} in 30d
+                      </p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </section>
 
         <section
@@ -254,6 +318,144 @@ async function loadConnectedApps(userId: string): Promise<ConnectedApp[]> {
   return [...grouped.values()].sort((a, b) =>
     a.earliest_issued_at < b.earliest_issued_at ? 1 : -1,
   );
+}
+
+type DataSource = {
+  source: string;
+  last_write_at: string | null;
+  records_30d: number;
+};
+
+async function loadDataSources(userId: string): Promise<DataSource[]> {
+  const sb = adminClient();
+  const sinceIso = new Date(Date.now() - 30 * 86_400_000).toISOString();
+
+  // workouts contribute (source, max(created_at), count)
+  // meals contribute (source, max(created_at), count)
+  // We don't include daily_entries — they don't have a source column today.
+  const [workoutRows, mealRows] = await Promise.all([
+    sb
+      .from("workouts")
+      .select("source, created_at")
+      .eq("user_id", userId)
+      .gte("created_at", sinceIso),
+    sb
+      .from("meals")
+      .select("source, created_at")
+      .eq("user_id", userId)
+      .gte("created_at", sinceIso),
+  ]);
+  if (workoutRows.error) throw new Error(`loadDataSources workouts: ${workoutRows.error.message}`);
+  if (mealRows.error) throw new Error(`loadDataSources meals: ${mealRows.error.message}`);
+
+  // Also pull all-time max(created_at) per source so we can show "last write
+  // 14 days ago" even when 30d has zero records.
+  const [allWorkoutRows, allMealRows] = await Promise.all([
+    sb
+      .from("workouts")
+      .select("source, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(500),
+    sb
+      .from("meals")
+      .select("source, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(500),
+  ]);
+  if (allWorkoutRows.error || allMealRows.error) {
+    return [];
+  }
+
+  type RawRow = { source: string; created_at: string };
+  const grouped = new Map<string, { records_30d: number; last_write_at: string | null }>();
+
+  const ensure = (source: string) => {
+    if (!grouped.has(source)) {
+      grouped.set(source, { records_30d: 0, last_write_at: null });
+    }
+    return grouped.get(source)!;
+  };
+
+  for (const row of [
+    ...(workoutRows.data ?? []),
+    ...(mealRows.data ?? []),
+  ] as RawRow[]) {
+    ensure(row.source).records_30d += 1;
+  }
+  for (const row of [
+    ...(allWorkoutRows.data ?? []),
+    ...(allMealRows.data ?? []),
+  ] as RawRow[]) {
+    const g = ensure(row.source);
+    if (!g.last_write_at || row.created_at > g.last_write_at) {
+      g.last_write_at = row.created_at;
+    }
+  }
+
+  return Array.from(grouped.entries())
+    .map(([source, info]) => ({ source, ...info }))
+    .sort((a, b) => {
+      if (!a.last_write_at) return 1;
+      if (!b.last_write_at) return -1;
+      return a.last_write_at < b.last_write_at ? 1 : -1;
+    });
+}
+
+function prettyName(source: string): string {
+  switch (source) {
+    case "manual":
+      return "Manual entry";
+    case "garmin":
+      return "Garmin Connect";
+    case "garmin_golf":
+      return "Garmin (golf)";
+    case "strava":
+      return "Strava";
+    case "mfp":
+    case "myfitnesspal":
+      return "MyFitnessPal";
+    case "cronometer":
+      return "Cronometer";
+    case "apple_health":
+      return "Apple Health";
+    case "whoop":
+      return "Whoop";
+    case "oura":
+      return "Oura";
+    default:
+      return source;
+  }
+}
+
+function freshnessTone(iso: string | null): {
+  label: string;
+  classes: string;
+} {
+  if (!iso) {
+    return {
+      label: "no data",
+      classes: "border-foreground/20 bg-muted text-muted-foreground",
+    };
+  }
+  const ageDays = (Date.now() - new Date(iso).getTime()) / 86_400_000;
+  if (ageDays <= 2) {
+    return {
+      label: "fresh",
+      classes: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+    };
+  }
+  if (ageDays <= 7) {
+    return {
+      label: "stale",
+      classes: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+    };
+  }
+  return {
+    label: "down",
+    classes: "border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-400",
+  };
 }
 
 function timeAgo(iso: string): string {
