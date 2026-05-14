@@ -80,7 +80,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     {
       title: "Log a workout",
       description:
-        "Insert or upsert a workout. Manual writes (no source_id) always insert; connector writes (with source_id) upsert by (source, source_id) for idempotent re-runs.",
+        "Insert or upsert a workout. Manual writes (no source_id) always insert; connector writes (with source_id) upsert by (source, source_id) for idempotent re-runs. Then: the evening reflection recipe surfaces this in the day's summary.",
       inputSchema: logWorkoutInputSchema,
     },
     async (input) => jsonResult(await logWorkout(ctx.userId, input)),
@@ -113,7 +113,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     {
       title: "Log or update the daily entry",
       description:
-        "Upsert the daily entry for (user, date). Partial fields allowed — this is also the update path: re-call with any subset of fields and only those change. All wellness scales follow 5 = best (fatigue/soreness/stress are inverted relative to their natural meaning so 5 is always the good direction).",
+        "Upsert the daily entry for (user, date). All wellness scales follow 5 = best (fatigue/soreness/stress are inverted relative to their natural meaning so 5 is always the good direction). Upsert merge semantics: only the fields you pass are touched; omitted fields keep their existing values. The schema does not accept null to clear — to wipe a field, use delete_daily_entry and re-log. Use the morning check-in recipe for wellness scales; this tool also accepts Garmin/Whoop/Oura-derived vitals.",
       inputSchema: logDailyInputSchema,
     },
     async (input) => jsonResult(await logDaily(ctx.userId, input)),
@@ -135,7 +135,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     {
       title: "Log a meal",
       description:
-        "Insert or upsert a meal at a specific timestamp. calories, protein_g, carbs_g, and fat_g are REQUIRED — every meal row must carry full energy + macro data. If the caller does not have authoritative values (food label, connector payload, weighed portion), it MUST estimate them from the description before writing. Do not skip the write to avoid estimating; an estimate is the expected behaviour. Fiber_g is optional. Connector writes (with source_id) upsert by (source, source_id); manual writes always insert.",
+        "Insert or upsert a meal at a specific timestamp. calories, protein_g, carbs_g, and fat_g are REQUIRED — every meal row must carry full energy + macro data, enforced by NOT NULL at the database level. If the caller does not have authoritative values (food label, connector payload, weighed portion), it MUST estimate them from the description before writing. Do not skip the write to avoid estimating; an estimate is the expected behaviour. Fiber_g is optional. Connector writes (with source_id) upsert by (source, source_id); manual writes always insert.",
       inputSchema: logMealInputSchema,
     },
     async (input) => jsonResult(await logMeal(ctx.userId, input)),
@@ -167,7 +167,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     {
       title: "Log a health event",
       description:
-        "Insert a new injury, illness, or symptom. severity is 1-5 with 5 = most severe — note this is OPPOSITE direction from the wellness scales. To mark an event as resolved later, call update_health_event with resolved_date.",
+        "Insert a new injury, illness, or symptom. severity is 1-5 with 5 = most severe — note this is OPPOSITE direction from the wellness scales. Resolve later via update_health_event(id, resolved_date=...) — don't delete, the history matters for the next injury that looks similar.",
       inputSchema: logHealthEventInputSchema,
     },
     async (input) => jsonResult(await logHealthEvent(ctx.userId, input)),
@@ -200,7 +200,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     {
       title: "Write a memory document",
       description:
-        "Upsert a markdown document at the given path. Full-document writes only — no patch semantics. Paths are slash-separated and end in .md; folders are implicit (writing to 'notes/2026/altitude-camp.md' creates the file directly, no folder record needed). Standard top-level paths: PROFILE.md, PRINCIPLES.md, GOALS.md, CURRENT.md, HEALTH_LOG.md, NUTRITION.md, EQUIPMENT.md, MEMORY.md. Custom paths and nested folders are encouraged for organization — e.g. daily/YYYY-MM-DD.md for per-day vendor data, notes/<topic>.md for thematic notes.",
+        "Upsert a markdown document at the given path. Full-document writes only — no patch semantics. Paths are slash-separated and end in .md; folders are implicit (writing to 'notes/2026/altitude-camp.md' creates the file directly, no folder record needed). Standard top-level paths: PROFILE.md, PRINCIPLES.md, GOALS.md, CURRENT.md, HEALTH_LOG.md, NUTRITION.md, EQUIPMENT.md, MEMORY.md. Custom paths and nested folders are encouraged for organization — e.g. daily/YYYY-MM-DD.md for per-day vendor data, notes/<topic>.md for thematic notes. **Overwrite warning:** this is a full-document replace, not a patch. If you have not just called fs_read on this path, you risk overwriting content (seed template, user edits, recipe-written content). Always fs_read first when updating an existing file; fs_write blind is only safe for files you know don't exist.",
       inputSchema: fsWriteInputSchema,
     },
     async (input) => jsonResult(await fsWrite(ctx.userId, input)),

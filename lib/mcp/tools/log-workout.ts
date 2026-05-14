@@ -9,7 +9,15 @@ export const logWorkoutInputSchema = {
   distance_km: z.number().min(0).max(10_000).optional(),
   avg_hr: z.number().int().min(20).max(260).optional(),
   max_hr: z.number().int().min(20).max(260).optional(),
-  rpe: z.number().int().min(1).max(10).optional(),
+  rpe: z
+    .number()
+    .int()
+    .min(1)
+    .max(10)
+    .optional()
+    .describe(
+      "1–10. Borg-style RPE. Higher = harder. NOT the 1–5 wellness scale.",
+    ),
   shoes: z.string().trim().max(100).optional(),
   notes: z.string().max(10_000).optional(),
   source: z.string().trim().max(50).default("manual"),
