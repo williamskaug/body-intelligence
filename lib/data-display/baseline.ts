@@ -8,6 +8,7 @@ export type Band = "above" | "in" | "below" | "unknown";
 
 export type Baseline = {
   mean: number;
+  median: number;
   sd: number;
   count: number;
 };
@@ -21,7 +22,11 @@ export function computeBaseline(values: ReadonlyArray<number | null | undefined>
   if (xs.length < 3) return null;
   const mean = xs.reduce((a, b) => a + b, 0) / xs.length;
   const variance = xs.reduce((a, b) => a + (b - mean) * (b - mean), 0) / xs.length;
-  return { mean, sd: Math.sqrt(variance), count: xs.length };
+  const sorted = [...xs].sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  const median =
+    sorted.length % 2 === 0 ? (sorted[mid - 1]! + sorted[mid]!) / 2 : sorted[mid]!;
+  return { mean, median, sd: Math.sqrt(variance), count: xs.length };
 }
 
 // Classify a single value against its baseline.

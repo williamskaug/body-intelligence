@@ -27,6 +27,8 @@ import {
   deleteHealthEventInputSchema,
 } from "./tools/delete-health-event";
 import { getRecent, getRecentInputSchema } from "./tools/get-recent";
+import { getBaseline, getBaselineInputSchema } from "./tools/get-baseline";
+import { getStats, getStatsInputSchema } from "./tools/get-stats";
 import { searchEverything, searchEverythingInputSchema } from "./tools/search-everything";
 import {
   getSetupGuide,
@@ -281,6 +283,30 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       inputSchema: searchEverythingInputSchema,
     },
     async (input) => jsonResult(await searchEverything(ctx.userId, input)),
+  );
+
+  // ---------- stats ----------
+
+  server.registerTool(
+    "get_baseline",
+    {
+      title: "Compute a personal baseline for a metric",
+      description:
+        "Roll up a numeric column over a trailing window into mean/median/stdev/n. Use this to ask 'is today X above/below normal?' Recommended window: 30 days. Returns null for mean/median/stdev when fewer than 3 non-null samples exist in the window.",
+      inputSchema: getBaselineInputSchema,
+    },
+    async (input) => jsonResult(await getBaseline(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "get_stats",
+    {
+      title: "Aggregate a metric over an explicit date range",
+      description:
+        "Compute one aggregate (mean / median / min / max / stdev / sum / count) over a numeric column between two dates inclusive. Use for monthly summaries, race-block totals, year-over-year — anywhere get_baseline's trailing-window framing doesn't fit.",
+      inputSchema: getStatsInputSchema,
+    },
+    async (input) => jsonResult(await getStats(ctx.userId, input)),
   );
 
   return server;
