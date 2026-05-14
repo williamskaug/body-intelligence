@@ -41,6 +41,22 @@ import { listWorkouts, listWorkoutsInputSchema } from "./tools/list-workouts";
 import { listMeals, listMealsInputSchema } from "./tools/list-meals";
 import { listDaily, listDailyInputSchema } from "./tools/list-daily";
 import { listHealthEvents, listHealthEventsInputSchema } from "./tools/list-health-events";
+import {
+  bulkLogWorkouts,
+  bulkLogWorkoutsInputSchema,
+} from "./tools/bulk-log-workouts";
+import { bulkLogDaily, bulkLogDailyInputSchema } from "./tools/bulk-log-daily";
+import { bulkLogMeals, bulkLogMealsInputSchema } from "./tools/bulk-log-meals";
+import {
+  computeTrainingLoad,
+  computeTrainingLoadInputSchema,
+} from "./tools/compute-training-load";
+import {
+  resolveHealthEvent,
+  resolveHealthEventInputSchema,
+} from "./tools/resolve-health-event";
+import { getCalendar, getCalendarInputSchema } from "./tools/get-calendar";
+import { listConnectors, listConnectorsInputSchema } from "./tools/list-connectors";
 import { searchEverything, searchEverythingInputSchema } from "./tools/search-everything";
 import {
   getSetupGuide,
@@ -442,6 +458,85 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       inputSchema: getRecipeStatusInputSchema,
     },
     async (input) => jsonResult(await getRecipeStatus(ctx.userId, input)),
+  );
+
+  // ---------- bulk + helpers ----------
+
+  server.registerTool(
+    "bulk_log_workouts",
+    {
+      title: "Bulk log workouts",
+      description:
+        "Insert or upsert up to 500 workouts in one call. on_conflict='update' (default) replaces rows by (source, source_id); 'ignore' keeps the existing row. Returns { inserted, updated, errors[] }. Use for connector backfills (12 months of Strava history) to avoid quadratic round-trip latency.",
+      inputSchema: bulkLogWorkoutsInputSchema,
+    },
+    async (input) => jsonResult(await bulkLogWorkouts(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "bulk_log_daily",
+    {
+      title: "Bulk log daily entries",
+      description:
+        "Insert or upsert up to 500 daily_entries rows in one call. Keyed by (user, date) — on_conflict='update' merges fields per the same partial-update semantics as log_daily; 'ignore' skips existing rows.",
+      inputSchema: bulkLogDailyInputSchema,
+    },
+    async (input) => jsonResult(await bulkLogDaily(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "bulk_log_meals",
+    {
+      title: "Bulk log meals",
+      description:
+        "Insert or upsert up to 500 meals in one call. Macro fields are still REQUIRED on each item (calories + protein_g + carbs_g + fat_g) — bulk imports without macros throw at the validation layer.",
+      inputSchema: bulkLogMealsInputSchema,
+    },
+    async (input) => jsonResult(await bulkLogMeals(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "compute_training_load",
+    {
+      title: "Compute weekly training load",
+      description:
+        "Return weekly buckets over the trailing N days. v1 each bucket has weekStart, totalMin, trimp (duration × (rpe ?? 5)), and countByType. CTL/ATL/TSB are future work. Pair with get_baseline for ramp-rate reasoning.",
+      inputSchema: computeTrainingLoadInputSchema,
+    },
+    async (input) => jsonResult(await computeTrainingLoad(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "resolve_health_event",
+    {
+      title: "Mark a health event resolved",
+      description:
+        "Thin alias around update_health_event(id, resolved_date=…). Defaults resolved_date to today if you don't pass one. Use when the intent is specifically 'this is over' so the action is obvious in transcripts.",
+      inputSchema: resolveHealthEventInputSchema,
+    },
+    async (input) => jsonResult(await resolveHealthEvent(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "get_calendar",
+    {
+      title: "Per-day rollup for a calendar month",
+      description:
+        "Return one row per day in the given (year, month) with workout_count, workout_total_min, workout_types, has_daily_entry, meal_count, and active_health_event_count. Cheaper than fetching all rows and rolling up client-side when you only need the calendar grid.",
+      inputSchema: getCalendarInputSchema,
+    },
+    async (input) => jsonResult(await getCalendar(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "list_connectors",
+    {
+      title: "List data sources writing into BI",
+      description:
+        "Derived from the source column on workouts and meals (BI doesn't hold connector credentials itself). Per source: records_30d, last_write_at, status (fresh ≤2d / stale ≤7d / down >7d / unknown). Use to diagnose 'why did the dashboard go flat?' — usually a connector stopped, not a training change.",
+      inputSchema: listConnectorsInputSchema,
+    },
+    async () => jsonResult(await listConnectors(ctx.userId)),
   );
 
   server.registerTool(
