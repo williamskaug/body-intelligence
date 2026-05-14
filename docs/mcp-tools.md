@@ -9,6 +9,14 @@ The surface covers full CRUD for every entity:
 - **Delete:** `delete_workout`, `delete_daily_entry`, `delete_meal`, `delete_health_event`, `fs_delete`
 - **Filesystem ops:** `fs_move` (rename / relocate a document)
 - **Read:** `fs_read`, `fs_list` (files + folders), `fs_search`, `get_recent`, `search_everything`
+- **Direct getters:** `get_workout(id)`, `get_meal(id)`, `get_daily(date)`, `get_health_event(id)`
+- **Range queries:** `list_workouts`, `list_meals`, `list_daily`, `list_health_events` (cursor-paginated, 200/page)
+- **Bulk writes:** `bulk_log_workouts`, `bulk_log_daily`, `bulk_log_meals` (up to 500/call, returns `{ inserted, updated, errors[] }`)
+- **Stats:** `get_baseline(metric, window_days)`, `get_stats(metric, from, to, agg)`, `get_streak(kind)`, `compute_training_load(days)`
+- **Calendar rollup:** `get_calendar(year, month)` returns per-day rollups
+- **Health events:** `resolve_health_event(id, resolved_date?)` (alias around `update_health_event`)
+- **Recipes:** `list_recipes(include_install_state?)`, `get_recipe_status(recipe_id)`, `mark_recipe_run(recipe_id, status, error?)`
+- **Connectors:** `list_connectors` (derived from `source` columns — BI does not hold connector credentials; no `trigger_sync`)
 - **Onboarding:** `get_setup_guide`
 
 `update_*` and `delete_*` tools take the entity's `id` (find it via `get_recent` or `search_everything`). They both throw if no row matches the id under the calling user — there's no silent no-op. Prefer `update_*` over `delete_*` when correcting bad data, so history stays intact.

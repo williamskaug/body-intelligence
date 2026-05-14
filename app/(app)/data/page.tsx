@@ -461,12 +461,6 @@ function mergeEvents<T extends { id: string }>(a: T[], b: T[]): T[] {
   return out;
 }
 
-function perWeek(n: number, days: number): string {
-  if (days <= 0) return "—";
-  const per = (n / days) * 7;
-  return `${per.toFixed(per >= 10 ? 0 : 1)} / wk`;
-}
-
 function perDay(n: number, days: number): string {
   if (days <= 0 || n === 0) return n === 0 ? "—" : "—";
   const per = n / days;
