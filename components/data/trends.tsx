@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Sparkline } from "@/components/data/sparkline";
 import {
   datesInRange,
@@ -128,19 +129,35 @@ export function Trends({ daily, workouts, meals, startDate, endDate }: Props) {
         </h3>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {metrics
-            .filter((m) => series[m.key].some((v) => v != null))
-            .map((m) => (
-              <MetricCard
-                key={m.key}
-                label={m.label}
-                unit={m.unit}
-                decimals={m.decimals}
-                values={series[m.key]}
-                baseline={baselines[m.key]}
-                higherIsBetter={m.higher}
-                latest={latestNonNull(series[m.key])}
-              />
-            ))}
+            .filter((m) => {
+              // Wellness has special "need at least 3 days" rules — the empty
+              // card takes its slot in the grid below. Other metrics still
+              // render if they have any data.
+              if (m.key === "wellness") {
+                return true;
+              }
+              return series[m.key].some((v) => v != null);
+            })
+            .map((m) => {
+              if (m.key === "wellness") {
+                const samples = series.wellness.filter((v) => v != null).length;
+                if (samples < MIN_WELLNESS_DAYS) {
+                  return <WellnessEmpty key={m.key} samples={samples} />;
+                }
+              }
+              return (
+                <MetricCard
+                  key={m.key}
+                  label={m.label}
+                  unit={m.unit}
+                  decimals={m.decimals}
+                  values={series[m.key]}
+                  baseline={baselines[m.key]}
+                  higherIsBetter={m.higher}
+                  latest={latestNonNull(series[m.key])}
+                />
+              );
+            })}
         </div>
       </section>
 
@@ -161,6 +178,30 @@ export function Trends({ daily, workouts, meals, startDate, endDate }: Props) {
         </h3>
         <MacroCard totals={totals} dayCount={distinctMealDays} />
       </section>
+    </div>
+  );
+}
+
+function WellnessEmpty({ samples }: { samples: number }) {
+  return (
+    <div className="rounded-xl border border-dashed bg-muted/20 p-4 shadow-sm">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Wellness avg
+        </span>
+        <span className="text-[10px] text-muted-foreground">
+          {samples === 0 ? "no data" : `${samples} day${samples === 1 ? "" : "s"}`}
+        </span>
+      </div>
+      <p className="mt-2 text-sm text-foreground/80">
+        Daily wellness scales not yet logged on ≥3 days with ≥3 fields each.
+      </p>
+      <Link
+        href="/agents?id=morning-checkin"
+        className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-foreground underline-offset-2 hover:underline"
+      >
+        Install morning check-in →
+      </Link>
     </div>
   );
 }
@@ -408,6 +449,10 @@ function MacroCard({
   ];
   const totalMeals = totals.mealsWithMacros + totals.mealsDescriptionOnly;
   const avgKcal = dayCount > 0 ? totals.calories / dayCount : 0;
+  // Only render a kcal average when the sample is large enough that the number
+  // is meaningful. One logged day of one logged meal is not a 30-day average.
+  const showAvgKcal =
+    dayCount >= MIN_MACRO_DAYS && totals.mealsWithMacros >= MIN_MACRO_MEALS;
 
   return (
     <div className="grid gap-3 lg:grid-cols-3">
@@ -417,14 +462,16 @@ function MacroCard({
         </span>
         <div className="mt-1 flex items-baseline gap-1">
           <span className="font-mono text-2xl tabular-nums">
-            {dayCount > 0 && totals.mealsWithMacros > 0 ? Math.round(avgKcal) : "—"}
+            {showAvgKcal ? Math.round(avgKcal) : "—"}
           </span>
           <span className="text-xs text-muted-foreground">kcal</span>
         </div>
         <div className="mt-3 text-xs text-muted-foreground">
           {totalMeals === 0
             ? "No meals logged."
-            : `${totalMeals} meal${totalMeals === 1 ? "" : "s"} on ${dayCount} day${dayCount === 1 ? "" : "s"} · ${totals.mealsWithMacros} with macros`}
+            : showAvgKcal
+              ? `${totalMeals} meal${totalMeals === 1 ? "" : "s"} on ${dayCount} day${dayCount === 1 ? "" : "s"} · ${totals.mealsWithMacros} with macros`
+              : `Need ≥${MIN_MACRO_DAYS} days with ≥${MIN_MACRO_MEALS} macro-logged meals (have ${dayCount}d / ${totals.mealsWithMacros}m).`}
         </div>
       </div>
 
@@ -521,11 +568,21 @@ function buildSegments(
   return out;
 }
 
+// A day's wellness composite is only meaningful when most of the six scales
+// are filled. Requiring >= 3 stops a phantom "4.0 / 5" from rendering as the
+// hero metric just because mood and fatigue happened to be jotted down once.
+const MIN_SCALES_PER_DAY = 3;
+// And we need at least 3 such days before showing a wellness trend at all.
+const MIN_WELLNESS_DAYS = 3;
+// Same idea for nutrition — one logged meal-day isn't an average.
+const MIN_MACRO_DAYS = 3;
+const MIN_MACRO_MEALS = 3;
+
 function wellnessComposite(d: TrendsDaily | undefined): number | null {
   if (!d) return null;
   const xs = [d.fatigue, d.soreness, d.mood, d.stress, d.motivation, d.sleep_quality]
     .filter((v): v is number => v != null && Number.isFinite(v));
-  if (xs.length === 0) return null;
+  if (xs.length < MIN_SCALES_PER_DAY) return null;
   return xs.reduce((a, b) => a + b, 0) / xs.length;
 }
 
