@@ -151,7 +151,72 @@ export function Timeline({ workouts, daily, meals, events }: Props) {
 
   const anomalies = detectAnomalies(daily, workouts);
   const anomaliesByDate = groupAnomaliesByDate(anomalies);
-  const topAttention = topAnomalies(anomalies, 5);
+
+  // Roll the top anomalies plus a few additional "worth your attention"
+  // signals into one ranked list, max 5. Severity beats recency; ties broken
+  // by date descending.
+  const attentionItems: AttentionItem[] = [];
+  for (const a of topAnomalies(anomalies, 5)) {
+    attentionItems.push({
+      key: `anomaly-${a.kind}-${a.date}`,
+      severity: a.severity,
+      date: a.date,
+      title: anomalyTitle(a.kind),
+      message: a.message,
+    });
+  }
+  // Active health events flagged for follow-up if they've been open >14 days.
+  for (const e of events) {
+    if (e.resolved_date) continue;
+    const ageDays = Math.round(
+      (Date.parse(`${todayIso}T00:00:00Z`) - Date.parse(`${e.date}T00:00:00Z`)) /
+        86_400_000,
+    );
+    if (ageDays >= 14) {
+      attentionItems.push({
+        key: `event-${e.id}`,
+        severity: ageDays >= 30 ? "medium" : "low",
+        date: e.date,
+        title: "Open health event",
+        message: `${e.kind}${e.body_part ? ` · ${e.body_part}` : ""} from ${ageDays}d ago — still tracking?`,
+      });
+    }
+  }
+  // Today is empty after 9am local — gently nudge.
+  if (!todayEntry) {
+    attentionItems.push({
+      key: "today-empty",
+      severity: "low",
+      date: todayIso,
+      title: "Today's check-in pending",
+      message: "Tap the green card above to log fatigue / mood / sleep_h.",
+    });
+  }
+  // Daily-checkin streak just broke (yesterday was filled, today still empty).
+  const yesterdayDate = (() => {
+    const y = new Date(`${todayIso}T00:00:00Z`);
+    y.setUTCDate(y.getUTCDate() - 1);
+    return y.toISOString().slice(0, 10);
+  })();
+  if (!todayEntry && daily.some((d) => d.date === yesterdayDate)) {
+    attentionItems.push({
+      key: "streak-at-risk",
+      severity: "low",
+      date: todayIso,
+      title: "Streak at risk",
+      message: "Yesterday was logged; today isn't yet. Logging anything keeps the streak.",
+    });
+  }
+
+  // Rank and trim.
+  const severityScore = (s: AttentionItem["severity"]) =>
+    s === "high" ? 3 : s === "medium" ? 2 : 1;
+  attentionItems.sort((a, b) => {
+    const ds = severityScore(b.severity) - severityScore(a.severity);
+    if (ds !== 0) return ds;
+    return a.date < b.date ? 1 : -1;
+  });
+  const topAttention = attentionItems.slice(0, 5);
 
   return (
     <div className="flex flex-col gap-3">
@@ -167,7 +232,7 @@ export function Timeline({ workouts, daily, meals, events }: Props) {
       />
 
       {topAttention.length > 0 ? (
-        <AttentionPanel anomalies={topAttention} />
+        <AttentionPanel items={topAttention} />
       ) : null}
 
       {openOlder.length > 0 ? (
@@ -213,16 +278,24 @@ export function Timeline({ workouts, daily, meals, events }: Props) {
   );
 }
 
-function AttentionPanel({ anomalies }: { anomalies: ReadonlyArray<Anomaly> }) {
+type AttentionItem = {
+  key: string;
+  severity: "low" | "medium" | "high";
+  date: string;
+  title: string;
+  message: string;
+};
+
+function AttentionPanel({ items }: { items: ReadonlyArray<AttentionItem> }) {
   return (
     <section className="rounded-2xl border border-rose-500/30 bg-rose-500/5 px-4 py-3 shadow-sm">
       <h2 className="text-xs font-semibold uppercase tracking-wide text-rose-700 dark:text-rose-400">
         What&apos;s worth your attention
       </h2>
       <ul className="mt-2 flex flex-col gap-1.5">
-        {anomalies.map((a, i) => (
+        {items.map((a) => (
           <li
-            key={`${a.kind}-${a.date}-${i}`}
+            key={a.key}
             className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm"
           >
             <span
@@ -239,12 +312,32 @@ function AttentionPanel({ anomalies }: { anomalies: ReadonlyArray<Anomaly> }) {
             <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
               {a.date}
             </span>
-            <span className="text-foreground/90">{a.message}</span>
+            <span className="font-medium text-foreground/90">{a.title}</span>
+            <span className="text-foreground/80">— {a.message}</span>
           </li>
         ))}
       </ul>
     </section>
   );
+}
+
+function anomalyTitle(kind: Anomaly["kind"]): string {
+  switch (kind) {
+    case "rhr_high":
+      return "RHR elevated";
+    case "hrv_low":
+      return "HRV suppressed";
+    case "sleep_long":
+      return "Long sleep";
+    case "sleep_short":
+      return "Short sleep";
+    case "missing_hrv":
+      return "HRV not captured";
+    case "missing_rhr":
+      return "RHR not captured";
+    case "rpe_high_streak":
+      return "Hard-day streak";
+  }
 }
 
 function DayAnomalyBadges({ anomalies }: { anomalies: ReadonlyArray<Anomaly> }) {
