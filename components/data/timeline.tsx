@@ -1,5 +1,11 @@
 import { Badge } from "@/components/ui/badge";
 import {
+  detectAnomalies,
+  groupAnomaliesByDate,
+  topAnomalies,
+  type Anomaly,
+} from "@/lib/data-display/anomalies";
+import {
   bandClass,
   classify,
   computeBaseline,
@@ -133,8 +139,16 @@ export function Timeline({ workouts, daily, meals, events }: Props) {
   // Unresolved events that started before the window — surface as a banner.
   const openOlder = events.filter((e) => !e.resolved_date && !dates.includes(e.date));
 
+  const anomalies = detectAnomalies(daily, workouts);
+  const anomaliesByDate = groupAnomaliesByDate(anomalies);
+  const topAttention = topAnomalies(anomalies, 5);
+
   return (
     <div className="flex flex-col gap-3">
+      {topAttention.length > 0 ? (
+        <AttentionPanel anomalies={topAttention} />
+      ) : null}
+
       {openOlder.length > 0 ? (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm">
           <div className="font-medium text-amber-800 dark:text-amber-300">
@@ -170,11 +184,88 @@ export function Timeline({ workouts, daily, meals, events }: Props) {
             meals={ms}
             events={es}
             baselines={baselines}
+            anomalies={anomaliesByDate.get(date) ?? []}
           />
         );
       })}
     </div>
   );
+}
+
+function AttentionPanel({ anomalies }: { anomalies: ReadonlyArray<Anomaly> }) {
+  return (
+    <section className="rounded-2xl border border-rose-500/30 bg-rose-500/5 px-4 py-3 shadow-sm">
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-rose-700 dark:text-rose-400">
+        What&apos;s worth your attention
+      </h2>
+      <ul className="mt-2 flex flex-col gap-1.5">
+        {anomalies.map((a, i) => (
+          <li
+            key={`${a.kind}-${a.date}-${i}`}
+            className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm"
+          >
+            <span
+              className={`inline-flex shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
+                a.severity === "high"
+                  ? "border-rose-500/40 bg-rose-500/15 text-rose-700 dark:text-rose-300"
+                  : a.severity === "medium"
+                    ? "border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                    : "border-foreground/20 bg-muted text-muted-foreground"
+              }`}
+            >
+              {a.severity}
+            </span>
+            <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+              {a.date}
+            </span>
+            <span className="text-foreground/90">{a.message}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function DayAnomalyBadges({ anomalies }: { anomalies: ReadonlyArray<Anomaly> }) {
+  if (anomalies.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {anomalies.map((a, i) => (
+        <span
+          key={`${a.kind}-${i}`}
+          title={a.message}
+          className={`rounded-md border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
+            a.severity === "high"
+              ? "border-rose-500/40 bg-rose-500/15 text-rose-700 dark:text-rose-300"
+              : a.severity === "medium"
+                ? "border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                : "border-foreground/20 bg-muted text-muted-foreground"
+          }`}
+        >
+          {anomalyLabel(a.kind)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function anomalyLabel(kind: Anomaly["kind"]): string {
+  switch (kind) {
+    case "rhr_high":
+      return "RHR ↑";
+    case "hrv_low":
+      return "HRV ↓";
+    case "sleep_long":
+      return "long sleep";
+    case "sleep_short":
+      return "short sleep";
+    case "missing_hrv":
+      return "no HRV";
+    case "missing_rhr":
+      return "no RHR";
+    case "rpe_high_streak":
+      return "hard streak";
+  }
 }
 
 function DayCard({
@@ -184,6 +275,7 @@ function DayCard({
   meals,
   events,
   baselines,
+  anomalies,
 }: {
   date: string;
   daily: TimelineDaily | undefined;
@@ -191,6 +283,7 @@ function DayCard({
   meals: TimelineMeal[];
   events: TimelineEvent[];
   baselines: Record<string, ReturnType<typeof computeBaseline>>;
+  anomalies: ReadonlyArray<Anomaly>;
 }) {
   const headerVitals: Array<{
     label: string;
@@ -222,6 +315,7 @@ function DayCard({
           <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground/70">
             {date}
           </span>
+          <DayAnomalyBadges anomalies={anomalies} />
         </div>
         <div className="flex flex-wrap items-center gap-1.5 text-xs">
           {headerVitals.map((v) => (
