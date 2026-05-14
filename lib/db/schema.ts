@@ -236,6 +236,27 @@ export const oauthCodes = pgTable(
   (t) => [index("oauth_codes_expires_idx").on(t.expiresAt)],
 );
 
+export const installedRecipes = pgTable(
+  "installed_recipes",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => usersInAuth.id, { onDelete: "cascade" }),
+    recipeId: text("recipe_id").notNull(),
+    installedAt: timestamp("installed_at", { withTimezone: true }).notNull().defaultNow(),
+    lastRunAt: timestamp("last_run_at", { withTimezone: true }),
+    lastRunStatus: text("last_run_status"), // 'ok' | 'failed' | null
+    runCount: integer("run_count").notNull().default(0),
+    lastError: text("last_error"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("installed_recipes_user_recipe_key").on(t.userId, t.recipeId),
+    index("installed_recipes_user_idx").on(t.userId),
+  ],
+);
+
 export const oauthTokens = pgTable(
   "oauth_tokens",
   {

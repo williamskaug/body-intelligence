@@ -30,6 +30,9 @@ import { getRecent, getRecentInputSchema } from "./tools/get-recent";
 import { getBaseline, getBaselineInputSchema } from "./tools/get-baseline";
 import { getStats, getStatsInputSchema } from "./tools/get-stats";
 import { getStreak, getStreakInputSchema } from "./tools/get-streak";
+import { markRecipeRun, markRecipeRunInputSchema } from "./tools/mark-recipe-run";
+import { listRecipes, listRecipesInputSchema } from "./tools/list-recipes";
+import { getRecipeStatus, getRecipeStatusInputSchema } from "./tools/get-recipe-status";
 import { searchEverything, searchEverythingInputSchema } from "./tools/search-everything";
 import {
   getSetupGuide,
@@ -319,6 +322,41 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       inputSchema: getStreakInputSchema,
     },
     async (input) => jsonResult(await getStreak(ctx.userId, input)),
+  );
+
+  // ---------- recipes ----------
+
+  server.registerTool(
+    "list_recipes",
+    {
+      title: "List BI's recipe catalog",
+      description:
+        "Return every recipe in the catalog with id, title, schedule, prompt, required_tools, required_connectors. Pass include_install_state=true to also see which the caller has installed and when each last ran.",
+      inputSchema: listRecipesInputSchema,
+    },
+    async (input) => jsonResult(await listRecipes(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "get_recipe_status",
+    {
+      title: "Check install + run state for one recipe",
+      description:
+        "Returns { installed, installed_at, last_run_at, last_run_status, run_count, last_error } or { installed: false } if the user has never run it.",
+      inputSchema: getRecipeStatusInputSchema,
+    },
+    async (input) => jsonResult(await getRecipeStatus(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "mark_recipe_run",
+    {
+      title: "Record that a recipe ran",
+      description:
+        "Call this as the FINAL step of any scheduled recipe with status='ok' (or 'failed' + error message). Updates installed_recipes so the /agents page can show install state and last-run timing. Auto-installs the recipe on first reported run.",
+      inputSchema: markRecipeRunInputSchema,
+    },
+    async (input) => jsonResult(await markRecipeRun(ctx.userId, input)),
   );
 
   return server;
