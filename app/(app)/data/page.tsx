@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Calendar } from "@/components/data/calendar";
 import { Documents } from "@/components/data/documents";
 import { EmptyDataState } from "@/components/data/empty-state";
+import { RaceHero } from "@/components/data/race-hero";
 import { Timeline } from "@/components/data/timeline";
 import { Trends } from "@/components/data/trends";
 import { hoursByType } from "@/lib/data-display/aggregate";
@@ -140,9 +141,23 @@ export default async function DataPage({
     );
   }
 
+  const docs = (documents.data ?? []) as Array<{
+    path: string;
+    content: string;
+    updated_at: string;
+  }>;
+  const goalsDoc = docs.find((d) => d.path === "GOALS.md")?.content ?? "";
+  const currentDoc = docs.find((d) => d.path === "CURRENT.md")?.content ?? "";
+
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6 sm:py-10">
-      <header className="flex flex-col gap-4">
+      <RaceHero
+        goalsContent={goalsDoc}
+        currentContent={currentDoc}
+        today={todayDate}
+      />
+
+      <header className="mt-6 flex flex-col gap-4">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">Your data</h1>
           <p className="mt-1 text-sm text-muted-foreground">
