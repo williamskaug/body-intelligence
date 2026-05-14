@@ -1,4 +1,5 @@
 import { computeBaseline, classify } from "@/lib/data-display/baseline";
+import { chartColorForType } from "@/lib/data-display/workout-types";
 
 export type CalendarWorkout = {
   id: string;
@@ -266,21 +267,36 @@ function DayCell({
           {dayNum}
         </span>
         <div className="flex items-center gap-0.5">
-          {events.some((e) => !e.resolved_date) ? (
+          {daily ? (
+            <span
+              className="h-1.5 w-1.5 rounded-full bg-emerald-500"
+              aria-label="daily entry logged"
+              title="Daily check-in logged"
+            />
+          ) : null}
+          {meals.length >= 3 ? (
             <span
               className="h-1.5 w-1.5 rounded-full bg-amber-500"
+              aria-label={`${meals.length} meals logged`}
+              title={`${meals.length} meals logged`}
+            />
+          ) : meals.length > 0 ? (
+            <span
+              className="h-1.5 w-1.5 rounded-full bg-amber-500/40"
+              aria-label={`${meals.length} meals logged`}
+              title={`${meals.length} meals logged`}
+            />
+          ) : null}
+          {events.some((e) => !e.resolved_date) ? (
+            <span
+              className="h-1.5 w-1.5 rounded-full bg-rose-500"
               aria-label="active health event"
+              title="Active health event"
             />
           ) : events.length > 0 ? (
             <span
               className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40"
               aria-label="resolved health event"
-            />
-          ) : null}
-          {meals.length > 0 ? (
-            <span
-              className="h-1.5 w-1.5 rounded-full bg-foreground/40"
-              aria-label={`${meals.length} meals logged`}
             />
           ) : null}
         </div>
@@ -303,17 +319,30 @@ function DayCell({
 }
 
 function WorkoutBar({ workout: w }: { workout: CalendarWorkout }) {
-  const tone = intensityClass(w.rpe);
+  // Height proportional to duration so shape-perception works at a glance:
+  // 30 min → ~6px, 60 min → ~10px, 120 min → ~16px, 254-min golf → 22px (clamped).
+  const min = w.duration_min ?? 0;
+  const height = Math.max(4, Math.min(22, Math.round(min / 8) + 4));
+  const showLabel = height >= 14;
+  const color = chartColorForType(w.type);
   const label = shortTypeLabel(w.type);
   return (
     <div
-      className={`flex items-center gap-1 truncate rounded-sm px-1 py-[2px] text-[10px] leading-none ${tone}`}
+      title={`${w.type}${w.duration_min ? ` · ${w.duration_min}min` : ""}${w.rpe ? ` · RPE ${w.rpe}` : ""}`}
+      style={{ height: `${height}px`, backgroundColor: color }}
+      className="flex items-center gap-1 overflow-hidden rounded-sm px-1 leading-none text-white shadow-sm"
     >
-      <span className="truncate font-semibold uppercase tracking-wide">{label}</span>
-      {w.duration_min != null ? (
-        <span className="ml-auto font-mono tabular-nums opacity-80">
-          {w.duration_min}′
-        </span>
+      {showLabel ? (
+        <>
+          <span className="truncate text-[9px] font-semibold uppercase tracking-wide">
+            {label}
+          </span>
+          {w.duration_min != null ? (
+            <span className="ml-auto font-mono text-[9px] tabular-nums opacity-90">
+              {w.duration_min}′
+            </span>
+          ) : null}
+        </>
       ) : null}
     </div>
   );
@@ -333,12 +362,11 @@ function Legend() {
         <LegendItem swatch="bg-card border-border" label="In baseline" />
         <LegendItem swatch="bg-amber-500/30 border-amber-500/40" label="Below baseline" />
         <span className="mx-2 hidden h-3 w-px bg-border sm:inline-block" />
-        <LegendItem swatch="bg-emerald-500/20 border-emerald-500/40" label="Easy (RPE 1–3)" />
-        <LegendItem swatch="bg-amber-500/20 border-amber-500/40" label="Moderate (4–6)" />
-        <LegendItem swatch="bg-rose-500/20 border-rose-500/40" label="Hard (7–10)" />
+        <span className="text-[10px]">Workout bars: color by type, height by duration.</span>
         <span className="mx-2 hidden h-3 w-px bg-border sm:inline-block" />
-        <LegendItem swatch="rounded-full h-1.5 w-1.5 bg-amber-500" label="Active event" inline />
-        <LegendItem swatch="rounded-full h-1.5 w-1.5 bg-foreground/40" label="Meals logged" inline />
+        <LegendItem swatch="rounded-full h-1.5 w-1.5 bg-emerald-500" label="Daily check-in" inline />
+        <LegendItem swatch="rounded-full h-1.5 w-1.5 bg-amber-500" label="≥3 meals" inline />
+        <LegendItem swatch="rounded-full h-1.5 w-1.5 bg-rose-500" label="Active event" inline />
       </div>
     </details>
   );
@@ -370,13 +398,6 @@ function backgroundClassFor(direction: "good" | "warn" | "neutral"): string {
     case "neutral":
       return "bg-card border-border";
   }
-}
-
-function intensityClass(rpe: number | null): string {
-  if (rpe == null) return "bg-zinc-500/15 text-zinc-800 dark:text-zinc-200 border-zinc-500/30";
-  if (rpe <= 3) return "bg-emerald-500/20 text-emerald-900 dark:text-emerald-200 border-emerald-500/40";
-  if (rpe <= 6) return "bg-amber-500/20 text-amber-900 dark:text-amber-200 border-amber-500/40";
-  return "bg-rose-500/20 text-rose-900 dark:text-rose-200 border-rose-500/40";
 }
 
 function shortTypeLabel(type: string): string {
