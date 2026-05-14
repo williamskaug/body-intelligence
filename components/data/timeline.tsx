@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { WellnessForm } from "@/components/data/wellness-form";
 import {
   detectAnomalies,
   groupAnomaliesByDate,
@@ -100,11 +101,20 @@ const WELLNESS_KEYS = [
 export function Timeline({ workouts, daily, meals, events }: Props) {
   // Group everything by date. Each day with any data becomes a card.
   const dates = collectDates(workouts, daily, meals, events);
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayEntry = daily.find((d) => d.date === todayIso);
+
+  // Even with zero data in window, we still want the check-in widget visible
+  // so the user has a single click to start logging. Old empty state goes
+  // beneath it.
   if (dates.length === 0) {
     return (
-      <div className="rounded-2xl border bg-card px-6 py-10 text-center text-sm text-muted-foreground shadow-sm">
-        No data in this window. Log a workout, daily check-in, or meal to see it
-        appear here.
+      <div className="flex flex-col gap-3">
+        <WellnessForm date={todayIso} initial={todayEntry ?? undefined} />
+        <div className="rounded-2xl border bg-card px-6 py-10 text-center text-sm text-muted-foreground shadow-sm">
+          No data in this window. Log a workout, daily check-in, or meal to see it
+          appear here.
+        </div>
       </div>
     );
   }
@@ -145,6 +155,17 @@ export function Timeline({ workouts, daily, meals, events }: Props) {
 
   return (
     <div className="flex flex-col gap-3">
+      <WellnessForm
+        date={todayIso}
+        initial={todayEntry ?? undefined}
+        title={todayEntry ? "Today's check-in (logged)" : "Today's check-in"}
+        subtitle={
+          todayEntry
+            ? "Resubmit to update any field. Omitted fields are preserved."
+            : "5 = best on every scale. Skip what you can't answer."
+        }
+      />
+
       {topAttention.length > 0 ? (
         <AttentionPanel anomalies={topAttention} />
       ) : null}
