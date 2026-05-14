@@ -2,10 +2,12 @@ import Link from "next/link";
 import { Calendar } from "@/components/data/calendar";
 import { Documents } from "@/components/data/documents";
 import { EmptyDataState } from "@/components/data/empty-state";
+import { PrincipleCheck } from "@/components/data/principle-check";
 import { RaceHero } from "@/components/data/race-hero";
 import { Timeline } from "@/components/data/timeline";
 import { Trends } from "@/components/data/trends";
 import { hoursByType } from "@/lib/data-display/aggregate";
+import { computeBaseline } from "@/lib/data-display/baseline";
 import { adminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -148,6 +150,33 @@ export default async function DataPage({
   }>;
   const goalsDoc = docs.find((d) => d.path === "GOALS.md")?.content ?? "";
   const currentDoc = docs.find((d) => d.path === "CURRENT.md")?.content ?? "";
+  const principlesDoc = docs.find((d) => d.path === "PRINCIPLES.md")?.content ?? "";
+
+  const dailyRows = (daily.data ?? []) as Array<{
+    date: string;
+    hrv_ms: number | null;
+    rhr_bpm: number | null;
+  }>;
+  const hrvBaseline = computeBaseline(dailyRows.map((d) => d.hrv_ms));
+  const rhrBaseline = computeBaseline(dailyRows.map((d) => d.rhr_bpm));
+  const yesterdayIso = (() => {
+    const y = new Date(today);
+    y.setUTCDate(y.getUTCDate() - 1);
+    return y.toISOString().slice(0, 10);
+  })();
+  const yesterdayHighestRpe = filteredWorkouts
+    .filter((w) => w.date === yesterdayIso && w.rpe != null)
+    .reduce<number | null>((m, w) => Math.max(m ?? 0, w.rpe ?? 0) || null, null);
+  const latestHrv = dailyRows.find((d) => d.hrv_ms != null)?.hrv_ms ?? null;
+  const latestRhr = dailyRows.find((d) => d.rhr_bpm != null)?.rhr_bpm ?? null;
+  const principleCtx = {
+    yesterdayHighestRpe,
+    hrvBelowBaseline:
+      latestHrv != null && hrvBaseline != null && latestHrv < hrvBaseline.mean - hrvBaseline.sd,
+    rhrAboveBaseline:
+      latestRhr != null && rhrBaseline != null && latestRhr > rhrBaseline.mean + rhrBaseline.sd,
+    activeHealthEvent: events.some((e) => !e.resolved_date),
+  };
 
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6 sm:py-10">
@@ -207,6 +236,10 @@ export default async function DataPage({
           />
         )}
       </div>
+
+      <section className="mt-8">
+        <PrincipleCheck principlesContent={principlesDoc} ctx={principleCtx} />
+      </section>
 
       <section className="mt-10">
         <div className="mb-3 flex items-baseline justify-between gap-3">
