@@ -29,13 +29,6 @@
       "when": 1778770307944,
       "tag": "20260514145147_installed_recipes",
       "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1778770545580,
-      "tag": "20260514145545_meals_macros_required",
-      "breakpoints": true
     }
   ]
 }
