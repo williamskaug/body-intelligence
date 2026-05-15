@@ -22,6 +22,20 @@
       "when": 1778618254883,
       "tag": "20260512203734_daily_entries_vitals",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1778770307944,
+      "tag": "20260514145147_installed_recipes",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1778770545580,
+      "tag": "20260514145545_meals_macros_required",
+      "breakpoints": true
     }
   ]
 }
