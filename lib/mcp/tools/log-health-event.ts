@@ -6,7 +6,15 @@ export const logHealthEventInputSchema = {
   date: dateString,
   kind: z.enum(["injury", "illness", "symptom"]),
   body_part: z.string().trim().max(100).optional(),
-  severity: z.number().int().min(1).max(5).optional(),
+  severity: z
+    .number()
+    .int()
+    .min(1)
+    .max(5)
+    .optional()
+    .describe(
+      "1–5. 5 = MOST SEVERE. Opposite direction from the wellness scales (where 5 = best). The one place in BI where 5 = bad.",
+    ),
   notes: z.string().max(10_000).optional(),
   resolved_date: dateString.optional(),
 };

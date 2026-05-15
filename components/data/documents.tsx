@@ -1,3 +1,9 @@
+import { DocEditor } from "@/components/data/doc-editor";
+import {
+  looksLikeTemplate,
+  meaningfulWordCount,
+} from "@/lib/memory/template-detection";
+
 export type DocumentRow = {
   path: string;
   content: string;
@@ -72,18 +78,25 @@ export function Documents({ rows }: { rows: ReadonlyArray<DocumentRow> }) {
 function DocCard({ doc }: { doc: DocumentRow }) {
   const meta = STANDARD_DOCS[doc.path];
   const role = meta?.role ?? "reference";
+  const isTemplate = looksLikeTemplate(doc.content);
   const subtitle = meta?.description ?? previewFirstLine(doc.content);
+  const words = meaningfulWordCount(doc.content);
   return (
     <details className="group rounded-xl border bg-card shadow-sm transition-shadow open:shadow-md">
       <summary className="flex cursor-pointer items-stretch gap-3 py-3 pr-4 text-sm">
         <span aria-hidden className={`w-[3px] rounded-r-sm ${ROLE_ACCENT[role]}`} />
         <div className="flex flex-1 items-center justify-between gap-3 pl-1">
           <div className="min-w-0">
-            <div className="flex items-baseline gap-2">
+            <div className="flex flex-wrap items-baseline gap-2">
               <span className="font-mono text-sm font-medium">{doc.path}</span>
               <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
                 {ROLE_LABELS[role]}
               </span>
+              {isTemplate ? (
+                <span className="rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">
+                  template
+                </span>
+              ) : null}
             </div>
             <span className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
               {subtitle}
@@ -91,13 +104,13 @@ function DocCard({ doc }: { doc: DocumentRow }) {
           </div>
           <div className="flex shrink-0 flex-col items-end gap-0.5 text-[10px] text-muted-foreground">
             <span>{timeAgo(doc.updated_at)}</span>
-            <span>{wordCount(doc.content)} words</span>
+            <span>
+              {isTemplate ? "0 words · template" : `${words} word${words === 1 ? "" : "s"}`}
+            </span>
           </div>
         </div>
       </summary>
-      <pre className="max-h-96 overflow-y-auto whitespace-pre-wrap rounded-b-xl border-t bg-muted/20 px-4 py-3 font-mono text-xs leading-relaxed">
-        {doc.content}
-      </pre>
+      <DocEditor path={doc.path} content={doc.content} />
     </details>
   );
 }
@@ -170,11 +183,6 @@ function previewFirstLine(content: string): string {
     .find((l) => l.length > 0);
   if (!line) return "(empty)";
   return line.length > 70 ? `${line.slice(0, 70)}…` : line;
-}
-
-function wordCount(content: string): number {
-  const m = content.trim().match(/\S+/g);
-  return m ? m.length : 0;
 }
 
 function timeAgo(iso: string): string {

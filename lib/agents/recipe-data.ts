@@ -19,7 +19,7 @@ export const recipes: Recipe[] = [
     schedule: "0 0 1 1 *",
     description:
       "Walks first-time users through filling in PROFILE.md, GOALS.md, and PRINCIPLES.md.",
-    required_tools: ["fs_read", "fs_write"],
+    required_tools: ["fs_read", "fs_write", "mark_recipe_run"],
     required_connectors: [],
     prompt: `Walk the user through Body Intelligence onboarding.
 
@@ -44,7 +44,7 @@ This recipe is meant to be run once; the schedule is a placeholder. The /agents 
     schedule: "0 7 * * *",
     description:
       "Asks for last night's sleep and today's wellness scales. Logs them via log_daily.",
-    required_tools: ["log_daily", "fs_read"],
+    required_tools: ["log_daily", "fs_read", "mark_recipe_run"],
     required_connectors: [],
     prompt: `It's morning. Ask the user a brief check-in to log their daily entry.
 
@@ -60,7 +60,9 @@ If they reply with partial info, log what they gave and don't push for the rest.
 
 Call log_daily with their date (today, in their timezone) and the fields they provided.
 
-Confirm what was logged in one short line. Don't editorialize on the numbers — that's a different conversation.`,
+Confirm what was logged in one short line. Don't editorialize on the numbers — that's a different conversation.
+
+After everything else, call mark_recipe_run(recipe_id="morning-checkin", status="ok") so the /agents page shows you ran. On failure, pass status="failed" with a short error string.`,
   },
   {
     id: "evening-reflection",
@@ -68,7 +70,7 @@ Confirm what was logged in one short line. Don't editorialize on the numbers —
     category: "capture",
     schedule: "0 21 * * *",
     description: "Prompts for any unlogged workouts and meals from the day.",
-    required_tools: ["log_workout", "log_daily", "get_recent"],
+    required_tools: ["log_workout", "log_daily", "get_recent", "mark_recipe_run"],
     required_connectors: [],
     prompt: `It's evening. Help the user catch up on anything they didn't log during the day.
 
@@ -80,7 +82,9 @@ If today's daily_entry has no meal_notes, ask for a one-line summary of what the
 
 Don't be pushy. If they say they didn't train or want to skip, drop it.
 
-End with a single sentence about what was logged or "all caught up."`,
+End with a single sentence about what was logged or "all caught up."
+
+After everything else, call mark_recipe_run(recipe_id="evening-reflection", status="ok").`,
   },
   {
     id: "weekly-review",
@@ -89,7 +93,7 @@ End with a single sentence about what was logged or "all caught up."`,
     schedule: "0 18 * * 0",
     description:
       "Summarizes the week's training load and trends. Updates CURRENT.md with the takeaways.",
-    required_tools: ["get_recent", "fs_read", "fs_write"],
+    required_tools: ["get_recent", "fs_read", "fs_write", "mark_recipe_run"],
     required_connectors: [],
     prompt: `Run a weekly training review.
 
@@ -107,7 +111,9 @@ Write a brief review covering:
 
 Then update CURRENT.md by replacing its "This week" section with the new review and pushing the old one to a "Previous weeks" section if there's space (keep CURRENT.md under 200 lines — archive older content out).
 
-Use fs_write to save. Don't ask for permission — this is a scheduled review, not an interactive session.`,
+Use fs_write to save. Don't ask for permission — this is a scheduled review, not an interactive session.
+
+After saving, call mark_recipe_run(recipe_id="weekly-review", status="ok").`,
   },
   {
     id: "race-countdown",
@@ -116,11 +122,11 @@ Use fs_write to save. Don't ask for permission — this is a scheduled review, n
     schedule: "0 8 * * *",
     description:
       "Active during the 14 days before any race in GOALS.md. Daily focus message.",
-    required_tools: ["fs_read", "get_recent"],
+    required_tools: ["fs_read", "get_recent", "mark_recipe_run"],
     required_connectors: [],
     prompt: `Check whether the user is within 14 days of a race.
 
-1. fs_read GOALS.md and look for race dates. If no race is within 14 days, exit silently.
+1. fs_read GOALS.md and look for race dates. **Sanity guard:** if the only race in GOALS.md is dated more than 5 years from today, treat the file as un-edited (the user kept the example placeholder) and exit silently. If no race is within 14 days, also exit silently.
 2. fs_read PRINCIPLES.md for the user's tapering philosophy.
 3. Call get_recent({days: 7}) for current state.
 
@@ -129,7 +135,113 @@ Send the user a brief message:
 - One specific focus for today (taper-appropriate workout type or rest, hydration cue, sleep target)
 - Any active health flags they should be aware of going into the race
 
-Keep it under 100 words. This runs daily for two weeks — if it gets noisy, the user disables it.`,
+Keep it under 100 words. This runs daily for two weeks — if it gets noisy, the user disables it.
+
+After sending, call mark_recipe_run(recipe_id="race-countdown", status="ok"). If you exited silently because no race is within 14 days, still call mark_recipe_run(recipe_id="race-countdown", status="ok") so the user sees the recipe is alive.`,
+  },
+  {
+    id: "garmin-sync",
+    title: "Garmin sync",
+    category: "connector",
+    schedule: "0 7 * * *",
+    description:
+      "Daily ingest of Garmin sleep, vitals, and movement into BI's structured tables; vendor scores go into daily/YYYY-MM-DD.md.",
+    required_tools: ["log_daily", "log_workout", "fs_write", "fs_read", "mark_recipe_run"],
+    required_connectors: ["garmin"],
+    prompt: `Sync yesterday's Garmin Connect data into Body Intelligence.
+
+Call get_setup_guide once at the start so the field conventions are fresh — especially the rule that structured fields NEVER go into sleep_notes / wellness_notes prose.
+
+**Decide the date.** Run for yesterday in the user's timezone (fs_read PROFILE.md if you need it). Call this DATE.
+
+**1. Pull Garmin data for DATE.** From the Garmin connector MCP, fetch:
+- Sleep: total hours + deep/light/REM/awake minutes
+- HRV, RHR, SpO2 avg, respiration avg
+- Weight (if a weigh-in exists)
+- Steps, active calories, floors climbed, intensity minutes (moderate + vigorous)
+- Body Battery morning / max / min / charged / drained
+- Training Readiness score + key contributors (sleep, HRV status, recovery time, training load focus)
+- Activities (workouts) for the day
+
+**2. Write the structured row.** Call log_daily(date=DATE, ...) with EVERY universal vital that has a value:
+- sleep_h, sleep_deep_min, sleep_light_min, sleep_rem_min, sleep_awake_min
+- hrv_ms, rhr_bpm, spo2_avg_pct, respiration_avg_brpm
+- weight_kg (only if a weigh-in exists)
+- steps, active_calories, floors_climbed, intensity_min_moderate, intensity_min_vigorous
+
+Do NOT put sleep stages into sleep_notes. Do NOT put HRV/RHR into prose. Each of those has a column.
+
+**3. Write the vendor scores to daily/YYYY-MM-DD.md.** Compose a markdown file with sections for Body Battery, Training Readiness, and any other Garmin-proprietary scores. Use fs_read first to see if a file already exists (e.g. from a prior partial sync); if it does, preserve any non-Garmin content and update the Garmin block in place. Example shape:
+
+\`\`\`
+# Vendor scores · DATE
+
+## Garmin
+
+### Body Battery
+- Morning: 56
+- Day max: 72
+- Day min: 14
+- Charged: 41
+- Drained: 49
+
+### Training Readiness
+- Score: 64 / Status: Moderate
+- Sleep score: 80
+- HRV status: Balanced
+- Recovery time: 18 h
+- Training load focus: Aerobic base
+\`\`\`
+
+Then fs_write that path. If a prior sync exists for the same date, overwrite the Garmin section but keep other vendor sections.
+
+**4. Workouts.** For each activity Garmin reports for DATE, call log_workout(date=DATE, type=<lowercased activity type>, duration_min, distance_km if applicable, avg_hr, max_hr, source='garmin', source_id=<Garmin activity id>). The source_id makes the write idempotent — re-runs upsert.
+
+**5. Confirm.** Send the user one short line summarising what was synced. No editorialising on the numbers — that's the morning check-in's job.
+
+**6. Mark the run.** Call mark_recipe_run(recipe_id="garmin-sync", status="ok"). On error, pass status="failed" and a short error message.`,
+  },
+  {
+    id: "strava-sync",
+    title: "Strava sync",
+    category: "connector",
+    schedule: "30 7 * * *",
+    description:
+      "Daily ingest of Strava activities as workouts. Idempotent via source_id.",
+    required_tools: ["log_workout", "mark_recipe_run"],
+    required_connectors: ["strava"],
+    prompt: `Sync yesterday's Strava activities into Body Intelligence.
+
+Call get_setup_guide once at the start.
+
+**Decide the date.** Run for yesterday in the user's timezone. Call this DATE.
+
+**1. Pull Strava activities for DATE.** From the Strava connector MCP, fetch every activity whose local start date is DATE.
+
+**2. For each activity, call log_workout** with:
+- date = DATE
+- type = Strava activity type, lowercased, normalised to BI vocabulary:
+  - 'Run' → 'run'
+  - 'TrailRun' → 'trail_run'
+  - 'Ride' / 'VirtualRide' → 'ride'
+  - 'Swim' → 'swim'
+  - 'Walk' / 'Hike' → 'walk' or 'hike'
+  - 'WeightTraining' → 'lift'
+  - others: lowercase and snake_case
+- duration_min = elapsed_time / 60 (rounded)
+- distance_km = distance_meters / 1000 (only if > 0)
+- avg_hr, max_hr (if recorded)
+- source = 'strava'
+- source_id = Strava activity id
+- notes = ONLY qualitative commentary the user wrote on Strava (the activity description). Do NOT dump distance / pace / HR into notes — those have columns.
+
+**3. RPE.** Strava doesn't expose RPE. Leave it null unless the activity description includes an explicit "RPE N" hint, in which case parse it out.
+
+**4. Detect misclassifications.** If duration_min < 5 AND type == 'run' (or trail_run), flag it — these are almost always walking gaps mis-tagged. Log it with type='walk' instead and mention the reclassification in the confirmation line. (The user can fix individual ones via update_workout later.)
+
+**5. Confirm.** One short line summarising activity count and total minutes.
+
+**6. Mark the run.** Call mark_recipe_run(recipe_id="strava-sync", status="ok"). On error, pass status="failed".`,
   },
   {
     id: "health-log-audit",
@@ -138,7 +250,7 @@ Keep it under 100 words. This runs daily for two weeks — if it gets noisy, the
     schedule: "0 17 * * 1/14",
     description:
       "Reviews active health events and asks if any should be marked resolved.",
-    required_tools: ["get_recent", "fs_read", "fs_write"],
+    required_tools: ["get_recent", "fs_read", "fs_write", "mark_recipe_run"],
     required_connectors: [],
     prompt: `Audit the user's active health events.
 
@@ -151,7 +263,9 @@ For each unresolved event:
 
 Based on their replies, update HEALTH_LOG.md with resolution notes (date, what helped, lessons learned). Use fs_write.
 
-If there are no active events, send a one-liner ("Health log clear, nothing to audit") and exit.`,
+If there are no active events, send a one-liner ("Health log clear, nothing to audit") and exit.
+
+After everything else, call mark_recipe_run(recipe_id="health-log-audit", status="ok").`,
   },
 ];
 

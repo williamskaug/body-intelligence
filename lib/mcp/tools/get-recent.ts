@@ -5,7 +5,12 @@ const KIND_VALUES = ["workouts", "daily", "meals", "health_events"] as const;
 
 export const getRecentInputSchema = {
   days: z.number().int().min(1).max(90),
-  kinds: z.array(z.enum(KIND_VALUES)).optional(),
+  kinds: z
+    .array(z.enum(KIND_VALUES))
+    .optional()
+    .describe(
+      "Subset of kinds to return. Omit for all four. Example: ['workouts','daily'] returns just those two — useful for a morning briefing that doesn't need meal history. Unresolved health events are ALWAYS returned regardless of the date window when 'health_events' is in kinds.",
+    ),
 };
 
 export type GetRecentInput = {

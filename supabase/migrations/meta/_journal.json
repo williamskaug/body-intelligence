@@ -22,6 +22,13 @@
       "when": 1778618254883,
       "tag": "20260512203734_daily_entries_vitals",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1778770307944,
+      "tag": "20260514145147_installed_recipes",
+      "breakpoints": true
     }
   ]
 }

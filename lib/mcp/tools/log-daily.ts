@@ -20,12 +20,24 @@ export const logDailyInputSchema = {
   floors_climbed: z.number().int().min(0).max(2000).optional(),
   intensity_min_moderate: z.number().int().min(0).max(1440).optional(),
   intensity_min_vigorous: z.number().int().min(0).max(1440).optional(),
-  fatigue: wellnessScale.optional(),
-  soreness: wellnessScale.optional(),
-  mood: wellnessScale.optional(),
-  stress: wellnessScale.optional(),
-  motivation: wellnessScale.optional(),
-  sleep_quality: wellnessScale.optional(),
+  fatigue: wellnessScale
+    .optional()
+    .describe(
+      "1–5. 5 = best (no fatigue). INVERTED relative to natural reading — 5 ALWAYS means good.",
+    ),
+  soreness: wellnessScale
+    .optional()
+    .describe(
+      "1–5. 5 = best (no soreness). INVERTED — 5 ALWAYS means good, same as fatigue and stress.",
+    ),
+  mood: wellnessScale.optional().describe("1–5. 5 = best."),
+  stress: wellnessScale
+    .optional()
+    .describe(
+      "1–5. 5 = best (no stress). INVERTED — 5 ALWAYS means good, same as fatigue and soreness.",
+    ),
+  motivation: wellnessScale.optional().describe("1–5. 5 = best."),
+  sleep_quality: wellnessScale.optional().describe("1–5. 5 = best."),
   sleep_notes: z.string().max(10_000).optional(),
   wellness_notes: z.string().max(10_000).optional(),
   meal_notes: z.string().max(10_000).optional(),

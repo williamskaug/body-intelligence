@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { recipes, type Recipe, type RecipeCategory } from "@/lib/agents/recipe-data";
+import { adminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { InstallRecipeButton } from "./install-button";
+import { RecipeInstalledControls } from "./installed-controls";
 
 const categoryLabels: Record<RecipeCategory, string> = {
   capture: "Capture",
@@ -61,6 +64,14 @@ function CategoryIcon({ category }: { category: RecipeCategory }) {
 
 type Params = Promise<{ category?: string }>;
 
+type InstallState = {
+  installed_at: string;
+  last_run_at: string | null;
+  last_run_status: string | null;
+  run_count: number;
+  last_error: string | null;
+};
+
 export default async function AgentsPage({
   searchParams,
 }: {
@@ -68,6 +79,7 @@ export default async function AgentsPage({
 }) {
   const { category: raw } = await searchParams;
   const filter = isCategory(raw) ? raw : null;
+  const installState = await loadInstallState();
 
   const filtered = filter ? recipes.filter((r) => r.category === filter) : recipes;
   const categoryCounts = recipes.reduce<Record<RecipeCategory, number>>(
@@ -115,12 +127,35 @@ export default async function AgentsPage({
       ) : (
         <ul className="mt-6 grid gap-4 md:grid-cols-2">
           {filtered.map((recipe) => (
-            <RecipeCard key={recipe.id} recipe={recipe} />
+            <RecipeCard
+              key={recipe.id}
+              recipe={recipe}
+              state={installState.get(recipe.id)}
+            />
           ))}
         </ul>
       )}
     </div>
   );
+}
+
+async function loadInstallState(): Promise<Map<string, InstallState>> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return new Map();
+  const sb = adminClient();
+  const { data, error } = await sb
+    .from("installed_recipes")
+    .select("recipe_id, installed_at, last_run_at, last_run_status, run_count, last_error")
+    .eq("user_id", user.id);
+  if (error) return new Map();
+  const out = new Map<string, InstallState>();
+  for (const row of (data ?? []) as Array<{ recipe_id: string } & InstallState>) {
+    out.set(row.recipe_id, row);
+  }
+  return out;
 }
 
 function FilterChip({
@@ -154,12 +189,20 @@ function FilterChip({
   );
 }
 
-function RecipeCard({ recipe }: { recipe: Recipe }) {
+function RecipeCard({
+  recipe,
+  state,
+}: {
+  recipe: Recipe;
+  state: InstallState | undefined;
+}) {
   const scheduleLabel =
     recipe.id === "onboarding"
       ? "On demand"
       : humanizeCron(recipe.schedule) ?? recipe.schedule;
   const needsConnectors = recipe.required_connectors.length > 0;
+  const installed = state != null;
+  const failed = state?.last_run_status === "failed";
   return (
     <li className="group relative flex overflow-hidden rounded-2xl border bg-card shadow-sm transition-all hover:shadow-md hover:border-foreground/20">
       <span
@@ -169,7 +212,10 @@ function RecipeCard({ recipe }: { recipe: Recipe }) {
       <div className="flex min-w-0 flex-1 flex-col p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-base font-semibold tracking-tight">{recipe.title}</h2>
+            <div className="flex items-baseline gap-2">
+              <h2 className="text-base font-semibold tracking-tight">{recipe.title}</h2>
+              <InstallStatePill installed={installed} failed={failed} />
+            </div>
             <p className="mt-1 text-xs text-muted-foreground">{scheduleLabel}</p>
           </div>
           <span
@@ -195,12 +241,72 @@ function RecipeCard({ recipe }: { recipe: Recipe }) {
           </p>
         ) : null}
 
-        <div className="mt-auto flex justify-end pt-5">
+        {state ? (
+          <div className="mt-3 rounded-md border bg-muted/20 px-2.5 py-1.5 text-[11px] text-muted-foreground">
+            <span className="font-medium text-foreground">
+              {state.run_count} run{state.run_count === 1 ? "" : "s"}
+            </span>
+            {state.last_run_at ? (
+              <> · last {timeAgo(state.last_run_at)} ({state.last_run_status ?? "?"})</>
+            ) : (
+              <> · awaiting first run</>
+            )}
+            {state.last_error ? (
+              <span className="mt-1 block text-rose-700 dark:text-rose-400">
+                Error: {state.last_error}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="mt-auto flex items-center justify-between gap-2 pt-5">
+          <RecipeInstalledControls recipeId={recipe.id} installed={installed} />
           <InstallRecipeButton recipe={recipe} />
         </div>
       </div>
     </li>
   );
+}
+
+function InstallStatePill({
+  installed,
+  failed,
+}: {
+  installed: boolean;
+  failed: boolean;
+}) {
+  if (!installed) {
+    return (
+      <span className="rounded-md border border-foreground/20 bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+        not installed
+      </span>
+    );
+  }
+  if (failed) {
+    return (
+      <span className="rounded-md border border-rose-500/40 bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-medium text-rose-700 dark:text-rose-300">
+        last run failed
+      </span>
+    );
+  }
+  return (
+    <span className="rounded-md border border-emerald-500/40 bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
+      installed
+    </span>
+  );
+}
+
+function timeAgo(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(ms / 60_000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  if (day < 30) return `${day}d ago`;
+  const mo = Math.floor(day / 30);
+  return `${mo}mo ago`;
 }
 
 function isCategory(v: string | undefined): v is RecipeCategory {

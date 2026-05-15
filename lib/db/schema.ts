@@ -134,6 +134,11 @@ export const meals = pgTable(
     eatenAt: timestamp("eaten_at", { withTimezone: true }).notNull(),
     mealType: text("meal_type"),
     description: text().notNull(),
+    // Calories + macros are REQUIRED at the MCP boundary via Zod (see
+    // lib/mcp/tools/log-meal.ts). The DB column itself stays nullable until
+    // the backfill script has populated existing rows; the NOT NULL flip
+    // lands in a separate migration / PR after that. See
+    // scripts/backfill-meal-macros.ts and docs/schema.md.
     calories: integer(),
     proteinG: numeric("protein_g", { precision: 6, scale: 2 }),
     carbsG: numeric("carbs_g", { precision: 6, scale: 2 }),
@@ -234,6 +239,27 @@ export const oauthCodes = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("oauth_codes_expires_idx").on(t.expiresAt)],
+);
+
+export const installedRecipes = pgTable(
+  "installed_recipes",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => usersInAuth.id, { onDelete: "cascade" }),
+    recipeId: text("recipe_id").notNull(),
+    installedAt: timestamp("installed_at", { withTimezone: true }).notNull().defaultNow(),
+    lastRunAt: timestamp("last_run_at", { withTimezone: true }),
+    lastRunStatus: text("last_run_status"), // 'ok' | 'failed' | null
+    runCount: integer("run_count").notNull().default(0),
+    lastError: text("last_error"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("installed_recipes_user_recipe_key").on(t.userId, t.recipeId),
+    index("installed_recipes_user_idx").on(t.userId),
+  ],
 );
 
 export const oauthTokens = pgTable(

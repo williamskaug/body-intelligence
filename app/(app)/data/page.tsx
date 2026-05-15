@@ -2,14 +2,18 @@ import Link from "next/link";
 import { Calendar } from "@/components/data/calendar";
 import { Documents } from "@/components/data/documents";
 import { EmptyDataState } from "@/components/data/empty-state";
+import { PrincipleCheck } from "@/components/data/principle-check";
+import { RaceHero } from "@/components/data/race-hero";
 import { Timeline } from "@/components/data/timeline";
 import { Trends } from "@/components/data/trends";
+import { hoursByType } from "@/lib/data-display/aggregate";
+import { computeBaseline } from "@/lib/data-display/baseline";
 import { adminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-type SearchParams = Promise<{ days?: string; view?: string }>;
+type SearchParams = Promise<{ days?: string; view?: string; nogolf?: string }>;
 
 type ViewKey = "timeline" | "calendar" | "trends";
 
@@ -31,6 +35,7 @@ export default async function DataPage({
   const params = await searchParams;
   const days = parseDays(params.days);
   const view = parseView(params.view);
+  const trainingOnly = params.nogolf === "1";
 
   const today = new Date();
   const todayDate = today.toISOString().slice(0, 10);
@@ -95,12 +100,53 @@ export default async function DataPage({
     (healthOpenOlder.data ?? []) as EventRow[],
   );
 
+  const allWorkouts = (workouts.data ?? []) as Array<{
+    id: string;
+    date: string;
+    type: string;
+    duration_min: number | null;
+    distance_km: string | null;
+    avg_hr: number | null;
+    max_hr: number | null;
+    rpe: number | null;
+    shoes: string | null;
+    source: string;
+    notes: string | null;
+  }>;
+  // "Training-only" filter: drop golf and very short sessions when ?nogolf=1.
+  const filteredWorkouts = trainingOnly
+    ? allWorkouts.filter(
+        (w) => w.type.trim().toLowerCase() !== "golf" && (w.duration_min ?? 0) >= 15,
+      )
+    : allWorkouts;
+
+  const workoutMix = hoursByType(filteredWorkouts, 3);
+
   const counts = {
-    workouts: (workouts.data ?? []).length,
+    workouts: filteredWorkouts.length,
     daily: (daily.data ?? []).length,
     meals: (meals.data ?? []).length,
     events: events.length,
   };
+
+  // Quick daily-entry streak — computed from rows we already fetched. For
+  // longer historical streaks (best, etc.) callers use the get_streak MCP
+  // tool. This is just the "are you on a roll right now?" surface.
+  const dailyDates = new Set(
+    (daily.data ?? []).map((d) => (d as { date: string }).date),
+  );
+  const dailyStreak = (() => {
+    let n = 0;
+    const cursor = new Date(today);
+    while (true) {
+      const iso = cursor.toISOString().slice(0, 10);
+      if (dailyDates.has(iso)) {
+        n++;
+        cursor.setUTCDate(cursor.getUTCDate() - 1);
+      } else break;
+    }
+    return n;
+  })();
 
   const hasAnyData =
     counts.workouts > 0 ||
@@ -116,9 +162,50 @@ export default async function DataPage({
     );
   }
 
+  const docs = (documents.data ?? []) as Array<{
+    path: string;
+    content: string;
+    updated_at: string;
+  }>;
+  const goalsDoc = docs.find((d) => d.path === "GOALS.md")?.content ?? "";
+  const currentDoc = docs.find((d) => d.path === "CURRENT.md")?.content ?? "";
+  const principlesDoc = docs.find((d) => d.path === "PRINCIPLES.md")?.content ?? "";
+
+  const dailyRows = (daily.data ?? []) as Array<{
+    date: string;
+    hrv_ms: number | null;
+    rhr_bpm: number | null;
+  }>;
+  const hrvBaseline = computeBaseline(dailyRows.map((d) => d.hrv_ms));
+  const rhrBaseline = computeBaseline(dailyRows.map((d) => d.rhr_bpm));
+  const yesterdayIso = (() => {
+    const y = new Date(today);
+    y.setUTCDate(y.getUTCDate() - 1);
+    return y.toISOString().slice(0, 10);
+  })();
+  const yesterdayHighestRpe = filteredWorkouts
+    .filter((w) => w.date === yesterdayIso && w.rpe != null)
+    .reduce<number | null>((m, w) => Math.max(m ?? 0, w.rpe ?? 0) || null, null);
+  const latestHrv = dailyRows.find((d) => d.hrv_ms != null)?.hrv_ms ?? null;
+  const latestRhr = dailyRows.find((d) => d.rhr_bpm != null)?.rhr_bpm ?? null;
+  const principleCtx = {
+    yesterdayHighestRpe,
+    hrvBelowBaseline:
+      latestHrv != null && hrvBaseline != null && latestHrv < hrvBaseline.mean - hrvBaseline.sd,
+    rhrAboveBaseline:
+      latestRhr != null && rhrBaseline != null && latestRhr > rhrBaseline.mean + rhrBaseline.sd,
+    activeHealthEvent: events.some((e) => !e.resolved_date),
+  };
+
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6 sm:py-10">
-      <header className="flex flex-col gap-4">
+      <RaceHero
+        goalsContent={goalsDoc}
+        currentContent={currentDoc}
+        today={todayDate}
+      />
+
+      <header className="mt-6 flex flex-col gap-4">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">Your data</h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -132,20 +219,27 @@ export default async function DataPage({
           <WindowPicker days={days} view={view} />
         </div>
 
-        <SummaryStrip counts={counts} days={days} />
+        <SummaryStrip
+          counts={counts}
+          days={days}
+          workoutMix={workoutMix}
+          trainingOnly={trainingOnly}
+          view={view}
+          dailyStreak={dailyStreak}
+        />
       </header>
 
       <div className="mt-6">
         {view === "timeline" ? (
           <Timeline
-            workouts={(workouts.data ?? []) as Parameters<typeof Timeline>[0]["workouts"]}
+            workouts={filteredWorkouts as Parameters<typeof Timeline>[0]["workouts"]}
             daily={(daily.data ?? []) as Parameters<typeof Timeline>[0]["daily"]}
             meals={(meals.data ?? []) as Parameters<typeof Timeline>[0]["meals"]}
             events={events}
           />
         ) : view === "calendar" ? (
           <Calendar
-            workouts={(workouts.data ?? []) as Parameters<typeof Calendar>[0]["workouts"]}
+            workouts={filteredWorkouts as Parameters<typeof Calendar>[0]["workouts"]}
             daily={(daily.data ?? []) as Parameters<typeof Calendar>[0]["daily"]}
             meals={(meals.data ?? []) as Parameters<typeof Calendar>[0]["meals"]}
             events={(healthRecent.data ?? []) as Parameters<typeof Calendar>[0]["events"]}
@@ -155,13 +249,17 @@ export default async function DataPage({
         ) : (
           <Trends
             daily={(daily.data ?? []) as Parameters<typeof Trends>[0]["daily"]}
-            workouts={(workouts.data ?? []) as Parameters<typeof Trends>[0]["workouts"]}
+            workouts={filteredWorkouts as Parameters<typeof Trends>[0]["workouts"]}
             meals={(meals.data ?? []) as Parameters<typeof Trends>[0]["meals"]}
             startDate={sinceDate}
             endDate={todayDate}
           />
         )}
       </div>
+
+      <section className="mt-8">
+        <PrincipleCheck principlesContent={principlesDoc} ctx={principleCtx} />
+      </section>
 
       <section className="mt-10">
         <div className="mb-3 flex items-baseline justify-between gap-3">
@@ -237,21 +335,45 @@ function WindowPicker({ days, view }: { days: number; view: ViewKey }) {
 function SummaryStrip({
   counts,
   days,
+  workoutMix,
+  trainingOnly,
+  view,
+  dailyStreak,
 }: {
   counts: { workouts: number; daily: number; meals: number; events: number };
   days: number;
+  workoutMix: { entries: Array<{ type: string; hours: number }>; totalHours: number };
+  trainingOnly: boolean;
+  view: ViewKey;
+  dailyStreak: number;
 }) {
-  const items: Array<{ label: string; n: number; sub: string; accent: string }> = [
+  const workoutSub =
+    workoutMix.totalHours > 0
+      ? workoutMix.entries
+          .map((e) => `${capitalize(e.type)} ${formatHours(e.hours)}h`)
+          .join(" · ")
+      : counts.workouts === 0
+        ? "none in view"
+        : `${counts.workouts} session${counts.workouts === 1 ? "" : "s"}`;
+  const items: Array<{
+    label: string;
+    n: string | number;
+    sub: string;
+    accent: string;
+  }> = [
     {
-      label: "Workouts",
-      n: counts.workouts,
-      sub: perWeek(counts.workouts, days),
+      label: "Training hours",
+      n: workoutMix.totalHours > 0 ? formatHours(workoutMix.totalHours) : counts.workouts,
+      sub: workoutSub,
       accent: "bg-sky-500/70",
     },
     {
       label: "Daily check-ins",
       n: counts.daily,
-      sub: `${pct(counts.daily, days)}% of days`,
+      sub:
+        dailyStreak > 0
+          ? `${pct(counts.daily, days)}% · streak ${dailyStreak}d`
+          : `${pct(counts.daily, days)}% of days · no streak`,
       accent: "bg-emerald-500/70",
     },
     {
@@ -268,26 +390,52 @@ function SummaryStrip({
     },
   ];
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-      {items.map((i) => (
-        <div
-          key={i.label}
-          className="relative overflow-hidden rounded-xl border bg-card px-3 py-2.5 shadow-sm"
-        >
-          <span aria-hidden className={`absolute left-0 top-0 h-full w-[3px] ${i.accent}`} />
-          <div className="pl-1">
-            <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-              {i.label}
-            </div>
-            <div className="mt-0.5 flex items-baseline gap-2">
-              <span className="font-mono text-xl tabular-nums">{i.n}</span>
-              <span className="text-[10px] text-muted-foreground">{i.sub}</span>
+    <div className="flex flex-col gap-2">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {items.map((i) => (
+          <div
+            key={i.label}
+            className="relative overflow-hidden rounded-xl border bg-card px-3 py-2.5 shadow-sm"
+          >
+            <span aria-hidden className={`absolute left-0 top-0 h-full w-[3px] ${i.accent}`} />
+            <div className="pl-1">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                {i.label}
+              </div>
+              <div className="mt-0.5 flex items-baseline gap-2">
+                <span className="font-mono text-xl tabular-nums">{i.n}</span>
+                <span className="line-clamp-1 text-[10px] text-muted-foreground">
+                  {i.sub}
+                </span>
+              </div>
             </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
+      <div className="flex items-center justify-end gap-2 text-[10px] text-muted-foreground">
+        <Link
+          href={`?view=${view}&days=${days}${trainingOnly ? "" : "&nogolf=1"}`}
+          className={`rounded-md border px-2 py-0.5 transition-colors ${
+            trainingOnly
+              ? "border-foreground bg-foreground text-background"
+              : "border-border hover:bg-muted hover:text-foreground"
+          }`}
+        >
+          {trainingOnly ? "Showing training-only (exclude golf & <15m)" : "Show training-only"}
+        </Link>
+      </div>
     </div>
   );
+}
+
+function capitalize(s: string): string {
+  if (!s) return s;
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function formatHours(h: number): string {
+  if (h >= 10) return Math.round(h).toString();
+  return h.toFixed(1);
 }
 
 function parseDays(raw: string | undefined): number {
@@ -311,12 +459,6 @@ function mergeEvents<T extends { id: string }>(a: T[], b: T[]): T[] {
     out.push(r);
   }
   return out;
-}
-
-function perWeek(n: number, days: number): string {
-  if (days <= 0) return "—";
-  const per = (n / days) * 7;
-  return `${per.toFixed(per >= 10 ? 0 : 1)} / wk`;
 }
 
 function perDay(n: number, days: number): string {

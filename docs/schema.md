@@ -2,6 +2,11 @@
 
 Postgres schema for Body Intelligence. Drizzle is the source of truth — this document mirrors what `lib/db/schema.ts` will declare. RLS policies live alongside the tables in Drizzle migrations.
 
+> **Iteration 2 changes:**
+> - `meals.calories`, `protein_g`, `carbs_g`, `fat_g` are now **NOT NULL** (run `scripts/backfill-meal-macros.ts` before applying the migration on existing data).
+> - New `installed_recipes` table mirrors Cowork-side recipe install + run state (see "Tables" below).
+> - `daily_entries` already carried the four `sleep_*_min` columns; iteration 2 added a setup-guide rule + `scripts/backfill-sleep-stages.ts` to ensure those columns are actually populated rather than dumped into `sleep_notes` prose.
+
 ## Conventions
 
 - Primary keys: `uuid` generated via `gen_random_uuid()` unless noted.
