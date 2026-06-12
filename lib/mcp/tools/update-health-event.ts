@@ -10,8 +10,25 @@ export const updateHealthEventInputSchema = {
   kind: z.enum(["injury", "illness", "symptom"]).optional(),
   body_part: z.string().trim().max(100).nullable().optional(),
   severity: z.number().int().min(1).max(5).nullable().optional(),
-  notes: z.string().max(10_000).nullable().optional(),
+  notes: z
+    .string()
+    .max(10_000)
+    .nullable()
+    .optional()
+    .describe(
+      "The event SUMMARY (mechanism, working hypothesis, management plan). Do NOT append dated status updates here — use add_health_event_update for those.",
+    ),
   resolved_date: dateString.nullable().optional(),
+  next_milestone_date: dateString
+    .nullable()
+    .optional()
+    .describe("Date of the next checkpoint gating progression (e.g. imaging). Null to clear."),
+  next_milestone: z
+    .string()
+    .max(200)
+    .nullable()
+    .optional()
+    .describe("What the checkpoint is, e.g. 'MRI + X-ray — structural clearance gate'."),
 };
 
 export type UpdateHealthEventInput = {
@@ -22,6 +39,8 @@ export type UpdateHealthEventInput = {
   severity?: number | null;
   notes?: string | null;
   resolved_date?: string | null;
+  next_milestone_date?: string | null;
+  next_milestone?: string | null;
 };
 
 const UPDATABLE_KEYS = [
@@ -31,6 +50,8 @@ const UPDATABLE_KEYS = [
   "severity",
   "notes",
   "resolved_date",
+  "next_milestone_date",
+  "next_milestone",
 ] as const;
 
 export async function updateHealthEvent(

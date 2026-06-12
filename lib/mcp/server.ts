@@ -56,6 +56,15 @@ import {
   resolveHealthEventInputSchema,
 } from "./tools/resolve-health-event";
 import { getCalendar, getCalendarInputSchema } from "./tools/get-calendar";
+import {
+  logDerivedDaily,
+  logDerivedDailyInputSchema,
+} from "./tools/log-derived-daily";
+import {
+  addHealthEventUpdate,
+  addHealthEventUpdateInputSchema,
+} from "./tools/add-health-event-update";
+import { getBriefing, getBriefingInputSchema } from "./tools/get-briefing";
 import { listConnectors, listConnectorsInputSchema } from "./tools/list-connectors";
 import { searchEverything, searchEverythingInputSchema } from "./tools/search-everything";
 import {
@@ -108,7 +117,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     {
       title: "Log a workout",
       description:
-        "Insert or upsert a workout. Manual writes (no source_id) always insert; connector writes (with source_id) upsert by (source, source_id) for idempotent re-runs. Then: the evening reflection recipe surfaces this in the day's summary.",
+        "Insert or upsert a workout. Manual writes (no source_id) always insert; connector writes (with source_id) upsert by (source, source_id) for idempotent re-runs. Types are normalized to a canonical vocabulary server-side ('running'→'run', 'road_biking'→'ride'). Pass sensor metrics (running dynamics, TE, stamina) in the nested metrics object — never as numbers dumped into notes.",
       inputSchema: logWorkoutInputSchema,
     },
     async (input) => jsonResult(await logWorkout(ctx.userId, input)),
@@ -141,7 +150,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     {
       title: "Log or update the daily entry",
       description:
-        "Upsert the daily entry for (user, date). All wellness scales follow 5 = best (fatigue/soreness/stress are inverted relative to their natural meaning so 5 is always the good direction). Upsert merge semantics: only the fields you pass are touched; omitted fields keep their existing values. The schema does not accept null to clear — to wipe a field, use delete_daily_entry and re-log. Use the morning check-in recipe for wellness scales; this tool also accepts Garmin/Whoop/Oura-derived vitals.",
+        "Upsert the daily entry for (user, date). All wellness scales follow 5 = best (fatigue/soreness/stress are inverted relative to their natural meaning so 5 is always the good direction). Upsert merge semantics: only the fields you pass are touched; omitted fields keep their existing values. The schema does not accept null to clear — to wipe a field, use delete_daily_entry and re-log. Accepts Garmin/Whoop/Oura-derived vitals including skin_temp_deviation_c and sleep_score; vendor-branded composites (Body Battery, Training Readiness) stay in daily/YYYY-MM-DD.md documents.",
       inputSchema: logDailyInputSchema,
     },
     async (input) => jsonResult(await logDaily(ctx.userId, input)),
@@ -206,7 +215,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     {
       title: "Update a health event by id",
       description:
-        "Patch fields on an existing health event. This is also how you RESOLVE an event — pass resolved_date with the date the issue cleared. Pass resolved_date: null to re-open a previously-resolved event.",
+        "Patch fields on an existing health event. This is also how you RESOLVE an event — pass resolved_date with the date the issue cleared (null to re-open). Set next_milestone / next_milestone_date for the checkpoint gating progression (e.g. 'MRI — structural clearance gate'). For dated status updates use add_health_event_update, NOT notes — notes is the stable summary.",
       inputSchema: updateHealthEventInputSchema,
     },
     async (input) => jsonResult(await updateHealthEvent(ctx.userId, input)),
@@ -221,6 +230,28 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       inputSchema: deleteHealthEventInputSchema,
     },
     async (input) => jsonResult(await deleteHealthEvent(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "log_derived_daily",
+    {
+      title: "Store the agent-computed derived layer for a date",
+      description:
+        "BI never computes these values — this is where YOUR computed derived layer is stored: readiness gate (green/amber/red training ceiling), gate reason, illness composite + per-signal flags, HRV/RHR/sleep z-scores, 7-day sleep debt, acute/chronic load, days to race. FULL-ROW REPLACE per (user, date): omitted fields become NULL — the OPPOSITE of log_daily's merge semantics, so a recompute never leaves stale flags behind. Write it from the daily dawn/briefing recipe after computing baselines; keep the narrative in briefings/YYYY-MM-DD.md.",
+      inputSchema: logDerivedDailyInputSchema,
+    },
+    async (input) => jsonResult(await logDerivedDaily(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "add_health_event_update",
+    {
+      title: "Add a dated thread update to a health event",
+      description:
+        "Append the day's status to a health event's thread (replaces the old pattern of editing 'STATUS <date>: ...' blocks into the event notes — never do that again). Default on_same_date='replace' makes scheduled re-runs idempotent; pass 'append' for a deliberate second note the same day. Passing severity_at_time also updates the event's current severity. The event's notes field stays the stable summary (mechanism, hypothesis, management plan).",
+      inputSchema: addHealthEventUpdateInputSchema,
+    },
+    async (input) => jsonResult(await addHealthEventUpdate(ctx.userId, input)),
   );
 
   server.registerTool(
@@ -380,11 +411,22 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    "get_briefing",
+    {
+      title: "Read the daily briefing document",
+      description:
+        "Read briefings/YYYY-MM-DD.md — the agent-written daily briefing (today's call, recovery snapshot, trends, open threads). Omit date for today's, falling back to the most recent. Convenience over fs_read for orienting an ad-hoc session in one call; pair with get_recent(kinds:['derived']) for the structured gate values.",
+      inputSchema: getBriefingInputSchema,
+    },
+    async (input) => jsonResult(await getBriefing(ctx.userId, input)),
+  );
+
+  server.registerTool(
     "get_recent",
     {
       title: "Get recent rows across entities",
       description:
-        "Bundle workouts / daily entries / meals / health events from the last N days. Unresolved health events older than the window still come back. Use kinds= to subset.",
+        "Bundle workouts / daily entries / meals / health events / derived rows from the last N days. 'derived' is the agent-computed layer (readiness gate, z-scores, sleep debt). Unresolved health events older than the window still come back. Use kinds= to subset.",
       inputSchema: getRecentInputSchema,
     },
     async (input) => jsonResult(await getRecent(ctx.userId, input)),
@@ -511,7 +553,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     {
       title: "Mark a health event resolved",
       description:
-        "Thin alias around update_health_event(id, resolved_date=…). Defaults resolved_date to today if you don't pass one. Use when the intent is specifically 'this is over' so the action is obvious in transcripts.",
+        "Thin alias around update_health_event(id, resolved_date=…). Defaults resolved_date to today if you don't pass one. Optional note records a closing thread entry (what cleared it, lessons) via add_health_event_update. Use when the intent is specifically 'this is over' so the action is obvious in transcripts.",
       inputSchema: resolveHealthEventInputSchema,
     },
     async (input) => jsonResult(await resolveHealthEvent(ctx.userId, input)),

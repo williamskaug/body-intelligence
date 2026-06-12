@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { adminClient } from "@/lib/supabase/admin";
-import { dateString } from "./shared";
+import { dateString, normalizeWorkoutType } from "./shared";
+import {
+  upsertWorkoutMetrics,
+  workoutMetricsSchema,
+  type WorkoutMetricsInput,
+} from "./workout-metrics";
 
 export const updateWorkoutInputSchema = {
   id: z.string().uuid(),
@@ -13,6 +18,11 @@ export const updateWorkoutInputSchema = {
   rpe: z.number().int().min(1).max(10).nullable().optional(),
   shoes: z.string().trim().max(100).nullable().optional(),
   notes: z.string().max(10_000).nullable().optional(),
+  metrics: workoutMetricsSchema
+    .optional()
+    .describe(
+      "Attach or replace sensor metrics for this workout after the fact. Full replace — pass the complete set.",
+    ),
 };
 
 export type UpdateWorkoutInput = {
@@ -26,6 +36,7 @@ export type UpdateWorkoutInput = {
   rpe?: number | null;
   shoes?: string | null;
   notes?: string | null;
+  metrics?: WorkoutMetricsInput;
 };
 
 const UPDATABLE_KEYS = [
@@ -47,6 +58,9 @@ export async function updateWorkout(userId: string, input: UpdateWorkoutInput) {
   for (const key of UPDATABLE_KEYS) {
     if (input[key] !== undefined) partial[key] = input[key];
   }
+  if (typeof partial.type === "string") {
+    partial.type = normalizeWorkoutType(partial.type);
+  }
 
   const { data, error } = await sb
     .from("workouts")
@@ -57,5 +71,10 @@ export async function updateWorkout(userId: string, input: UpdateWorkoutInput) {
     .maybeSingle();
   if (error) throw new Error(`update_workout: ${error.message}`);
   if (!data) throw new Error(`update_workout: workout ${input.id} not found`);
+
+  if (input.metrics) {
+    const metrics = await upsertWorkoutMetrics(sb, userId, data.id, data.date, input.metrics);
+    return { ...data, metrics };
+  }
   return data;
 }

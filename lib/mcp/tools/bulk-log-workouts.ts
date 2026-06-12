@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { adminClient } from "@/lib/supabase/admin";
 import { logWorkoutInputSchema } from "./log-workout";
+import { normalizeWorkoutType } from "./shared";
+import { upsertWorkoutMetrics } from "./workout-metrics";
 
 const MAX_BATCH = 500;
 
@@ -30,7 +32,7 @@ export async function bulkLogWorkouts(userId: string, input: BulkLogWorkoutsInpu
     const payload = {
       user_id: userId,
       date: it.date,
-      type: it.type,
+      type: normalizeWorkoutType(it.type),
       duration_min: it.duration_min ?? null,
       distance_km: it.distance_km ?? null,
       avg_hr: it.avg_hr ?? null,
@@ -61,15 +63,41 @@ export async function bulkLogWorkouts(userId: string, input: BulkLogWorkoutsInpu
           .from("workouts")
           .update(payload)
           .eq("id", existing.data.id);
-        if (upErr) errors.push({ index: i, error: upErr.message });
-        else updated++;
+        if (upErr) {
+          errors.push({ index: i, error: upErr.message });
+          continue;
+        }
+        if (it.metrics) {
+          try {
+            await upsertWorkoutMetrics(sb, userId, existing.data.id, it.date, it.metrics);
+          } catch (e) {
+            errors.push({ index: i, error: e instanceof Error ? e.message : String(e) });
+            continue;
+          }
+        }
+        updated++;
         continue;
       }
     }
 
-    const { error } = await sb.from("workouts").insert(payload);
-    if (error) errors.push({ index: i, error: error.message });
-    else inserted++;
+    const { data: insertedRow, error } = await sb
+      .from("workouts")
+      .insert(payload)
+      .select("id")
+      .single();
+    if (error) {
+      errors.push({ index: i, error: error.message });
+      continue;
+    }
+    if (it.metrics) {
+      try {
+        await upsertWorkoutMetrics(sb, userId, insertedRow.id, it.date, it.metrics);
+      } catch (e) {
+        errors.push({ index: i, error: e instanceof Error ? e.message : String(e) });
+        continue;
+      }
+    }
+    inserted++;
   }
 
   return { inserted, updated, errors };

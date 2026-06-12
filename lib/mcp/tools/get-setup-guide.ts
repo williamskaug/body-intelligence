@@ -20,24 +20,47 @@ decisions to BI — there is no logic on the server side beyond CRUD.
 
 # Data model
 
-- workouts — one row per workout. Free-form type (run / lift / ride / yoga / …).
+- workouts — one row per workout. type uses a CANONICAL vocabulary: run,
+  trail_run, ride, gravel_ride, mtb, golf, strength, walk, hike, swim, row,
+  yoga, mobility, xc_ski, orienteering, padel, other. Aliases normalize
+  server-side ('running'→'run', 'road_biking'→'ride', 'WeightTraining'→
+  'strength'); unknown types pass through lowercased + snake_cased.
   Optional duration_min, distance_km, avg_hr, max_hr, rpe (1–10), shoes, notes.
+- workout_metrics — optional 1:1 sensor metrics per workout, written via the
+  nested metrics object on log_workout / bulk_log_workouts / update_workout:
+  cadence_spm, gct_ms, gct_balance_pct_left, vertical oscillation/ratio,
+  stride_len_m, te_aerobic/anaerobic, vendor_training_load, stamina
+  start/end/min, decoupling_pct, elevation gain/loss, avg/max speed.
+  Full replace per workout. Lap splits + vendor labels stay in daily/*.md.
 - daily_entries — one row per (user, date). Universal vitals (sleep_h, four
-  sleep-stage minutes, hrv_ms, rhr_bpm, spo2_avg_pct, respiration_avg_brpm),
-  body composition (weight_kg, body_fat_pct), movement totals (steps,
-  active_calories, floors_climbed, intensity_min_moderate, intensity_min_vigorous),
-  six 1–5 wellness scales, and three free-text blocks (sleep_notes,
-  wellness_notes, meal_notes). Partial updates allowed — write whatever the
-  source has, leave the rest. Vendor-proprietary scores (Body Battery,
-  Readiness, Recovery) do NOT belong here — they go in daily/YYYY-MM-DD.md.
-- meals — one row per meal. eaten_at (timestamp), meal_type, required description,
-  REQUIRED calories + protein_g + carbs_g + fat_g (estimate from the description if
-  no authoritative source is available — never skip a meal write to avoid
-  estimating). fiber_g optional. Day-level prose lives in daily_entries.meal_notes;
-  dietary philosophy lives in NUTRITION.md.
+  sleep-stage minutes, hrv_ms, rhr_bpm, spo2_avg_pct, respiration_avg_brpm,
+  skin_temp_deviation_c, sleep_score), body composition (weight_kg,
+  body_fat_pct), movement totals (steps, active_calories, floors_climbed,
+  intensity_min_moderate, intensity_min_vigorous), six 1–5 wellness scales,
+  and three free-text blocks (sleep_notes, wellness_notes, meal_notes).
+  Partial updates allowed — write whatever the source has, leave the rest.
+  Vendor-proprietary composites (Body Battery, Readiness, Recovery) do NOT
+  belong here — they go in daily/YYYY-MM-DD.md.
+- derived_daily — one row per (user, date), written ONLY by your scheduled
+  agent via log_derived_daily (BI never computes anything): readiness_gate
+  green/amber/red + gate_reason, illness_composite + per-signal flags
+  (skin_temp/hrv/rhr/resp), hrv_z/rhr_z/sleep_z, sleep_debt_7d_min,
+  sleep_need_min, acute_load_7d, chronic_load_28d, days_to_race.
+  FULL-ROW REPLACE per date (opposite of log_daily's merge). The dashboard
+  renders today's gate from this table — keep it fresh from the daily recipe.
+- meals — one row per meal. Supported but OPTIONAL — only prompt for meals if
+  the user has been logging them; day-level food prose can go in
+  daily_entries.meal_notes if the user volunteers it. When writing a meal,
+  calories + protein_g + carbs_g + fat_g are required (estimate from the
+  description if no authoritative source). Dietary philosophy: NUTRITION.md.
 - health_events — injuries / illnesses / symptoms. kind is one of
   'injury' | 'illness' | 'symptom'. resolved_date null = still active.
-  Use update_health_event with resolved_date to mark an event as past.
+  notes = the stable summary (mechanism, hypothesis, management plan).
+  Dated status updates go through add_health_event_update — a thread of
+  (date, note, severity_at_time) rows — NEVER appended into notes.
+  next_milestone / next_milestone_date hold the checkpoint gating
+  progression (e.g. 'MRI — structural clearance gate', 2026-06-23).
+  Resolve via resolve_health_event (optionally with a closing note).
 - documents — virtual filesystem keyed by (user, path). Markdown content. Eight
   standard paths seeded on signup (see Memory layer below).
 
@@ -47,9 +70,11 @@ decisions to BI — there is no logic on the server side beyond CRUD.
   deep/light/REM/awake sleep minutes, write them to sleep_deep_min /
   sleep_light_min / sleep_rem_min / sleep_awake_min — NOT into sleep_notes
   prose. Same for HRV, RHR, weight, body fat, steps, active calories, every
-  vital. sleep_notes / wellness_notes / meal_notes are for QUALITATIVE
-  commentary only ("woke once at 3am", "knee felt tight the first mile"),
-  not as a dump zone for values that have homes.
+  vital — and same for running dynamics: cadence, GCT balance, training
+  effect, stamina go in the metrics object on log_workout, not in workout
+  notes. sleep_notes / wellness_notes / meal_notes / workout notes are for
+  QUALITATIVE commentary only ("woke once at 3am", "knee felt tight the
+  first mile"), not as a dump zone for values that have homes.
 - Vendor-proprietary scores (Garmin Body Battery, Whoop Recovery, Oura
   Readiness) belong in daily/YYYY-MM-DD.md via fs_write — not in
   sleep_notes, not as new columns. Universal vitals (sleep_h, hrv_ms,
@@ -113,12 +138,13 @@ daily_entries.
 
 # Reasoning rhythm
 
-The user invokes you through scheduled-agent recipes (morning check-in, evening
-reflection, weekly review, race countdown, …) plus ad-hoc conversations.
+The user invokes you through scheduled-agent recipes (dawn agent / morning
+check-in, weekly review, race countdown, …) plus ad-hoc conversations.
 
 At the start of a session, orient yourself by:
-1. fs_read('CURRENT.md') and fs_read('PRINCIPLES.md') — the load-bearing context.
-2. get_recent(days=7) for the structured data.
+1. get_briefing() — today's (or the latest) agent-written briefing, plus
+   get_recent(days=7) including kinds:['derived'] for the structured gate.
+2. fs_read('CURRENT.md') and fs_read('PRINCIPLES.md') — the load-bearing context.
 3. fs_read on the specific memory file the conversation touches (GOALS.md for
    race planning, NUTRITION.md for fueling, HEALTH_LOG.md for injuries).
 

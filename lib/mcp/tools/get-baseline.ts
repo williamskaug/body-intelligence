@@ -7,7 +7,7 @@ export const getBaselineInputSchema = {
   metric: z
     .enum(METRIC_KEYS)
     .describe(
-      "Which metric to baseline. Daily-entry columns use their snake_case names (e.g. 'rhr_bpm', 'hrv_ms', 'sleep_h'). Workout-side metrics are prefixed: 'workout_duration_min', 'workout_rpe', etc.",
+      "Which metric to baseline. Daily-entry columns use their snake_case names (e.g. 'rhr_bpm', 'hrv_ms', 'sleep_h', 'skin_temp_deviation_c', 'sleep_score'). Workout-side metrics are prefixed 'workout_' (incl. sensor metrics like 'workout_cadence_spm', 'workout_gct_balance_pct_left'). Agent-derived columns are prefixed 'derived_' (e.g. 'derived_hrv_z', 'derived_sleep_debt_7d_min').",
     ),
   window_days: z
     .number()

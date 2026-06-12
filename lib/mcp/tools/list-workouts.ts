@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { adminClient } from "@/lib/supabase/admin";
-import { dateString } from "./shared";
+import { dateString, normalizeWorkoutType } from "./shared";
 
 const MAX_PAGE = 200;
 
@@ -45,7 +45,9 @@ export async function listWorkouts(userId: string, input: ListWorkoutsInput) {
     .limit(limit + 1);
 
   if (input.type) {
-    q = q.ilike("type", input.type);
+    // Normalize the filter the same way writes are normalized, so
+    // type='running' matches rows stored canonically as 'run'.
+    q = q.eq("type", normalizeWorkoutType(input.type));
   }
   if (input.cursor) {
     // cursor encodes "date|id" so the next page picks up after the last row.

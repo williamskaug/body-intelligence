@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { adminClient } from "@/lib/supabase/admin";
 
-const KIND_VALUES = ["workouts", "daily", "meals", "health_events"] as const;
+const KIND_VALUES = ["workouts", "daily", "meals", "health_events", "derived"] as const;
 
 export const getRecentInputSchema = {
   days: z.number().int().min(1).max(90),
@@ -9,7 +9,7 @@ export const getRecentInputSchema = {
     .array(z.enum(KIND_VALUES))
     .optional()
     .describe(
-      "Subset of kinds to return. Omit for all four. Example: ['workouts','daily'] returns just those two — useful for a morning briefing that doesn't need meal history. Unresolved health events are ALWAYS returned regardless of the date window when 'health_events' is in kinds.",
+      "Subset of kinds to return. Omit for all five. 'derived' returns agent-computed derived_daily rows (readiness gate, z-scores, sleep debt). Unresolved health events are ALWAYS returned regardless of the date window when 'health_events' is in kinds.",
     ),
 };
 
@@ -32,7 +32,8 @@ export async function getRecent(userId: string, input: GetRecentInput) {
     daily: unknown[];
     meals: unknown[];
     health_events: unknown[];
-  } = { workouts: [], daily: [], meals: [], health_events: [] };
+    derived: unknown[];
+  } = { workouts: [], daily: [], meals: [], health_events: [], derived: [] };
 
   if (wanted.has("workouts")) {
     const { data, error } = await sb
@@ -65,6 +66,17 @@ export async function getRecent(userId: string, input: GetRecentInput) {
       .order("eaten_at", { ascending: false });
     if (error) throw new Error(`get_recent meals: ${error.message}`);
     result.meals = data ?? [];
+  }
+
+  if (wanted.has("derived")) {
+    const { data, error } = await sb
+      .from("derived_daily")
+      .select("*")
+      .eq("user_id", userId)
+      .gte("date", sinceDate)
+      .order("date", { ascending: false });
+    if (error) throw new Error(`get_recent derived: ${error.message}`);
+    result.derived = data ?? [];
   }
 
   if (wanted.has("health_events")) {

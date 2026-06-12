@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { adminClient } from "@/lib/supabase/admin";
+import { getWorkoutMetrics } from "./workout-metrics";
 
 export const getWorkoutInputSchema = {
   id: z.string().uuid(),
@@ -16,5 +17,7 @@ export async function getWorkout(userId: string, input: GetWorkoutInput) {
     .eq("id", input.id)
     .maybeSingle();
   if (error) throw new Error(`get_workout: ${error.message}`);
-  return data;
+  if (!data) return null;
+  const metrics = await getWorkoutMetrics(sb, userId, data.id);
+  return { ...data, metrics };
 }

@@ -15,6 +15,23 @@ export const logDailyInputSchema = {
   respiration_avg_brpm: z.number().min(4).max(40).optional(),
   weight_kg: z.number().min(20).max(400).optional(),
   body_fat_pct: z.number().min(2).max(70).optional(),
+  skin_temp_deviation_c: z
+    .number()
+    .min(-10)
+    .max(10)
+    .optional()
+    .describe(
+      "Overnight skin/wrist temperature deviation from personal baseline, °C. Universal sensor measurement (Garmin/Oura/Whoop/Apple) — a key early-illness signal.",
+    ),
+  sleep_score: z
+    .number()
+    .int()
+    .min(0)
+    .max(100)
+    .optional()
+    .describe(
+      "Vendor 0-100 last-night sleep score. The factor breakdown stays in daily/YYYY-MM-DD.md.",
+    ),
   steps: z.number().int().min(0).max(200_000).optional(),
   active_calories: z.number().int().min(0).max(20_000).optional(),
   floors_climbed: z.number().int().min(0).max(2000).optional(),
@@ -56,6 +73,8 @@ export type LogDailyInput = {
   respiration_avg_brpm?: number;
   weight_kg?: number;
   body_fat_pct?: number;
+  skin_temp_deviation_c?: number;
+  sleep_score?: number;
   steps?: number;
   active_calories?: number;
   floors_climbed?: number;
@@ -90,6 +109,8 @@ export async function logDaily(userId: string, input: LogDailyInput) {
     "respiration_avg_brpm",
     "weight_kg",
     "body_fat_pct",
+    "skin_temp_deviation_c",
+    "sleep_score",
     "steps",
     "active_calories",
     "floors_climbed",

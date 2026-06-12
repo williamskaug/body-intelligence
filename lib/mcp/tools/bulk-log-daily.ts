@@ -27,6 +27,8 @@ const DAILY_FIELDS = [
   "respiration_avg_brpm",
   "weight_kg",
   "body_fat_pct",
+  "skin_temp_deviation_c",
+  "sleep_score",
   "steps",
   "active_calories",
   "floors_climbed",
