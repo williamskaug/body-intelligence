@@ -1,4 +1,9 @@
-export type RecipeCategory = "capture" | "review" | "connector" | "planning";
+export type RecipeCategory =
+  | "autopilot"
+  | "capture"
+  | "review"
+  | "connector"
+  | "planning";
 
 export type Recipe = {
   id: string;
@@ -9,9 +14,77 @@ export type Recipe = {
   prompt: string;
   required_tools: string[];
   required_connectors: string[];
+  /**
+   * Capability tags this recipe provides (e.g. "ingest:garmin",
+   * "checkin:morning"). User-authored recipe docs under recipes/ declare
+   * `covers:` in YAML front-matter; when an installed user recipe's tags
+   * fully cover a catalog recipe's tags, the /agents page badges the
+   * catalog card "Covered by your <recipe>" instead of "not installed".
+   * Deterministic tag intersection — no reasoning on the server.
+   */
+  covers: string[];
 };
 
 export const recipes: Recipe[] = [
+  {
+    id: "dawn-agent",
+    title: "Dawn agent",
+    category: "autopilot",
+    schedule: "0 9 * * *",
+    description:
+      "The flagship daily pass: sync yesterday from your wearable, compute baselines + readiness gate, update injury threads, write today's briefing.",
+    required_tools: [
+      "get_setup_guide",
+      "get_recipe_status",
+      "log_daily",
+      "log_workout",
+      "get_baseline",
+      "log_derived_daily",
+      "list_health_events",
+      "add_health_event_update",
+      "log_health_event",
+      "resolve_health_event",
+      "fs_read",
+      "fs_write",
+      "mark_recipe_run",
+    ],
+    required_connectors: ["garmin"],
+    covers: [
+      "ingest:garmin",
+      "ingest:strava",
+      "checkin:morning",
+      "review:evening",
+      "race:countdown",
+      "briefing:daily",
+      "derived:daily",
+    ],
+    prompt: `Run the daily dawn pass: finalize yesterday, compute the derived layer, update open health threads, and brief today. One idempotent pass — safe to re-run.
+
+Call get_setup_guide once at the start so field conventions are fresh.
+
+**Phase 0 — guard.** get_recipe_status("dawn-agent"). If it already ran today with status ok, stop unless explicitly re-invoked. Set DATE_Y = yesterday, DATE_T = today, in the user's timezone (from Settings profile; fs_read PROFILE.md if unclear).
+
+**Phase 1 — context.** fs_read PROFILE.md (zones, anthropometrics), GOALS.md (races, targets), PRINCIPLES.md (the user's gate thresholds and training rules — these OVERRIDE the defaults below wherever they conflict), CURRENT.md (active block).
+
+**Phase 2 — sync DATE_Y from the wearable connector.**
+- Vitals → log_daily(date=DATE_Y, ...): sleep_h + the four sleep-stage minutes, hrv_ms, rhr_bpm, spo2_avg_pct, respiration_avg_brpm, skin_temp_deviation_c, sleep_score, weight_kg (if a weigh-in exists), steps, active_calories, floors_climbed, intensity minutes. Also log_daily(DATE_T) with this morning's sleep + recovery vitals (movement totals stay null — they self-heal on tomorrow's run).
+- Activities → log_workout per activity with source + source_id (idempotent), canonical type (the server normalizes aliases), and the metrics object for sensor data: cadence_spm, gct_ms, gct_balance_pct_left, vertical oscillation/ratio, stride_len_m, te_aerobic/anaerobic, vendor_training_load, stamina start/end/min, decoupling_pct (compute first-half vs second-half efficiency for sessions ≥ 60 min), elevation, speeds. notes = qualitative commentary ONLY.
+- Vendor-branded composites (Body Battery, Training Readiness + factors, sleep-score breakdown) → daily/DATE_Y.md via fs_write (fs_read first — full-document replace; preserve non-Garmin sections). Lap splits and vendor labels go here too.
+- If a Strava connector is available, pull only activities the wearable never saw (phone-only recordings); skip mirrored duplicates.
+
+**Phase 3 — derived layer.** Compute against the user's own history, not population norms:
+- get_baseline(metric, window_days=30) for hrv_ms, rhr_bpm, sleep_h → z = (today − mean) / stdev.
+- Sleep debt: trailing-7-day sum of max(0, sleep_need − sleep_h×60); use the vendor sleep need if available, else 450 min.
+- Illness composite: RED if ≥2 of {skin_temp_deviation_c ≥ +0.5, rhr_z ≥ +1, hrv_z ≤ −1, respiration elevated}; AMBER if exactly 1; GREEN otherwise.
+- Readiness gate (the user's PRINCIPLES.md rules win; defaults): GREEN composite + hrv_z ≥ −0.5 + sleep debt < 180 + no acute thread → quality allowed. AMBER, or hrv_z in [−1, −0.5), or sleep debt 180–300 → easy/Z2 only. RED, or hrv_z < −1, or active acute thread, or sleep debt > 300 → rest.
+- Write it: log_derived_daily(date=DATE_T, readiness_gate, gate_reason, illness_composite, the four signal flags, hrv_z, rhr_z, sleep_z, sleep_debt_7d_min, sleep_need_min, acute_load_7d, chronic_load_28d, days_to_race if GOALS.md has a race, computed_by="dawn-agent"). Full-row replace — pass everything you computed each run. Optionally refresh BASELINES.md as the narrative substrate.
+
+**Phase 4 — health threads.** list_health_events(active_only=true). For each: check today's signals, then add_health_event_update(event_id, date=DATE_T, note, severity_at_time) — never append status text into the event's notes. Update next_milestone/next_milestone_date via update_health_event when a checkpoint is set or moves. resolve_health_event(id, note) when the resolution gate is met. Open a NEW event when the illness composite trips RED or a session's metrics flag tissue risk (e.g. GCT asymmetry > 5% after a hard run on an injured side).
+
+**Phase 5 — briefing.** Write briefings/DATE_T.md: (1) today's call + the one-line gating reason, (2) recovery snapshot (sleep, HRV z, RHR z, composite, sleep debt), (3) yesterday in one line, (4) trends worth watching, (5) open threads + next milestone, (6) a confidence note on any wearable-estimated signal. Keep it scannable. Send the user the top section as a short message.
+
+**Phase 6 — close.** mark_recipe_run(recipe_id="dawn-agent", status="ok") — or "failed" with a short error.`,
+  },
   {
     id: "onboarding",
     title: "Onboarding",
@@ -21,6 +94,7 @@ export const recipes: Recipe[] = [
       "Walks first-time users through filling in PROFILE.md, GOALS.md, and PRINCIPLES.md.",
     required_tools: ["fs_read", "fs_write", "mark_recipe_run"],
     required_connectors: [],
+    covers: ["onboarding"],
     prompt: `Walk the user through Body Intelligence onboarding.
 
 Read PROFILE.md, GOALS.md, and PRINCIPLES.md via fs_read. Each will contain template content with embedded fill-in prompts inside HTML comments (<!-- ... -->).
@@ -33,7 +107,7 @@ Greet the user warmly. Briefly explain the three files you'll fill out together 
 
 **PRINCIPLES.md** — this one is harder. Ask: "What's one rule you train by? Something specific enough that a coach who doesn't know you could follow it." Iterate until you have 3-5 principles across training, recovery, planning, and red flags. The defaults in the template are good starting points if they're stuck — read them aloud and ask if any feel right. fs_write.
 
-After all three, briefly summarize what you learned about them and end with: "You can always update these — just tell me what changed, or open them directly. Want to install the morning check-in recipe next?"
+After all three, briefly summarize what you learned about them and end with: "You can always update these — just tell me what changed, or open them directly. Want to install the dawn agent next? It's the daily pass that syncs your wearable, computes your readiness gate, and writes a morning briefing. (No wearable? The morning check-in and evening reflection recipes are the manual path.)"
 
 This recipe is meant to be run once; the schedule is a placeholder. The /agents UI surfaces a "Run onboarding" button that triggers it via Cowork.`,
   },
@@ -43,9 +117,10 @@ This recipe is meant to be run once; the schedule is a placeholder. The /agents 
     category: "capture",
     schedule: "0 7 * * *",
     description:
-      "Asks for last night's sleep and today's wellness scales. Logs them via log_daily.",
+      "Asks for last night's sleep and today's wellness scales. Logs them via log_daily. The manual path — the dawn agent covers this for wearable users.",
     required_tools: ["log_daily", "fs_read", "mark_recipe_run"],
     required_connectors: [],
+    covers: ["checkin:morning"],
     prompt: `It's morning. Ask the user a brief check-in to log their daily entry.
 
 Read PROFILE.md (via fs_read) once at the start so you know the user's name and any logging preferences.
@@ -69,16 +144,15 @@ After everything else, call mark_recipe_run(recipe_id="morning-checkin", status=
     title: "Evening reflection",
     category: "capture",
     schedule: "0 21 * * *",
-    description: "Prompts for any unlogged workouts and meals from the day.",
-    required_tools: ["log_workout", "log_daily", "get_recent", "mark_recipe_run"],
+    description: "Prompts for any unlogged workouts from the day.",
+    required_tools: ["log_workout", "get_recent", "mark_recipe_run"],
     required_connectors: [],
+    covers: ["review:evening"],
     prompt: `It's evening. Help the user catch up on anything they didn't log during the day.
 
 Call get_recent({days: 1, kinds: ["workouts", "daily"]}) to see what's already logged for today.
 
 If no workout is logged but the user usually trains on this weekday (you can infer from the last 14 days), ask whether they trained today. If yes, prompt for: type, duration, distance, RPE. Call log_workout.
-
-If today's daily_entry has no meal_notes, ask for a one-line summary of what they ate. Call log_daily with just meal_notes.
 
 Don't be pushy. If they say they didn't train or want to skip, drop it.
 
@@ -93,20 +167,21 @@ After everything else, call mark_recipe_run(recipe_id="evening-reflection", stat
     schedule: "0 18 * * 0",
     description:
       "Summarizes the week's training load and trends. Updates CURRENT.md with the takeaways.",
-    required_tools: ["get_recent", "fs_read", "fs_write", "mark_recipe_run"],
+    required_tools: ["get_recent", "get_stats", "fs_read", "fs_write", "mark_recipe_run"],
     required_connectors: [],
+    covers: ["review:weekly"],
     prompt: `Run a weekly training review.
 
-1. Call get_recent({days: 7}) to pull this week's workouts, daily entries, and active health events.
-2. Call get_recent({days: 28}) to pull the broader 4-week context for trends.
+1. Call get_recent({days: 7}) to pull this week's workouts, daily entries, active health events, and derived rows (the agent-computed gate / z-scores / sleep debt — included by default).
+2. Call get_recent({days: 28}) to pull the broader 4-week context for trends. For specific aggregates use get_stats (e.g. metric='derived_sleep_debt_7d_min' or 'workout_vendor_training_load').
 3. fs_read PRINCIPLES.md, GOALS.md, and CURRENT.md.
-4. fs_list({ prefix: "daily/" }) to find this week's per-day vendor context files. fs_read each one written within the last 7 days for vendor-specific scores (Garmin training readiness, Whoop recovery, etc.) that don't live in the structured tables.
+4. Only if derived rows are missing for the week, fall back to fs_list({ prefix: "daily/" }) + fs_read for vendor-side signals.
 
 Write a brief review covering:
-- Training load this week (workout count, total duration, perceived intensity from RPE)
+- Training load this week (workout count, total duration, vendor training load or RPE-weighted minutes)
 - How the week compares to the 4-week trend (heavier, lighter, same)
-- Recovery indicators: average HRV, RHR, sleep, fatigue scale trend, plus any vendor-side signals (e.g. Garmin readiness or training-status flags) from the daily/ files
-- Active health flags from health_events
+- Recovery indicators: gate history for the week (how many green/amber/red days), average HRV, RHR, sleep, sleep-debt direction
+- Active health flags from health_events, with each thread's latest update and next milestone
 - One sentence on whether the week tracked toward GOALS.md
 
 Then update CURRENT.md by replacing its "This week" section with the new review and pushing the old one to a "Previous weeks" section if there's space (keep CURRENT.md under 200 lines — archive older content out).
@@ -124,6 +199,7 @@ After saving, call mark_recipe_run(recipe_id="weekly-review", status="ok").`,
       "Active during the 14 days before any race in GOALS.md. Daily focus message.",
     required_tools: ["fs_read", "get_recent", "mark_recipe_run"],
     required_connectors: [],
+    covers: ["race:countdown"],
     prompt: `Check whether the user is within 14 days of a race.
 
 1. fs_read GOALS.md and look for race dates. **Sanity guard:** if the only race in GOALS.md is dated more than 5 years from today, treat the file as un-edited (the user kept the example placeholder) and exit silently. If no race is within 14 days, also exit silently.
@@ -145,9 +221,10 @@ After sending, call mark_recipe_run(recipe_id="race-countdown", status="ok"). If
     category: "connector",
     schedule: "0 7 * * *",
     description:
-      "Daily ingest of Garmin sleep, vitals, and movement into BI's structured tables; vendor scores go into daily/YYYY-MM-DD.md.",
+      "Daily ingest of Garmin sleep, vitals, and movement into BI's structured tables; vendor scores go into daily/YYYY-MM-DD.md. Sync only — the dawn agent does this plus the derived layer and briefing.",
     required_tools: ["log_daily", "log_workout", "fs_write", "fs_read", "mark_recipe_run"],
     required_connectors: ["garmin"],
+    covers: ["ingest:garmin"],
     prompt: `Sync yesterday's Garmin Connect data into Body Intelligence.
 
 Call get_setup_guide once at the start so the field conventions are fresh — especially the rule that structured fields NEVER go into sleep_notes / wellness_notes prose.
@@ -166,6 +243,7 @@ Call get_setup_guide once at the start so the field conventions are fresh — es
 **2. Write the structured row.** Call log_daily(date=DATE, ...) with EVERY universal vital that has a value:
 - sleep_h, sleep_deep_min, sleep_light_min, sleep_rem_min, sleep_awake_min
 - hrv_ms, rhr_bpm, spo2_avg_pct, respiration_avg_brpm
+- skin_temp_deviation_c, sleep_score
 - weight_kg (only if a weigh-in exists)
 - steps, active_calories, floors_climbed, intensity_min_moderate, intensity_min_vigorous
 
@@ -195,7 +273,11 @@ Do NOT put sleep stages into sleep_notes. Do NOT put HRV/RHR into prose. Each of
 
 Then fs_write that path. If a prior sync exists for the same date, overwrite the Garmin section but keep other vendor sections.
 
-**4. Workouts.** For each activity Garmin reports for DATE, call log_workout(date=DATE, type=<lowercased activity type>, duration_min, distance_km if applicable, avg_hr, max_hr, source='garmin', source_id=<Garmin activity id>). The source_id makes the write idempotent — re-runs upsert.
+**4. Workouts.** For each activity Garmin reports for DATE, call log_workout(date=DATE, type=<activity type — the server normalizes to the canonical vocabulary>, duration_min, distance_km if applicable, avg_hr, max_hr, source='garmin', source_id=<Garmin activity id>). The source_id makes the write idempotent — re-runs upsert.
+
+Pass sensor data in the metrics object, NOT in notes: cadence_spm, gct_ms, gct_balance_pct_left, vertical_oscillation_mm, vertical_ratio_pct, stride_len_m, te_aerobic, te_anaerobic, vendor_training_load, stamina_start/end/min_pct, elevation_gain_m/loss_m, avg/max_speed_kmh. notes carries qualitative commentary only. Lap splits and vendor TE labels go in daily/DATE.md.
+
+Garmin golf rounds do NOT appear in the activities list — query list_golf_rounds separately and log each round as type='golf' with source_id=<scorecard id>; the scorecard table goes in daily/DATE.md.
 
 **5. Confirm.** Send the user one short line summarising what was synced. No editorialising on the numbers — that's the morning check-in's job.
 
@@ -207,9 +289,10 @@ Then fs_write that path. If a prior sync exists for the same date, overwrite the
     category: "connector",
     schedule: "30 7 * * *",
     description:
-      "Daily ingest of Strava activities as workouts. Idempotent via source_id.",
+      "Daily ingest of Strava activities as workouts. Idempotent via source_id. Fallback for activities your primary wearable never saw.",
     required_tools: ["log_workout", "mark_recipe_run"],
     required_connectors: ["strava"],
+    covers: ["ingest:strava"],
     prompt: `Sync yesterday's Strava activities into Body Intelligence.
 
 Call get_setup_guide once at the start.
@@ -220,14 +303,7 @@ Call get_setup_guide once at the start.
 
 **2. For each activity, call log_workout** with:
 - date = DATE
-- type = Strava activity type, lowercased, normalised to BI vocabulary:
-  - 'Run' → 'run'
-  - 'TrailRun' → 'trail_run'
-  - 'Ride' / 'VirtualRide' → 'ride'
-  - 'Swim' → 'swim'
-  - 'Walk' / 'Hike' → 'walk' or 'hike'
-  - 'WeightTraining' → 'lift'
-  - others: lowercase and snake_case
+- type = Strava activity type ('Run' → 'run', 'TrailRun' → 'trail_run', 'Ride'/'VirtualRide' → 'ride', 'WeightTraining' → 'strength', 'Walk'/'Hike' → 'walk'/'hike'). The server normalizes aliases to the canonical vocabulary anyway, so pass what Strava gives you.
 - duration_min = elapsed_time / 60 (rounded)
 - distance_km = distance_meters / 1000 (only if > 0)
 - avg_hr, max_hr (if recorded)
@@ -250,18 +326,19 @@ Call get_setup_guide once at the start.
     schedule: "0 17 * * 1/14",
     description:
       "Reviews active health events and asks if any should be marked resolved.",
-    required_tools: ["get_recent", "fs_read", "fs_write", "mark_recipe_run"],
+    required_tools: ["get_recent", "resolve_health_event", "fs_read", "fs_write", "mark_recipe_run"],
     required_connectors: [],
+    covers: ["health:audit"],
     prompt: `Audit the user's active health events.
 
 1. Call get_recent({days: 60, kinds: ["health_events"]}) — this returns unresolved events older than the window too.
 2. fs_read HEALTH_LOG.md.
 
 For each unresolved event:
-- Note its date logged and most recent reference
+- Note its date logged, latest thread update, and next milestone if set
 - Ask the user briefly: "Still tracking the L-knee twinge from 3 weeks ago? Resolved, ongoing, or worse?"
 
-Based on their replies, update HEALTH_LOG.md with resolution notes (date, what helped, lessons learned). Use fs_write.
+Based on their replies: resolve_health_event(id, note=<what cleared it / lessons>) for finished events, add_health_event_update for status changes, and update HEALTH_LOG.md with the narrative block (mechanism, treatment, resolution, lessons). Use fs_write.
 
 If there are no active events, send a one-liner ("Health log clear, nothing to audit") and exit.
 

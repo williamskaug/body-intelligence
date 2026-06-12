@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { recipes, type Recipe, type RecipeCategory } from "@/lib/agents/recipe-data";
+import { parseRecipeDoc, type UserRecipeDoc } from "@/lib/agents/recipe-doc";
 import { adminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { InstallRecipeButton } from "./install-button";
 import { RecipeInstalledControls } from "./installed-controls";
 
 const categoryLabels: Record<RecipeCategory, string> = {
+  autopilot: "Autopilot",
   capture: "Capture",
   review: "Review",
   planning: "Planning",
@@ -14,6 +16,7 @@ const categoryLabels: Record<RecipeCategory, string> = {
 };
 
 const categoryAccent: Record<RecipeCategory, string> = {
+  autopilot: "bg-rose-500/70",
   capture: "bg-emerald-500/70",
   review: "bg-sky-500/70",
   planning: "bg-violet-500/70",
@@ -21,6 +24,8 @@ const categoryAccent: Record<RecipeCategory, string> = {
 };
 
 const categoryBadge: Record<RecipeCategory, string> = {
+  autopilot:
+    "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300",
   capture:
     "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
   review:
@@ -34,6 +39,13 @@ const categoryBadge: Record<RecipeCategory, string> = {
 function CategoryIcon({ category }: { category: RecipeCategory }) {
   const common = "h-3 w-3";
   switch (category) {
+    case "autopilot":
+      return (
+        <svg viewBox="0 0 16 16" className={common} fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden>
+          <path d="M8 2v3M8 11v3M2 8h3M11 8h3" strokeLinecap="round" />
+          <circle cx="8" cy="8" r="2.25" />
+        </svg>
+      );
     case "capture":
       return (
         <svg viewBox="0 0 16 16" className={common} fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden>
@@ -72,6 +84,12 @@ type InstallState = {
   last_error: string | null;
 };
 
+type UserAgent = {
+  slug: string;
+  doc: UserRecipeDoc | null;
+  state: InstallState | undefined;
+};
+
 export default async function AgentsPage({
   searchParams,
 }: {
@@ -79,7 +97,40 @@ export default async function AgentsPage({
 }) {
   const { category: raw } = await searchParams;
   const filter = isCategory(raw) ? raw : null;
-  const installState = await loadInstallState();
+  const [installState, userDocs] = await Promise.all([
+    loadInstallState(),
+    loadUserRecipeDocs(),
+  ]);
+
+  // "Your agents": user-authored recipe docs under recipes/, merged with
+  // run state, plus any tracked non-catalog recipe ids without a doc.
+  const catalogIds = new Set(recipes.map((r) => r.id));
+  const userAgents: UserAgent[] = userDocs.map((doc) => ({
+    slug: doc.slug,
+    doc,
+    state: installState.get(doc.slug),
+  }));
+  for (const [recipeId, state] of installState) {
+    if (catalogIds.has(recipeId)) continue;
+    if (userAgents.some((a) => a.slug === recipeId)) continue;
+    userAgents.push({ slug: recipeId, doc: null, state });
+  }
+  userAgents.sort((a, b) => (b.state?.run_count ?? 0) - (a.state?.run_count ?? 0));
+
+  // Supersession: a catalog recipe is "covered" when an actively-running
+  // user recipe's covers tags include all of the catalog recipe's tags.
+  // Pure tag intersection — declared by the user in front-matter.
+  const coveredBy = (recipe: Recipe): string | null => {
+    if (recipe.covers.length === 0) return null;
+    for (const agent of userAgents) {
+      if (!agent.doc || !agent.state) continue;
+      const tags = new Set(agent.doc.covers);
+      if (tags.size > 0 && recipe.covers.every((t) => tags.has(t))) {
+        return agent.doc.title;
+      }
+    }
+    return null;
+  };
 
   const filtered = filter ? recipes.filter((r) => r.category === filter) : recipes;
   const categoryCounts = recipes.reduce<Record<RecipeCategory, number>>(
@@ -87,13 +138,13 @@ export default async function AgentsPage({
       acc[r.category] = (acc[r.category] ?? 0) + 1;
       return acc;
     },
-    { capture: 0, review: 0, planning: 0, connector: 0 },
+    { autopilot: 0, capture: 0, review: 0, planning: 0, connector: 0 },
   );
 
   return (
     <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6 sm:py-12">
       <header className="max-w-2xl">
-        <h1 className="text-3xl font-semibold tracking-tight">Recipe library</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Agents</h1>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
           Each recipe is a prompt plus a schedule. Open one, copy the prompt and
           cron, then paste them into Cowork&apos;s new-scheduled-task dialog.
@@ -102,41 +153,159 @@ export default async function AgentsPage({
         </p>
       </header>
 
-      <nav
-        aria-label="Filter by category"
-        className="mt-8 flex flex-wrap items-center gap-1.5 text-sm"
-      >
-        <FilterChip href="/agents" label="All" count={recipes.length} active={!filter} />
-        {(["capture", "review", "planning", "connector"] as const)
-          .filter((c) => categoryCounts[c] > 0)
-          .map((c) => (
-            <FilterChip
-              key={c}
-              href={`/agents?category=${c}`}
-              label={categoryLabels[c]}
-              count={categoryCounts[c]}
-              active={filter === c}
-            />
-          ))}
-      </nav>
+      {userAgents.length > 0 ? (
+        <section className="mt-8">
+          <h2 className="text-lg font-semibold tracking-tight">Your agents</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Recipes you authored (stored under <code className="font-mono">recipes/</code> in
+            your memory files) and scheduled agents reporting in via{" "}
+            <code className="font-mono">mark_recipe_run</code>.
+          </p>
+          <ul className="mt-4 grid gap-4 md:grid-cols-2">
+            {userAgents.map((agent) => (
+              <UserAgentCard key={agent.slug} agent={agent} />
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
-      {filtered.length === 0 ? (
-        <p className="mt-10 rounded-2xl border border-dashed bg-muted/20 p-6 text-center text-sm text-muted-foreground">
-          No recipes in this category yet.
-        </p>
-      ) : (
-        <ul className="mt-6 grid gap-4 md:grid-cols-2">
-          {filtered.map((recipe) => (
-            <RecipeCard
-              key={recipe.id}
-              recipe={recipe}
-              state={installState.get(recipe.id)}
-            />
-          ))}
-        </ul>
-      )}
+      <section className="mt-10">
+        <h2 className="text-lg font-semibold tracking-tight">Recipe library</h2>
+
+        <nav
+          aria-label="Filter by category"
+          className="mt-4 flex flex-wrap items-center gap-1.5 text-sm"
+        >
+          <FilterChip href="/agents" label="All" count={recipes.length} active={!filter} />
+          {(["autopilot", "capture", "review", "planning", "connector"] as const)
+            .filter((c) => categoryCounts[c] > 0)
+            .map((c) => (
+              <FilterChip
+                key={c}
+                href={`/agents?category=${c}`}
+                label={categoryLabels[c]}
+                count={categoryCounts[c]}
+                active={filter === c}
+              />
+            ))}
+        </nav>
+
+        {filtered.length === 0 ? (
+          <p className="mt-10 rounded-2xl border border-dashed bg-muted/20 p-6 text-center text-sm text-muted-foreground">
+            No recipes in this category yet.
+          </p>
+        ) : (
+          <ul className="mt-6 grid gap-4 md:grid-cols-2">
+            {filtered.map((recipe) => (
+              <RecipeCard
+                key={recipe.id}
+                recipe={recipe}
+                state={installState.get(recipe.id)}
+                coveredByTitle={coveredBy(recipe)}
+                customizedDoc={
+                  userAgents.find((a) => a.slug === recipe.id)?.doc ?? null
+                }
+              />
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
+}
+
+function UserAgentCard({ agent }: { agent: UserAgent }) {
+  const { doc, state } = agent;
+  const title = doc?.title ?? agent.slug;
+  const failed = state?.last_run_status === "failed";
+  const scheduleLabel = doc?.schedule
+    ? humanizeCron(doc.schedule) ?? doc.schedule
+    : null;
+  return (
+    <li className="group relative flex overflow-hidden rounded-2xl border bg-card shadow-sm transition-all hover:shadow-md hover:border-foreground/20">
+      <span aria-hidden className="w-1 shrink-0 bg-rose-500/70" />
+      <div className="flex min-w-0 flex-1 flex-col p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-baseline gap-2">
+              <h3 className="text-base font-semibold tracking-tight">{title}</h3>
+              {failed ? (
+                <span className="rounded-md border border-rose-500/40 bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-medium text-rose-700 dark:text-rose-300">
+                  last run failed
+                </span>
+              ) : state ? (
+                <span className="rounded-md border border-emerald-500/40 bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
+                  active
+                </span>
+              ) : null}
+            </div>
+            {scheduleLabel ? (
+              <p className="mt-1 text-xs text-muted-foreground">{scheduleLabel}</p>
+            ) : null}
+          </div>
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-rose-500/30 bg-rose-500/10 px-2 py-0.5 text-[10px] font-medium text-rose-700 dark:text-rose-300">
+            Yours
+          </span>
+        </div>
+        {doc?.description ? (
+          <p className="mt-3 text-sm text-muted-foreground">{doc.description}</p>
+        ) : null}
+        {state ? (
+          <div className="mt-3 rounded-md border bg-muted/20 px-2.5 py-1.5 text-[11px] text-muted-foreground">
+            <span className="font-medium text-foreground">
+              {state.run_count} run{state.run_count === 1 ? "" : "s"}
+            </span>
+            {state.last_run_at ? (
+              <> · last {timeAgo(state.last_run_at)} ({state.last_run_status ?? "?"})</>
+            ) : (
+              <> · awaiting first run</>
+            )}
+            {state.last_error ? (
+              <span className="mt-1 block text-rose-700 dark:text-rose-400">
+                Error: {state.last_error}
+              </span>
+            ) : null}
+          </div>
+        ) : (
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            No tracked runs — invoked by another agent, or not scheduled yet.
+          </p>
+        )}
+        {doc ? (
+          <div className="mt-auto pt-4">
+            <Link
+              href={`/data/docs/${doc.path}`}
+              className="text-xs font-medium text-foreground underline-offset-4 hover:underline"
+            >
+              View recipe →
+            </Link>
+          </div>
+        ) : null}
+      </div>
+    </li>
+  );
+}
+
+async function loadUserRecipeDocs(): Promise<UserRecipeDoc[]> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+  const sb = adminClient();
+  const { data, error } = await sb
+    .from("documents")
+    .select("path, content")
+    .eq("user_id", user.id)
+    .like("path", "recipes/%")
+    .order("path");
+  if (error) return [];
+  const out: UserRecipeDoc[] = [];
+  for (const row of (data ?? []) as Array<{ path: string; content: string }>) {
+    const doc = parseRecipeDoc(row.path, row.content);
+    if (doc) out.push(doc);
+  }
+  return out;
 }
 
 async function loadInstallState(): Promise<Map<string, InstallState>> {
@@ -192,9 +361,13 @@ function FilterChip({
 function RecipeCard({
   recipe,
   state,
+  coveredByTitle,
+  customizedDoc,
 }: {
   recipe: Recipe;
   state: InstallState | undefined;
+  coveredByTitle: string | null;
+  customizedDoc: UserRecipeDoc | null;
 }) {
   const scheduleLabel =
     recipe.id === "onboarding"
@@ -214,7 +387,11 @@ function RecipeCard({
           <div className="min-w-0">
             <div className="flex items-baseline gap-2">
               <h2 className="text-base font-semibold tracking-tight">{recipe.title}</h2>
-              <InstallStatePill installed={installed} failed={failed} />
+              <InstallStatePill
+                installed={installed}
+                failed={failed}
+                coveredByTitle={coveredByTitle}
+              />
             </div>
             <p className="mt-1 text-xs text-muted-foreground">{scheduleLabel}</p>
           </div>
@@ -226,6 +403,18 @@ function RecipeCard({
           </span>
         </div>
         <p className="mt-3 text-sm text-muted-foreground">{recipe.description}</p>
+
+        {customizedDoc && state != null ? (
+          <p className="mt-3 rounded-md border border-rose-500/30 bg-rose-500/10 px-2.5 py-1.5 text-[11px] text-rose-900 dark:text-rose-200">
+            You run a customized version —{" "}
+            <Link
+              href={`/data/docs/${customizedDoc.path}`}
+              className="font-medium underline-offset-2 hover:underline"
+            >
+              view your recipe
+            </Link>
+          </p>
+        ) : null}
 
         <div className="mt-4 flex flex-wrap gap-1.5 text-xs">
           {recipe.required_tools.map((tool) => (
@@ -271,11 +460,20 @@ function RecipeCard({
 function InstallStatePill({
   installed,
   failed,
+  coveredByTitle,
 }: {
   installed: boolean;
   failed: boolean;
+  coveredByTitle: string | null;
 }) {
   if (!installed) {
+    if (coveredByTitle) {
+      return (
+        <span className="rounded-md border border-sky-500/40 bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-medium text-sky-700 dark:text-sky-300">
+          covered by your {coveredByTitle}
+        </span>
+      );
+    }
     return (
       <span className="rounded-md border border-foreground/20 bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
         not installed
@@ -310,7 +508,13 @@ function timeAgo(iso: string): string {
 }
 
 function isCategory(v: string | undefined): v is RecipeCategory {
-  return v === "capture" || v === "review" || v === "planning" || v === "connector";
+  return (
+    v === "autopilot" ||
+    v === "capture" ||
+    v === "review" ||
+    v === "planning" ||
+    v === "connector"
+  );
 }
 
 // Lightweight pretty-printer for the cron strings we actually ship.
