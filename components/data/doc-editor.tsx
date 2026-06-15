@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { saveMemoryDoc } from "@/app/(app)/data/actions";
+import { Markdown } from "@/components/data/markdown";
 
 type Props = {
   path: string;
@@ -10,6 +11,7 @@ type Props = {
 
 export function DocEditor({ path, content }: Props) {
   const [editing, setEditing] = useState(false);
+  const [raw, setRaw] = useState(false);
   const [draft, setDraft] = useState(content);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -18,6 +20,21 @@ export function DocEditor({ path, content }: Props) {
     return (
       <div className="border-t bg-muted/20">
         <div className="flex items-center justify-end gap-2 border-b border-dashed px-4 py-2 text-[10px] text-muted-foreground">
+          <button
+            type="button"
+            aria-pressed={raw}
+            onClick={(e) => {
+              e.preventDefault();
+              setRaw((r) => !r);
+            }}
+            className={`rounded-md border px-2 py-0.5 font-medium ${
+              raw
+                ? "border-foreground bg-foreground text-background"
+                : "bg-background text-foreground/80 hover:text-foreground"
+            }`}
+          >
+            Raw
+          </button>
           <button
             type="button"
             onClick={(e) => {
@@ -31,9 +48,15 @@ export function DocEditor({ path, content }: Props) {
             Edit
           </button>
         </div>
-        <pre className="max-h-96 overflow-y-auto whitespace-pre-wrap rounded-b-xl px-4 py-3 font-mono text-xs leading-relaxed">
-          {content}
-        </pre>
+        {raw ? (
+          <pre className="max-h-96 overflow-y-auto whitespace-pre-wrap rounded-b-xl px-4 py-3 font-mono text-xs leading-relaxed">
+            {content}
+          </pre>
+        ) : (
+          <div className="max-h-96 overflow-y-auto rounded-b-xl px-4 py-3">
+            <Markdown>{content}</Markdown>
+          </div>
+        )}
       </div>
     );
   }

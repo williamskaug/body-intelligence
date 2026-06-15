@@ -1,5 +1,10 @@
 import { computeBaseline, classify } from "@/lib/data-display/baseline";
-import { chartColorForType } from "@/lib/data-display/workout-types";
+import { type Gate, GATE_FILL_CLASS } from "@/lib/data-display/derived";
+import {
+  chartColorForType,
+  normalizeType,
+  shortLabelForType,
+} from "@/lib/data-display/workout-types";
 
 export type CalendarWorkout = {
   id: string;
@@ -23,11 +28,6 @@ export type CalendarDaily = {
   sleep_quality: number | null;
 };
 
-export type CalendarMeal = {
-  id: string;
-  eaten_at: string;
-};
-
 export type CalendarEvent = {
   id: string;
   date: string;
@@ -39,8 +39,9 @@ export type CalendarEvent = {
 type Props = {
   workouts: ReadonlyArray<CalendarWorkout>;
   daily: ReadonlyArray<CalendarDaily>;
-  meals: ReadonlyArray<CalendarMeal>;
   events: ReadonlyArray<CalendarEvent>;
+  /** Agent-computed readiness gate per date — renders a corner dot when present. */
+  derivedGateByDate?: Record<string, Gate>;
   startDate: string;
   endDate: string;
 };
@@ -48,8 +49,8 @@ type Props = {
 export function Calendar({
   workouts,
   daily,
-  meals,
   events,
+  derivedGateByDate,
   startDate,
   endDate,
 }: Props) {
@@ -65,12 +66,12 @@ export function Calendar({
   const wellnessBaseline = computeBaseline(daily.map((d) => wellnessComposite(d)));
   const workoutsByDate = groupBy(workouts, (w) => w.date);
   const dailyByDate = new Map(daily.map((d) => [d.date, d] as const));
-  const mealsByDate = groupBy(meals, (m) => m.eaten_at.slice(0, 10));
   const eventsByDate = groupBy(events, (e) => e.date);
+  const gateByDate = derivedGateByDate ?? {};
 
   const todayIso = new Date().toISOString().slice(0, 10);
   const anyData =
-    workouts.length > 0 || daily.length > 0 || meals.length > 0 || events.length > 0;
+    workouts.length > 0 || daily.length > 0 || events.length > 0;
 
   return (
     <div className="flex flex-col gap-8">
@@ -90,8 +91,8 @@ export function Calendar({
           todayIso={todayIso}
           workoutsByDate={workoutsByDate}
           dailyByDate={dailyByDate}
-          mealsByDate={mealsByDate}
           eventsByDate={eventsByDate}
+          gateByDate={gateByDate}
           wellnessBaseline={wellnessBaseline}
         />
       ))}
@@ -108,8 +109,8 @@ function MonthGrid({
   todayIso,
   workoutsByDate,
   dailyByDate,
-  mealsByDate,
   eventsByDate,
+  gateByDate,
   wellnessBaseline,
 }: {
   year: number;
@@ -119,8 +120,8 @@ function MonthGrid({
   todayIso: string;
   workoutsByDate: Map<string, CalendarWorkout[]>;
   dailyByDate: Map<string, CalendarDaily>;
-  mealsByDate: Map<string, CalendarMeal[]>;
   eventsByDate: Map<string, CalendarEvent[]>;
+  gateByDate: Record<string, Gate>;
   wellnessBaseline: ReturnType<typeof computeBaseline>;
 }) {
   const monthLabel = new Date(Date.UTC(year, month, 1)).toLocaleDateString(
@@ -180,8 +181,8 @@ function MonthGrid({
             isToday={cell.iso === todayIso}
             workouts={workoutsByDate.get(cell.iso) ?? []}
             daily={dailyByDate.get(cell.iso)}
-            meals={mealsByDate.get(cell.iso) ?? []}
             events={eventsByDate.get(cell.iso) ?? []}
+            gate={gateByDate[cell.iso]}
             wellnessBaseline={wellnessBaseline}
           />
         ))}
@@ -197,8 +198,8 @@ function DayCell({
   isToday,
   workouts,
   daily,
-  meals,
   events,
+  gate,
   wellnessBaseline,
 }: {
   iso: string;
@@ -207,8 +208,8 @@ function DayCell({
   isToday: boolean;
   workouts: CalendarWorkout[];
   daily: CalendarDaily | undefined;
-  meals: CalendarMeal[];
   events: CalendarEvent[];
+  gate: Gate | undefined;
   wellnessBaseline: ReturnType<typeof computeBaseline>;
 }) {
   const dayNum = Number(iso.slice(8, 10));
@@ -244,12 +245,12 @@ function DayCell({
       titleLines.push([w.type, min, rpe].filter(Boolean).join(" · "));
     }
   }
-  if (meals.length > 0) titleLines.push(`${meals.length} meal${meals.length === 1 ? "" : "s"}`);
   if (events.length > 0) {
     for (const e of events) {
       titleLines.push(`${e.kind}${e.body_part ? ` · ${e.body_part}` : ""}${e.resolved_date ? "" : " (active)"}`);
     }
   }
+  if (gate) titleLines.push(`Readiness gate: ${gate}`);
 
   return (
     <div
@@ -258,6 +259,13 @@ function DayCell({
       }`}
       title={titleLines.join("\n")}
     >
+      {gate ? (
+        <span
+          className={`absolute right-1 bottom-1 h-1.5 w-1.5 rounded-full ${GATE_FILL_CLASS[gate]}`}
+          aria-label={`readiness gate ${gate}`}
+          title={`Readiness gate: ${gate}`}
+        />
+      ) : null}
       <div className="flex items-start justify-between">
         <span
           className={`font-mono text-[11px] tabular-nums ${
@@ -272,19 +280,6 @@ function DayCell({
               className="h-1.5 w-1.5 rounded-full bg-emerald-500"
               aria-label="daily entry logged"
               title="Daily check-in logged"
-            />
-          ) : null}
-          {meals.length >= 3 ? (
-            <span
-              className="h-1.5 w-1.5 rounded-full bg-amber-500"
-              aria-label={`${meals.length} meals logged`}
-              title={`${meals.length} meals logged`}
-            />
-          ) : meals.length > 0 ? (
-            <span
-              className="h-1.5 w-1.5 rounded-full bg-amber-500/40"
-              aria-label={`${meals.length} meals logged`}
-              title={`${meals.length} meals logged`}
             />
           ) : null}
           {events.some((e) => !e.resolved_date) ? (
@@ -324,8 +319,8 @@ function WorkoutBar({ workout: w }: { workout: CalendarWorkout }) {
   const min = w.duration_min ?? 0;
   const height = Math.max(4, Math.min(22, Math.round(min / 8) + 4));
   const showLabel = height >= 14;
-  const color = chartColorForType(w.type);
-  const label = shortTypeLabel(w.type);
+  const color = chartColorForType(normalizeType(w.type));
+  const label = shortLabelForType(w.type);
   return (
     <div
       title={`${w.type}${w.duration_min ? ` · ${w.duration_min}min` : ""}${w.rpe ? ` · RPE ${w.rpe}` : ""}`}
@@ -365,8 +360,8 @@ function Legend() {
         <span className="text-[10px]">Workout bars: color by type, height by duration.</span>
         <span className="mx-2 hidden h-3 w-px bg-border sm:inline-block" />
         <LegendItem swatch="rounded-full h-1.5 w-1.5 bg-emerald-500" label="Daily check-in" inline />
-        <LegendItem swatch="rounded-full h-1.5 w-1.5 bg-amber-500" label="≥3 meals" inline />
         <LegendItem swatch="rounded-full h-1.5 w-1.5 bg-rose-500" label="Active event" inline />
+        <LegendItem swatch={`rounded-full h-1.5 w-1.5 ${GATE_FILL_CLASS.amber}`} label="Readiness gate (corner)" inline />
       </div>
     </details>
   );
@@ -398,12 +393,6 @@ function backgroundClassFor(direction: "good" | "warn" | "neutral"): string {
     case "neutral":
       return "bg-card border-border";
   }
-}
-
-function shortTypeLabel(type: string): string {
-  const t = type.trim();
-  if (t.length <= 4) return t;
-  return t.slice(0, 4);
 }
 
 function wellnessComposite(d: CalendarDaily | undefined): number | null {

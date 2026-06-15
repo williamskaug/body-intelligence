@@ -3,7 +3,6 @@ import { WellnessForm } from "@/components/data/wellness-form";
 import {
   detectAnomalies,
   groupAnomaliesByDate,
-  topAnomalies,
   type Anomaly,
 } from "@/lib/data-display/anomalies";
 import {
@@ -12,6 +11,12 @@ import {
   computeBaseline,
   deltaString,
 } from "@/lib/data-display/baseline";
+import { type Gate, GATE_FILL_CLASS } from "@/lib/data-display/derived";
+import {
+  daysBetween,
+  eventThread,
+  type ThreadedHealthEvent,
+} from "@/lib/data-display/health-events";
 import { displayForType, formatStat } from "@/lib/data-display/workout-types";
 
 export type TimelineWorkout = {
@@ -55,38 +60,39 @@ export type TimelineDaily = {
   sleep_quality: number | null;
   sleep_notes: string | null;
   wellness_notes: string | null;
-  meal_notes: string | null;
 };
 
-export type TimelineMeal = {
-  id: string;
-  eaten_at: string;
-  meal_type: string | null;
-  description: string;
-  calories: number | null;
-  protein_g: string | null;
-  carbs_g: string | null;
-  fat_g: string | null;
-  fiber_g: string | null;
-  notes: string | null;
-  source: string;
+// Per-workout vendor dynamics joined onto a workout by id. supabase-js returns
+// numeric() columns as strings; integer columns come back as numbers.
+export type WorkoutMetricsRow = {
+  cadence_spm: string | null;
+  gct_ms: number | null;
+  gct_balance_pct_left: string | null;
+  vertical_oscillation_mm: string | null;
+  vertical_ratio_pct: string | null;
+  stride_len_m: string | null;
+  te_aerobic: string | null;
+  te_anaerobic: string | null;
+  vendor_training_load: string | null;
+  stamina_start_pct: number | null;
+  stamina_end_pct: number | null;
+  stamina_min_pct: number | null;
+  decoupling_pct: string | null;
+  elevation_gain_m: number | null;
+  elevation_loss_m: number | null;
+  avg_speed_kmh: string | null;
+  max_speed_kmh: string | null;
 };
 
-export type TimelineEvent = {
-  id: string;
-  date: string;
-  kind: string;
-  body_part: string | null;
-  severity: number | null;
-  notes: string | null;
-  resolved_date: string | null;
-};
-
-type Props = {
+export type TimelineProps = {
   workouts: ReadonlyArray<TimelineWorkout>;
   daily: ReadonlyArray<TimelineDaily>;
-  meals: ReadonlyArray<TimelineMeal>;
-  events: ReadonlyArray<TimelineEvent>;
+  events: ReadonlyArray<ThreadedHealthEvent>;
+  todayDate: string;
+  /** Agent-computed readiness gate per date — small dot beside the heading. */
+  derivedGateByDate?: Record<string, Gate>;
+  /** Vendor running dynamics keyed by workout id — powers the per-workout expander. */
+  metricsByWorkoutId?: Record<string, WorkoutMetricsRow>;
 };
 
 const WELLNESS_KEYS = [
@@ -98,23 +104,22 @@ const WELLNESS_KEYS = [
   { key: "sleep_quality", short: "SlQ", long: "Sleep quality" },
 ] as const;
 
-export function Timeline({ workouts, daily, meals, events }: Props) {
+export function Timeline({
+  workouts,
+  daily,
+  events,
+  todayDate,
+  derivedGateByDate,
+  metricsByWorkoutId,
+}: TimelineProps) {
   // Group everything by date. Each day with any data becomes a card.
-  const dates = collectDates(workouts, daily, meals, events);
-  const todayIso = new Date().toISOString().slice(0, 10);
-  const todayEntry = daily.find((d) => d.date === todayIso);
+  const dates = collectDates(workouts, daily, events);
 
-  // Even with zero data in window, we still want the check-in widget visible
-  // so the user has a single click to start logging. Old empty state goes
-  // beneath it.
   if (dates.length === 0) {
     return (
-      <div className="flex flex-col gap-3">
-        <WellnessForm date={todayIso} initial={todayEntry ?? undefined} />
-        <div className="rounded-2xl border bg-card px-6 py-10 text-center text-sm text-muted-foreground shadow-sm">
-          No data in this window. Log a workout, daily check-in, or meal to see it
-          appear here.
-        </div>
+      <div className="rounded-2xl border bg-card px-6 py-10 text-center text-sm text-muted-foreground shadow-sm">
+        No data in this window. Log a workout or daily check-in to see it appear
+        here.
       </div>
     );
   }
@@ -144,7 +149,6 @@ export function Timeline({ workouts, daily, meals, events }: Props) {
   const workoutsByDate = groupBy(workouts, (w) => w.date);
   const dailyByDate = groupBy(daily, (d) => d.date);
   const eventsByDate = groupBy(events, (e) => e.date);
-  const mealsByDate = groupBy(meals, (m) => m.eaten_at.slice(0, 10));
 
   // Unresolved events that started before the window — surface as a banner.
   const openOlder = events.filter((e) => !e.resolved_date && !dates.includes(e.date));
@@ -152,89 +156,8 @@ export function Timeline({ workouts, daily, meals, events }: Props) {
   const anomalies = detectAnomalies(daily, workouts);
   const anomaliesByDate = groupAnomaliesByDate(anomalies);
 
-  // Roll the top anomalies plus a few additional "worth your attention"
-  // signals into one ranked list, max 5. Severity beats recency; ties broken
-  // by date descending.
-  const attentionItems: AttentionItem[] = [];
-  for (const a of topAnomalies(anomalies, 5)) {
-    attentionItems.push({
-      key: `anomaly-${a.kind}-${a.date}`,
-      severity: a.severity,
-      date: a.date,
-      title: anomalyTitle(a.kind),
-      message: a.message,
-    });
-  }
-  // Active health events flagged for follow-up if they've been open >14 days.
-  for (const e of events) {
-    if (e.resolved_date) continue;
-    const ageDays = Math.round(
-      (Date.parse(`${todayIso}T00:00:00Z`) - Date.parse(`${e.date}T00:00:00Z`)) /
-        86_400_000,
-    );
-    if (ageDays >= 14) {
-      attentionItems.push({
-        key: `event-${e.id}`,
-        severity: ageDays >= 30 ? "medium" : "low",
-        date: e.date,
-        title: "Open health event",
-        message: `${e.kind}${e.body_part ? ` · ${e.body_part}` : ""} from ${ageDays}d ago — still tracking?`,
-      });
-    }
-  }
-  // Today is empty after 9am local — gently nudge.
-  if (!todayEntry) {
-    attentionItems.push({
-      key: "today-empty",
-      severity: "low",
-      date: todayIso,
-      title: "Today's check-in pending",
-      message: "Tap the green card above to log fatigue / mood / sleep_h.",
-    });
-  }
-  // Daily-checkin streak just broke (yesterday was filled, today still empty).
-  const yesterdayDate = (() => {
-    const y = new Date(`${todayIso}T00:00:00Z`);
-    y.setUTCDate(y.getUTCDate() - 1);
-    return y.toISOString().slice(0, 10);
-  })();
-  if (!todayEntry && daily.some((d) => d.date === yesterdayDate)) {
-    attentionItems.push({
-      key: "streak-at-risk",
-      severity: "low",
-      date: todayIso,
-      title: "Streak at risk",
-      message: "Yesterday was logged; today isn't yet. Logging anything keeps the streak.",
-    });
-  }
-
-  // Rank and trim.
-  const severityScore = (s: AttentionItem["severity"]) =>
-    s === "high" ? 3 : s === "medium" ? 2 : 1;
-  attentionItems.sort((a, b) => {
-    const ds = severityScore(b.severity) - severityScore(a.severity);
-    if (ds !== 0) return ds;
-    return a.date < b.date ? 1 : -1;
-  });
-  const topAttention = attentionItems.slice(0, 5);
-
   return (
     <div className="flex flex-col gap-3">
-      <WellnessForm
-        date={todayIso}
-        initial={todayEntry ?? undefined}
-        title={todayEntry ? "Today's check-in (logged)" : "Today's check-in"}
-        subtitle={
-          todayEntry
-            ? "Resubmit to update any field. Omitted fields are preserved."
-            : "5 = best on every scale. Skip what you can't answer."
-        }
-      />
-
-      {topAttention.length > 0 ? (
-        <AttentionPanel items={topAttention} />
-      ) : null}
-
       {openOlder.length > 0 ? (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm">
           <div className="font-medium text-amber-800 dark:text-amber-300">
@@ -258,86 +181,25 @@ export function Timeline({ workouts, daily, meals, events }: Props) {
       {dates.map((date) => {
         const d = dailyByDate.get(date)?.[0];
         const ws = workoutsByDate.get(date) ?? [];
-        const ms = mealsByDate.get(date) ?? [];
         const es = eventsByDate.get(date) ?? [];
 
         return (
           <DayCard
             key={date}
             date={date}
+            todayDate={todayDate}
             daily={d}
             workouts={ws}
-            meals={ms}
             events={es}
             baselines={baselines}
             anomalies={anomaliesByDate.get(date) ?? []}
+            gate={derivedGateByDate?.[date]}
+            metricsByWorkoutId={metricsByWorkoutId}
           />
         );
       })}
     </div>
   );
-}
-
-type AttentionItem = {
-  key: string;
-  severity: "low" | "medium" | "high";
-  date: string;
-  title: string;
-  message: string;
-};
-
-function AttentionPanel({ items }: { items: ReadonlyArray<AttentionItem> }) {
-  return (
-    <section className="rounded-2xl border border-rose-500/30 bg-rose-500/5 px-4 py-3 shadow-sm">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-rose-700 dark:text-rose-400">
-        What&apos;s worth your attention
-      </h2>
-      <ul className="mt-2 flex flex-col gap-1.5">
-        {items.map((a) => (
-          <li
-            key={a.key}
-            className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm"
-          >
-            <span
-              className={`inline-flex shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
-                a.severity === "high"
-                  ? "border-rose-500/40 bg-rose-500/15 text-rose-700 dark:text-rose-300"
-                  : a.severity === "medium"
-                    ? "border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300"
-                    : "border-foreground/20 bg-muted text-muted-foreground"
-              }`}
-            >
-              {a.severity}
-            </span>
-            <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-              {a.date}
-            </span>
-            <span className="font-medium text-foreground/90">{a.title}</span>
-            <span className="text-foreground/80">— {a.message}</span>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-function anomalyTitle(kind: Anomaly["kind"]): string {
-  switch (kind) {
-    case "rhr_high":
-      return "RHR elevated";
-    case "hrv_low":
-      return "HRV suppressed";
-    case "sleep_long":
-      return "Long sleep";
-    case "sleep_short":
-      return "Short sleep";
-    case "missing_hrv":
-      return "HRV not captured";
-    case "missing_rhr":
-      return "RHR not captured";
-    case "rpe_high_streak":
-      return "Hard-day streak";
-  }
 }
 
 function DayAnomalyBadges({ anomalies }: { anomalies: ReadonlyArray<Anomaly> }) {
@@ -348,19 +210,27 @@ function DayAnomalyBadges({ anomalies }: { anomalies: ReadonlyArray<Anomaly> }) 
         <span
           key={`${a.kind}-${i}`}
           title={a.message}
-          className={`rounded-md border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
-            a.severity === "high"
-              ? "border-rose-500/40 bg-rose-500/15 text-rose-700 dark:text-rose-300"
-              : a.severity === "medium"
-                ? "border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300"
-                : "border-foreground/20 bg-muted text-muted-foreground"
-          }`}
+          className={`rounded-md border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${anomalyBadgeClass(a.severity)}`}
         >
           {anomalyLabel(a.kind)}
         </span>
       ))}
     </div>
   );
+}
+
+// "info" is noteworthy but not a warning (e.g. long recovery sleep) — render it
+// neutral gray, never amber/red.
+function anomalyBadgeClass(severity: Anomaly["severity"]): string {
+  switch (severity) {
+    case "high":
+      return "border-rose-500/40 bg-rose-500/15 text-rose-700 dark:text-rose-300";
+    case "medium":
+      return "border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300";
+    case "low":
+    case "info":
+      return "border-foreground/20 bg-muted text-muted-foreground";
+  }
 }
 
 function anomalyLabel(kind: Anomaly["kind"]): string {
@@ -384,21 +254,26 @@ function anomalyLabel(kind: Anomaly["kind"]): string {
 
 function DayCard({
   date,
+  todayDate,
   daily,
   workouts,
-  meals,
   events,
   baselines,
   anomalies,
+  gate,
+  metricsByWorkoutId,
 }: {
   date: string;
+  todayDate: string;
   daily: TimelineDaily | undefined;
   workouts: TimelineWorkout[];
-  meals: TimelineMeal[];
-  events: TimelineEvent[];
+  events: ThreadedHealthEvent[];
   baselines: Record<string, ReturnType<typeof computeBaseline>>;
   anomalies: ReadonlyArray<Anomaly>;
+  gate: Gate | undefined;
+  metricsByWorkoutId?: Record<string, WorkoutMetricsRow>;
 }) {
+  // Primary header chips — capped at FOUR: sleep, HRV, RHR, weight.
   const headerVitals: Array<{
     label: string;
     value: string | number | null | undefined;
@@ -422,9 +297,18 @@ function DayCard({
     <article className="rounded-2xl border bg-card shadow-sm">
       <header className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 px-5 pt-4">
         <div className="flex flex-col gap-0.5">
-          <h3 className="text-base font-semibold tracking-tight">
-            {weekdayLong(date)}
-            <span className="text-muted-foreground">, {monthDay(date)}</span>
+          <h3 className="flex items-center gap-2 text-base font-semibold tracking-tight">
+            {gate ? (
+              <span
+                aria-hidden
+                title={`readiness gate: ${gate}`}
+                className={`h-2.5 w-2.5 shrink-0 rounded-full ${GATE_FILL_CLASS[gate]}`}
+              />
+            ) : null}
+            <span>
+              {weekdayLong(date)}
+              <span className="text-muted-foreground">, {monthDay(date)}</span>
+            </span>
           </h3>
           <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground/70">
             {date}
@@ -462,118 +346,41 @@ function DayCard({
         </div>
       ) : null}
 
+      {workouts.length > 0 ? (
+        <div className="mt-3 flex flex-col gap-2 px-5">
+          {workouts.map((w) => (
+            <WorkoutRow
+              key={w.id}
+              workout={w}
+              metrics={metricsByWorkoutId?.[w.id]}
+            />
+          ))}
+        </div>
+      ) : null}
+
       {daily && hasSleepStages(daily) ? (
         <div className="mt-3 px-5">
           <SleepStagesBar daily={daily} />
         </div>
       ) : null}
 
-      {daily && hasVitals(daily) ? (
-        <div className="mt-3 flex flex-wrap items-center gap-1.5 px-5 text-xs">
-          <ContinuousChip
-            label="SpO₂"
-            value={daily.spo2_avg_pct}
-            unit="%"
-            decimals={1}
-            baseline={baselines.spo2_avg_pct}
-            higherIsBetter={true}
-          />
-          <ContinuousChip
-            label="Resp"
-            value={daily.respiration_avg_brpm}
-            unit="brpm"
-            decimals={1}
-            baseline={baselines.respiration_avg_brpm}
-            higherIsBetter={null}
-          />
-          <ContinuousChip
-            label="BF"
-            value={daily.body_fat_pct}
-            unit="%"
-            decimals={1}
-            baseline={baselines.body_fat_pct}
-            higherIsBetter={null}
-          />
-        </div>
-      ) : null}
-
-      {daily && hasActivity(daily) ? (
-        <div className="mt-3 flex flex-wrap items-center gap-1.5 px-5 text-xs">
-          <ContinuousChip
-            label="Steps"
-            value={daily.steps}
-            unit=""
-            decimals={0}
-            baseline={baselines.steps}
-            higherIsBetter={true}
-          />
-          <ContinuousChip
-            label="Act"
-            value={daily.active_calories}
-            unit="kcal"
-            decimals={0}
-            baseline={baselines.active_calories}
-            higherIsBetter={true}
-          />
-          <ContinuousChip
-            label="Floors"
-            value={daily.floors_climbed}
-            unit=""
-            decimals={0}
-            baseline={baselines.floors_climbed}
-            higherIsBetter={true}
-          />
-          <ContinuousChip
-            label="Mod"
-            value={daily.intensity_min_moderate}
-            unit="min"
-            decimals={0}
-            baseline={baselines.intensity_min_moderate}
-            higherIsBetter={true}
-          />
-          <ContinuousChip
-            label="Vig"
-            value={daily.intensity_min_vigorous}
-            unit="min"
-            decimals={0}
-            baseline={baselines.intensity_min_vigorous}
-            higherIsBetter={true}
-          />
-        </div>
-      ) : null}
-
-      {workouts.length > 0 ? (
-        <div className="mt-3 flex flex-col gap-2 px-5">
-          {workouts.map((w) => (
-            <WorkoutRow key={w.id} workout={w} />
-          ))}
-        </div>
-      ) : null}
-
-      {meals.length > 0 ? (
-        <div className="mt-3 px-5">
-          <MealsRow meals={meals} />
-        </div>
-      ) : null}
+      {daily ? <MoreMetricsRow daily={daily} baselines={baselines} /> : null}
 
       {events.length > 0 ? (
         <div className="mt-3 flex flex-col gap-1.5 px-5">
           {events.map((e) => (
-            <EventRow key={e.id} event={e} />
+            <EventRow key={e.id} event={e} todayDate={todayDate} />
           ))}
         </div>
       ) : null}
 
-      {daily && (daily.sleep_notes || daily.wellness_notes || daily.meal_notes) ? (
+      {daily && (daily.sleep_notes || daily.wellness_notes) ? (
         <div className="mt-4 space-y-2 border-t bg-muted/20 px-5 py-3 text-xs leading-relaxed text-muted-foreground">
           {daily.sleep_notes ? (
             <NoteRow accent="bg-indigo-500/70" label="Sleep" body={daily.sleep_notes} />
           ) : null}
           {daily.wellness_notes ? (
             <NoteRow accent="bg-emerald-500/70" label="Wellness" body={daily.wellness_notes} />
-          ) : null}
-          {daily.meal_notes ? (
-            <NoteRow accent="bg-amber-500/70" label="Meals" body={daily.meal_notes} />
           ) : null}
         </div>
       ) : (
@@ -582,7 +389,7 @@ function DayCard({
 
       <details className="border-t bg-muted/10">
         <summary className="cursor-pointer px-5 py-2 text-[11px] text-muted-foreground hover:text-foreground">
-          Edit wellness for {date}
+          Log / edit check-in
         </summary>
         <div className="px-5 pb-4">
           <WellnessForm
@@ -607,18 +414,22 @@ function NoteRow({
   body: string;
 }) {
   return (
-    <div className="flex gap-2">
-      <span
-        aria-hidden
-        className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${accent}`}
-      />
-      <div className="min-w-0">
-        <span className="text-[10px] font-medium uppercase tracking-wide text-foreground/70">
-          {label}
-        </span>
-        <p className="mt-0.5">{body}</p>
-      </div>
-    </div>
+    <details className="group flex gap-2">
+      <summary className="flex cursor-pointer list-none gap-2">
+        <span
+          aria-hidden
+          className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${accent}`}
+        />
+        <div className="min-w-0">
+          <span className="text-[10px] font-medium uppercase tracking-wide text-foreground/70">
+            {label}
+          </span>
+          <p className="mt-0.5 line-clamp-2 group-open:line-clamp-none whitespace-pre-wrap">
+            {body}
+          </p>
+        </div>
+      </summary>
+    </details>
   );
 }
 
@@ -702,54 +513,179 @@ function gaugeBarColor(direction: "good" | "warn" | "neutral"): string {
   }
 }
 
-function WorkoutRow({ workout: w }: { workout: TimelineWorkout }) {
+function WorkoutRow({
+  workout: w,
+  metrics,
+}: {
+  workout: TimelineWorkout;
+  metrics: WorkoutMetricsRow | undefined;
+}) {
   const display = displayForType(w.type);
-  const primaryKeys = new Set(display.stats);
   const stats = display.stats
     .map((k) => formatStat(k, w))
     .filter((s): s is { label: string; value: string } => s != null);
-  // Secondary fields: anything captured that the type-specific display doesn't
-  // already surface. Avoids "—" placeholders but still shows everything we have.
-  const secondary: Array<{ label: string; value: string }> = [];
-  if (!primaryKeys.has("max_hr") && w.max_hr != null) {
-    secondary.push({ label: "max HR", value: String(w.max_hr) });
-  }
-  if (!primaryKeys.has("shoes") && w.shoes) {
-    secondary.push({ label: "shoes", value: w.shoes });
-  }
+
+  const dynamics = metrics ? buildDynamics(metrics) : [];
+  const hasExpander =
+    Boolean(w.notes) ||
+    dynamics.length > 0 ||
+    Boolean(w.shoes) ||
+    w.max_hr != null;
+
   return (
-    <div className="flex flex-wrap items-center gap-2 text-sm">
-      <span
-        className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${display.color}`}
-      >
-        {w.type}
-      </span>
-      {stats.map((s, i) => (
-        <span key={i} className="text-sm">
-          <span className="font-mono tabular-nums">{s.value}</span>{" "}
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-            {s.label}
+    <details className="group">
+      <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 text-sm">
+        {hasExpander ? (
+          <span
+            aria-hidden
+            className="shrink-0 text-[10px] text-muted-foreground transition-transform group-open:rotate-90"
+          >
+            ▶
           </span>
+        ) : null}
+        <span
+          className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${display.color}`}
+        >
+          {display.displayName}
         </span>
-      ))}
-      {secondary.map((s, i) => (
-        <span key={`sec-${i}`} className="text-xs text-muted-foreground">
-          <span className="font-mono tabular-nums">{s.value}</span>{" "}
-          <span className="text-[10px] uppercase tracking-wide">{s.label}</span>
-        </span>
-      ))}
-      {w.source !== "manual" ? (
-        <Badge variant="outline" className="text-[10px] capitalize">
-          {sourceLabel(w.source)}
-        </Badge>
+        {stats.map((s, i) => (
+          <span key={i} className="text-sm">
+            <span className="font-mono tabular-nums">{s.value}</span>{" "}
+            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              {s.label}
+            </span>
+          </span>
+        ))}
+        {w.source !== "manual" ? (
+          <Badge variant="outline" className="text-[10px] capitalize">
+            {sourceLabel(w.source)}
+          </Badge>
+        ) : null}
+      </summary>
+
+      {hasExpander ? (
+        <div className="mt-2 flex flex-col gap-3 pl-5">
+          {w.notes ? (
+            <p className="whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">
+              {w.notes}
+            </p>
+          ) : null}
+
+          {dynamics.length > 0 ? (
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-3">
+              {dynamics.map((d) => (
+                <div key={d.label} className="flex flex-col gap-0.5">
+                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    {d.label}
+                  </span>
+                  <span className="flex items-baseline gap-1.5">
+                    <span className="font-mono tabular-nums">{d.value}</span>
+                    {d.chip ? (
+                      <span
+                        className={`rounded-[3px] border px-1 py-px text-[9px] font-medium uppercase tracking-wide ${d.chip.warn ? "border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300" : "border-border bg-muted text-muted-foreground"}`}
+                      >
+                        {d.chip.text}
+                      </span>
+                    ) : null}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {w.shoes || w.max_hr != null ? (
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+              {w.shoes ? (
+                <span>
+                  shoes <span className="font-mono tabular-nums normal-case">{w.shoes}</span>
+                </span>
+              ) : null}
+              {w.max_hr != null ? (
+                <span>
+                  max HR <span className="font-mono tabular-nums">{w.max_hr}</span>
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       ) : null}
-      {w.notes ? (
-        <span className="ml-1 truncate text-xs text-muted-foreground" title={w.notes}>
-          · {w.notes}
-        </span>
-      ) : null}
-    </div>
+    </details>
   );
+}
+
+// Build the non-null vendor-dynamics rows for a workout's expander. Each row is
+// a label + display value, plus an optional chip (e.g. GCT asymmetry warning).
+function buildDynamics(
+  m: WorkoutMetricsRow,
+): Array<{ label: string; value: string; chip?: { text: string; warn: boolean } }> {
+  const out: Array<{ label: string; value: string; chip?: { text: string; warn: boolean } }> = [];
+
+  const cadence = num(m.cadence_spm);
+  if (cadence != null) {
+    out.push({ label: "Cadence", value: `${Math.round(cadence)} spm` });
+  }
+
+  const left = num(m.gct_balance_pct_left);
+  if (left != null) {
+    const right = 100 - left;
+    const asym = Math.abs(left - 50) * 2;
+    out.push({
+      label: "GCT balance",
+      value: `${left.toFixed(1)}% L / ${right.toFixed(1)}% R`,
+      chip: { text: `${asym.toFixed(1)}% asym`, warn: asym > 5 },
+    });
+  }
+
+  const teA = num(m.te_aerobic);
+  const teAn = num(m.te_anaerobic);
+  if (teA != null || teAn != null) {
+    const parts: string[] = [];
+    if (teA != null) parts.push(`${teA.toFixed(1)} aero`);
+    if (teAn != null) parts.push(`${teAn.toFixed(1)} anaero`);
+    out.push({ label: "Training effect", value: parts.join(" · ") });
+  }
+
+  const load = num(m.vendor_training_load);
+  if (load != null) {
+    out.push({ label: "Training load", value: String(Math.round(load)) });
+  }
+
+  if (m.stamina_start_pct != null || m.stamina_min_pct != null) {
+    const start = m.stamina_start_pct;
+    const min = m.stamina_min_pct;
+    out.push({
+      label: "Stamina",
+      value:
+        start != null && min != null
+          ? `${start}% → ${min}%`
+          : `${start ?? min}%`,
+    });
+  }
+
+  const decoupling = num(m.decoupling_pct);
+  if (decoupling != null) {
+    out.push({ label: "Decoupling", value: `${decoupling.toFixed(1)}%` });
+  }
+
+  if (m.elevation_gain_m != null || m.elevation_loss_m != null) {
+    const gain = m.elevation_gain_m != null ? `+${m.elevation_gain_m}` : "";
+    const loss = m.elevation_loss_m != null ? `−${m.elevation_loss_m}` : "";
+    out.push({
+      label: "Elevation",
+      value: [gain, loss].filter(Boolean).join(" / ") + " m",
+    });
+  }
+
+  const avgSpeed = num(m.avg_speed_kmh);
+  const maxSpeed = num(m.max_speed_kmh);
+  if (avgSpeed != null || maxSpeed != null) {
+    const parts: string[] = [];
+    if (avgSpeed != null) parts.push(`${avgSpeed.toFixed(1)} avg`);
+    if (maxSpeed != null) parts.push(`${maxSpeed.toFixed(1)} max`);
+    out.push({ label: "Speed (km/h)", value: parts.join(" · ") });
+  }
+
+  return out;
 }
 
 function sourceLabel(source: string): string {
@@ -757,56 +693,53 @@ function sourceLabel(source: string): string {
   return idx === -1 ? source : source.slice(0, idx);
 }
 
-function MealsRow({ meals }: { meals: TimelineMeal[] }) {
-  const sorted = [...meals].sort((a, b) => a.eaten_at.localeCompare(b.eaten_at));
+// SpO2, respiration, body fat, steps, active kcal, floors, intensity minutes —
+// all rolled into one collapsed line so the default card stays ≤4 chips.
+function MoreMetricsRow({
+  daily,
+  baselines,
+}: {
+  daily: TimelineDaily;
+  baselines: Record<string, ReturnType<typeof computeBaseline>>;
+}) {
+  const chips: Array<{
+    label: string;
+    value: string | number | null;
+    unit: string;
+    decimals: number;
+    baseline: ReturnType<typeof computeBaseline>;
+    higherIsBetter: boolean | null;
+  }> = [
+    { label: "SpO₂", value: daily.spo2_avg_pct, unit: "%", decimals: 1, baseline: baselines.spo2_avg_pct, higherIsBetter: true },
+    { label: "Resp", value: daily.respiration_avg_brpm, unit: "brpm", decimals: 1, baseline: baselines.respiration_avg_brpm, higherIsBetter: null },
+    { label: "BF", value: daily.body_fat_pct, unit: "%", decimals: 1, baseline: baselines.body_fat_pct, higherIsBetter: null },
+    { label: "Steps", value: daily.steps, unit: "", decimals: 0, baseline: baselines.steps, higherIsBetter: true },
+    { label: "Act", value: daily.active_calories, unit: "kcal", decimals: 0, baseline: baselines.active_calories, higherIsBetter: true },
+    { label: "Floors", value: daily.floors_climbed, unit: "", decimals: 0, baseline: baselines.floors_climbed, higherIsBetter: true },
+    { label: "Mod", value: daily.intensity_min_moderate, unit: "min", decimals: 0, baseline: baselines.intensity_min_moderate, higherIsBetter: true },
+    { label: "Vig", value: daily.intensity_min_vigorous, unit: "min", decimals: 0, baseline: baselines.intensity_min_vigorous, higherIsBetter: true },
+  ];
+  const present = chips.filter((c) => c.value != null);
+  if (present.length === 0) return null;
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-        Meals
-      </span>
-      {sorted.map((m) => (
-        <MealChip key={m.id} meal={m} />
-      ))}
-    </div>
-  );
-}
-
-function MealChip({ meal: m }: { meal: TimelineMeal }) {
-  const macroParts: string[] = [];
-  if (m.calories != null) macroParts.push(`${m.calories} kcal`);
-  if (m.protein_g != null) macroParts.push(`${Number(m.protein_g).toFixed(0)}P`);
-  if (m.carbs_g != null) macroParts.push(`${Number(m.carbs_g).toFixed(0)}C`);
-  if (m.fat_g != null) macroParts.push(`${Number(m.fat_g).toFixed(0)}F`);
-  if (m.fiber_g != null) macroParts.push(`${Number(m.fiber_g).toFixed(0)}g fiber`);
-  return (
-    <div className="flex max-w-[22rem] flex-col gap-0.5 rounded-md border bg-muted/30 px-2 py-1 text-xs">
-      <div className="flex items-baseline gap-1.5">
-        <span className="font-mono text-[10px] text-muted-foreground">
-          {m.eaten_at.slice(11, 16)}
-        </span>
-        {m.meal_type ? (
-          <span className="text-[10px] capitalize text-muted-foreground">
-            {m.meal_type}
-          </span>
-        ) : null}
-        <span className="truncate" title={m.description}>
-          {m.description}
-        </span>
-        {m.source !== "manual" ? (
-          <Badge variant="outline" className="ml-auto text-[10px] capitalize">
-            {sourceLabel(m.source)}
-          </Badge>
-        ) : null}
+    <details className="mt-3 px-5">
+      <summary className="cursor-pointer text-[10px] uppercase tracking-wide text-muted-foreground hover:text-foreground">
+        More metrics ({present.length})
+      </summary>
+      <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
+        {present.map((c) => (
+          <ContinuousChip
+            key={c.label}
+            label={c.label}
+            value={c.value}
+            unit={c.unit}
+            decimals={c.decimals}
+            baseline={c.baseline}
+            higherIsBetter={c.higherIsBetter}
+          />
+        ))}
       </div>
-      {macroParts.length > 0 || m.notes ? (
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground">
-          {macroParts.length > 0 ? (
-            <span className="font-mono tabular-nums">{macroParts.join(" · ")}</span>
-          ) : null}
-          {m.notes ? <span className="italic">{m.notes}</span> : null}
-        </div>
-      ) : null}
-    </div>
+    </details>
   );
 }
 
@@ -871,28 +804,25 @@ function hasSleepStages(d: TimelineDaily): boolean {
   );
 }
 
-function hasVitals(d: TimelineDaily): boolean {
-  return (
-    d.spo2_avg_pct != null ||
-    d.respiration_avg_brpm != null ||
-    d.body_fat_pct != null
-  );
-}
-
-function hasActivity(d: TimelineDaily): boolean {
-  return (
-    d.steps != null ||
-    d.active_calories != null ||
-    d.floors_climbed != null ||
-    d.intensity_min_moderate != null ||
-    d.intensity_min_vigorous != null
-  );
-}
-
-function EventRow({ event: e }: { event: TimelineEvent }) {
+function EventRow({
+  event: e,
+  todayDate,
+}: {
+  event: ThreadedHealthEvent;
+  todayDate: string;
+}) {
   const tone = e.resolved_date
     ? "bg-muted text-muted-foreground border-border"
     : "bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-500/30";
+  const activeDays = e.resolved_date
+    ? daysBetween(e.date, e.resolved_date)
+    : daysBetween(e.date, todayDate);
+  const thread = eventThread(e);
+  const latest = thread.updates[0] ?? null;
+  const milestoneDays =
+    e.next_milestone_date != null
+      ? daysBetween(todayDate, e.next_milestone_date)
+      : null;
   return (
     <div className="flex flex-col gap-0.5 text-xs">
       <div className="flex flex-wrap items-center gap-2">
@@ -904,13 +834,33 @@ function EventRow({ event: e }: { event: TimelineEvent }) {
           {e.severity ? (
             <span className="text-[10px] opacity-75">sev {e.severity}/5</span>
           ) : null}
-          {e.resolved_date ? (
-            <span className="text-[10px] opacity-75">resolved {e.resolved_date}</span>
-          ) : null}
+          <span className="text-[10px] opacity-75">
+            {e.resolved_date ? `resolved · ${activeDays}d` : `active ${activeDays}d`}
+          </span>
         </span>
+        {e.next_milestone && e.next_milestone_date ? (
+          <span className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+            {e.next_milestone} ~{shortMonthDay(e.next_milestone_date)}
+            {milestoneDays != null ? (
+              <span className="opacity-75">
+                · {milestoneDays >= 0 ? `in ${milestoneDays}d` : `${-milestoneDays}d ago`}
+              </span>
+            ) : null}
+          </span>
+        ) : null}
+        <a
+          href="#health-threads"
+          className="text-[10px] text-muted-foreground underline-offset-2 hover:underline"
+        >
+          {thread.updates.length > 0
+            ? `(${thread.updates.length} update${thread.updates.length === 1 ? "" : "s"})`
+            : "view thread"}
+        </a>
       </div>
-      {e.notes ? (
-        <p className="pl-2 text-[11px] italic text-muted-foreground">{e.notes}</p>
+      {latest ? (
+        <p className="line-clamp-2 pl-2 text-[11px] text-muted-foreground">
+          <span className="font-mono opacity-70">{latest.label}</span> {latest.note}
+        </p>
       ) : null}
     </div>
   );
@@ -919,13 +869,11 @@ function EventRow({ event: e }: { event: TimelineEvent }) {
 function collectDates(
   workouts: ReadonlyArray<TimelineWorkout>,
   daily: ReadonlyArray<TimelineDaily>,
-  meals: ReadonlyArray<TimelineMeal>,
-  events: ReadonlyArray<TimelineEvent>,
+  events: ReadonlyArray<ThreadedHealthEvent>,
 ): string[] {
   const set = new Set<string>();
   for (const w of workouts) set.add(w.date);
   for (const d of daily) set.add(d.date);
-  for (const m of meals) set.add(m.eaten_at.slice(0, 10));
   for (const e of events) set.add(e.date);
   return Array.from(set).sort((a, b) => b.localeCompare(a));
 }
@@ -941,7 +889,7 @@ function groupBy<T>(rows: ReadonlyArray<T>, key: (r: T) => string): Map<string, 
   return out;
 }
 
-function num(s: string | null): number | null {
+function num(s: string | number | null | undefined): number | null {
   if (s == null) return null;
   const n = Number(s);
   return Number.isFinite(n) ? n : null;
@@ -956,6 +904,15 @@ function monthDay(date: string): string {
   const d = new Date(`${date}T00:00:00Z`);
   return d.toLocaleDateString(undefined, {
     month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function shortMonthDay(date: string): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  return d.toLocaleDateString(undefined, {
+    month: "short",
     day: "numeric",
     timeZone: "UTC",
   });
