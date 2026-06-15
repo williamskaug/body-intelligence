@@ -86,6 +86,7 @@ export default async function DataPage({
     metricsRows,
     eventUpdates,
     installed,
+    milestones,
   ] = await Promise.all([
     sb
       .from("workouts")
@@ -95,27 +96,27 @@ export default async function DataPage({
       .eq("user_id", user.id)
       .gte("date", sinceDate)
       .order("date", { ascending: false }),
+    // Core columns only — the derived-layer migration's additive columns
+    // (skin_temp_deviation_c, sleep_score, health_events.next_milestone*)
+    // are fetched separately in the tolerant batch so a deploy that lands
+    // before the migration doesn't 500 the whole dashboard.
     sb
       .from("daily_entries")
       .select(
-        "id, date, sleep_h, sleep_deep_min, sleep_light_min, sleep_rem_min, sleep_awake_min, hrv_ms, rhr_bpm, spo2_avg_pct, respiration_avg_brpm, skin_temp_deviation_c, sleep_score, weight_kg, body_fat_pct, steps, active_calories, floors_climbed, intensity_min_moderate, intensity_min_vigorous, fatigue, soreness, mood, stress, motivation, sleep_quality, sleep_notes, wellness_notes, meal_notes",
+        "id, date, sleep_h, sleep_deep_min, sleep_light_min, sleep_rem_min, sleep_awake_min, hrv_ms, rhr_bpm, spo2_avg_pct, respiration_avg_brpm, weight_kg, body_fat_pct, steps, active_calories, floors_climbed, intensity_min_moderate, intensity_min_vigorous, fatigue, soreness, mood, stress, motivation, sleep_quality, sleep_notes, wellness_notes, meal_notes",
       )
       .eq("user_id", user.id)
       .gte("date", sinceDate)
       .order("date", { ascending: false }),
     sb
       .from("health_events")
-      .select(
-        "id, date, kind, body_part, severity, notes, resolved_date, next_milestone, next_milestone_date",
-      )
+      .select("id, date, kind, body_part, severity, notes, resolved_date")
       .eq("user_id", user.id)
       .gte("date", sinceDate)
       .order("date", { ascending: false }),
     sb
       .from("health_events")
-      .select(
-        "id, date, kind, body_part, severity, notes, resolved_date, next_milestone, next_milestone_date",
-      )
+      .select("id, date, kind, body_part, severity, notes, resolved_date")
       .eq("user_id", user.id)
       .lt("date", sinceDate)
       .is("resolved_date", null)
@@ -149,20 +150,24 @@ export default async function DataPage({
       .from("installed_recipes")
       .select("recipe_id")
       .eq("user_id", user.id),
+    // Milestone columns isolated here so a missing column (pre-migration)
+    // degrades to "no milestones" rather than failing the core event query.
+    sb
+      .from("health_events")
+      .select("id, next_milestone, next_milestone_date")
+      .eq("user_id", user.id)
+      .not("next_milestone", "is", null),
   ]);
 
-  for (const r of [
-    workouts,
-    daily,
-    healthRecent,
-    healthOpenOlder,
-    documents,
-    derivedRows,
-    metricsRows,
-    eventUpdates,
-    installed,
-  ]) {
+  // Core entities must succeed.
+  for (const r of [workouts, daily, healthRecent, healthOpenOlder, documents, installed]) {
     if (r.error) throw new Error(r.error.message);
+  }
+  // The derived layer is additive: if its migration hasn't landed yet (the
+  // window between a code deploy and the migrate workflow), degrade to empty
+  // instead of crashing the whole dashboard. Re-throw any other error.
+  for (const r of [derivedRows, metricsRows, eventUpdates, milestones]) {
+    if (r.error && !isMissingRelation(r.error)) throw new Error(r.error.message);
   }
 
   // The latest derived row drives the hero gate (may be today's or older —
@@ -200,15 +205,22 @@ export default async function DataPage({
     severity: number | null;
     notes: string | null;
     resolved_date: string | null;
-    next_milestone: string | null;
-    next_milestone_date: string | null;
   };
+  const milestoneByEvent = new Map(
+    ((milestones.data ?? []) as Array<{
+      id: string;
+      next_milestone: string | null;
+      next_milestone_date: string | null;
+    }>).map((m) => [m.id, m] as const),
+  );
   const rawEvents = mergeEvents(
     (healthRecent.data ?? []) as RawEvent[],
     (healthOpenOlder.data ?? []) as RawEvent[],
   );
   const events: ThreadedHealthEvent[] = rawEvents.map((e) => ({
     ...e,
+    next_milestone: milestoneByEvent.get(e.id)?.next_milestone ?? null,
+    next_milestone_date: milestoneByEvent.get(e.id)?.next_milestone_date ?? null,
     updates: updatesByEvent.get(e.id) ?? [],
   }));
 
@@ -476,6 +488,16 @@ export default async function DataPage({
       </section>
     </div>
   );
+}
+
+// A Postgres "relation/column does not exist" or PostgREST schema-cache miss,
+// from a query against a table whose migration hasn't applied yet.
+function isMissingRelation(error: { code?: string; message?: string }): boolean {
+  if (error.code === "42P01" || error.code === "42703" || error.code === "PGRST205") {
+    return true;
+  }
+  const m = error.message ?? "";
+  return /does not exist|schema cache/i.test(m);
 }
 
 async function sb_profileTimezone(userId: string): Promise<{ timezone: string }> {

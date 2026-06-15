@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { updateProfileAction } from "./actions";
 
@@ -14,8 +14,41 @@ export type ProfileFormProps = {
   email: string;
 };
 
+// Intl.supportedValuesOf is available in modern browsers; fall back to a small
+// curated list if the runtime predates it.
+function supportedTimezones(): string[] {
+  try {
+    const fn = (
+      Intl as unknown as { supportedValuesOf?: (k: string) => string[] }
+    ).supportedValuesOf;
+    if (fn) return fn("timeZone");
+  } catch {
+    // fall through
+  }
+  return [
+    "UTC",
+    "Europe/Oslo",
+    "Europe/London",
+    "Europe/Berlin",
+    "America/New_York",
+    "America/Los_Angeles",
+  ];
+}
+
 export function ProfileForm({ defaults, email }: ProfileFormProps) {
   const [state, action, pending] = useActionState(updateProfileAction, {});
+  const [timezone, setTimezone] = useState(defaults.timezone);
+  const zones = supportedTimezones();
+  const isUtc = timezone === "UTC";
+
+  const detectTimezone = () => {
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (tz) setTimezone(tz);
+    } catch {
+      // ignore — keep current value
+    }
+  };
 
   return (
     <form action={action} className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -41,16 +74,39 @@ export function ProfileForm({ defaults, email }: ProfileFormProps) {
 
       <Field
         label="Timezone"
-        hint="IANA name. Used for daily-entry date boundaries."
+        hint="Used for daily-entry date boundaries and the day's readiness gate."
       >
-        <input
-          type="text"
-          name="timezone"
-          defaultValue={defaults.timezone}
-          placeholder="Europe/Oslo"
-          autoComplete="off"
-          className="block w-full rounded-md border bg-background px-3 py-2 font-mono text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
-        />
+        <div className="flex gap-2">
+          <select
+            name="timezone"
+            value={timezone}
+            onChange={(e) => setTimezone(e.target.value)}
+            className="block w-full rounded-md border bg-background px-3 py-2 font-mono text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            {/* Ensure the current value is selectable even if not in the list. */}
+            {zones.includes(timezone) ? null : (
+              <option value={timezone}>{timezone}</option>
+            )}
+            {zones.map((z) => (
+              <option key={z} value={z}>
+                {z}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={detectTimezone}
+            className="shrink-0 rounded-md border bg-background px-2.5 text-xs text-muted-foreground shadow-sm hover:bg-muted hover:text-foreground"
+          >
+            Detect
+          </button>
+        </div>
+        {isUtc ? (
+          <span className="mt-1 block text-[11px] text-amber-600 dark:text-amber-400">
+            UTC is the default, not your real zone — set it so day boundaries
+            land correctly.
+          </span>
+        ) : null}
       </Field>
 
       <Field label="Units">

@@ -5,6 +5,12 @@ import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
 import { adminClient } from "@/lib/supabase/admin";
 import { recipes } from "@/lib/agents/recipe-data";
+import {
+  computeSourceStatus,
+  sourceDef,
+  STATUS_TONE,
+  type SourceStatus,
+} from "@/lib/data-display/source-registry";
 import { InstallRecipeButton } from "../agents/install-button";
 import { McpUrl } from "./mcp-url";
 import { ProfileForm } from "./profile-form";
@@ -112,7 +118,11 @@ export default async function SettingsPage() {
           <p className="mt-2 text-sm text-muted-foreground">
             Derived from the <span className="font-mono">source</span> column on
             workouts and meals — which connectors have been writing into BI.
-            Green = wrote within 2 days, yellow = within a week, red = stale.
+            A primary source is <span className="font-medium">fresh</span> when
+            its sync recipe ran today (even on a rest day), and only{" "}
+            <span className="font-medium">down</span> when it goes overdue.
+            Fallback sources sit <span className="font-medium">idle</span> until
+            needed; manual entry isn&apos;t a connector.
           </p>
 
           {dataSources.length === 0 ? (
@@ -129,7 +139,7 @@ export default async function SettingsPage() {
           ) : (
             <ul className="mt-6 divide-y">
               {dataSources.map((src) => {
-                const tone = freshnessTone(src.last_write_at);
+                const tone = STATUS_TONE[src.status];
                 return (
                   <li
                     key={src.source}
@@ -137,7 +147,7 @@ export default async function SettingsPage() {
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-baseline gap-2">
-                        <span className="text-sm font-medium">{prettyName(src.source)}</span>
+                        <span className="text-sm font-medium">{src.label}</span>
                         <span
                           className={`rounded-md border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${tone.classes}`}
                         >
@@ -154,6 +164,9 @@ export default async function SettingsPage() {
                         {" · "}
                         {src.records_30d} record{src.records_30d === 1 ? "" : "s"} in 30d
                       </p>
+                      {src.note ? (
+                        <p className="mt-1 text-[11px] text-muted-foreground/80">{src.note}</p>
+                      ) : null}
                     </div>
                   </li>
                 );
@@ -322,140 +335,99 @@ async function loadConnectedApps(userId: string): Promise<ConnectedApp[]> {
 
 type DataSource = {
   source: string;
+  label: string;
   last_write_at: string | null;
   records_30d: number;
+  status: SourceStatus;
+  note: string | null;
 };
 
 async function loadDataSources(userId: string): Promise<DataSource[]> {
   const sb = adminClient();
   const sinceIso = new Date(Date.now() - 30 * 86_400_000).toISOString();
+  const todayIso = new Date().toISOString().slice(0, 10);
 
-  // workouts contribute (source, max(created_at), count)
-  // meals contribute (source, max(created_at), count)
-  // We don't include daily_entries — they don't have a source column today.
-  const [workoutRows, mealRows] = await Promise.all([
+  // workouts + meals contribute (source, max(created_at), count). Recipe runs
+  // provide the heartbeat. daily_entries has no source column today.
+  const [workoutRows, mealRows, allWorkoutRows, allMealRows, runs] = await Promise.all([
+    sb.from("workouts").select("source, created_at").eq("user_id", userId).gte("created_at", sinceIso),
+    sb.from("meals").select("source, created_at").eq("user_id", userId).gte("created_at", sinceIso),
     sb
       .from("workouts")
       .select("source, created_at")
       .eq("user_id", userId)
-      .gte("created_at", sinceIso),
+      .order("created_at", { ascending: false })
+      .limit(500),
     sb
       .from("meals")
       .select("source, created_at")
       .eq("user_id", userId)
-      .gte("created_at", sinceIso),
+      .order("created_at", { ascending: false })
+      .limit(500),
+    sb
+      .from("installed_recipes")
+      .select("recipe_id, last_run_at, last_run_status")
+      .eq("user_id", userId),
   ]);
   if (workoutRows.error) throw new Error(`loadDataSources workouts: ${workoutRows.error.message}`);
   if (mealRows.error) throw new Error(`loadDataSources meals: ${mealRows.error.message}`);
+  if (allWorkoutRows.error || allMealRows.error) return [];
 
-  // Also pull all-time max(created_at) per source so we can show "last write
-  // 14 days ago" even when 30d has zero records.
-  const [allWorkoutRows, allMealRows] = await Promise.all([
-    sb
-      .from("workouts")
-      .select("source, created_at")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(500),
-    sb
-      .from("meals")
-      .select("source, created_at")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(500),
-  ]);
-  if (allWorkoutRows.error || allMealRows.error) {
-    return [];
-  }
+  const heartbeatRecipes = new Set(
+    ((runs.data ?? []) as Array<{
+      recipe_id: string;
+      last_run_at: string | null;
+      last_run_status: string | null;
+    }>)
+      .filter(
+        (r) =>
+          r.last_run_status === "ok" &&
+          r.last_run_at != null &&
+          r.last_run_at.slice(0, 10) === todayIso,
+      )
+      .map((r) => r.recipe_id),
+  );
 
   type RawRow = { source: string; created_at: string };
   const grouped = new Map<string, { records_30d: number; last_write_at: string | null }>();
-
   const ensure = (source: string) => {
-    if (!grouped.has(source)) {
-      grouped.set(source, { records_30d: 0, last_write_at: null });
-    }
+    if (!grouped.has(source)) grouped.set(source, { records_30d: 0, last_write_at: null });
     return grouped.get(source)!;
   };
 
-  for (const row of [
-    ...(workoutRows.data ?? []),
-    ...(mealRows.data ?? []),
-  ] as RawRow[]) {
+  for (const row of [...(workoutRows.data ?? []), ...(mealRows.data ?? [])] as RawRow[]) {
     ensure(row.source).records_30d += 1;
   }
-  for (const row of [
-    ...(allWorkoutRows.data ?? []),
-    ...(allMealRows.data ?? []),
-  ] as RawRow[]) {
+  for (const row of [...(allWorkoutRows.data ?? []), ...(allMealRows.data ?? [])] as RawRow[]) {
     const g = ensure(row.source);
-    if (!g.last_write_at || row.created_at > g.last_write_at) {
-      g.last_write_at = row.created_at;
-    }
+    if (!g.last_write_at || row.created_at > g.last_write_at) g.last_write_at = row.created_at;
   }
 
-  return Array.from(grouped.entries())
-    .map(([source, info]) => ({ source, ...info }))
-    .sort((a, b) => {
-      if (!a.last_write_at) return 1;
-      if (!b.last_write_at) return -1;
-      return a.last_write_at < b.last_write_at ? 1 : -1;
-    });
-}
-
-function prettyName(source: string): string {
-  switch (source) {
-    case "manual":
-      return "Manual entry";
-    case "garmin":
-      return "Garmin Connect";
-    case "garmin_golf":
-      return "Garmin (golf)";
-    case "strava":
-      return "Strava";
-    case "mfp":
-    case "myfitnesspal":
-      return "MyFitnessPal";
-    case "cronometer":
-      return "Cronometer";
-    case "apple_health":
-      return "Apple Health";
-    case "whoop":
-      return "Whoop";
-    case "oura":
-      return "Oura";
-    default:
-      return source;
-  }
-}
-
-function freshnessTone(iso: string | null): {
-  label: string;
-  classes: string;
-} {
-  if (!iso) {
-    return {
-      label: "no data",
-      classes: "border-foreground/20 bg-muted text-muted-foreground",
-    };
-  }
-  const ageDays = (Date.now() - new Date(iso).getTime()) / 86_400_000;
-  if (ageDays <= 2) {
-    return {
-      label: "fresh",
-      classes: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-    };
-  }
-  if (ageDays <= 7) {
-    return {
-      label: "stale",
-      classes: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400",
-    };
-  }
-  return {
-    label: "down",
-    classes: "border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-400",
+  const order: Record<SourceStatus, number> = {
+    down: 0,
+    stale: 1,
+    fresh: 2,
+    idle: 3,
+    manual: 4,
+    retired: 5,
+    unknown: 6,
   };
+  return Array.from(grouped.entries())
+    .map(([source, info]) => {
+      const def = sourceDef(source);
+      const heartbeatOkToday = (def.heartbeatRecipes ?? []).some((r) =>
+        heartbeatRecipes.has(r),
+      );
+      return {
+        source,
+        label: def.label,
+        last_write_at: info.last_write_at,
+        records_30d: info.records_30d,
+        status: computeSourceStatus(def, info.last_write_at, heartbeatOkToday),
+        note: def.note ?? null,
+      };
+    })
+    .sort((a, b) => order[a.status] - order[b.status]);
 }
 
 function timeAgo(iso: string): string {

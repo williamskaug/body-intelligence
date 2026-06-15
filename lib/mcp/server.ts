@@ -575,7 +575,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     {
       title: "List data sources writing into BI",
       description:
-        "Derived from the source column on workouts and meals (BI doesn't hold connector credentials itself). Per source: records_30d, last_write_at, status (fresh ≤2d / stale ≤7d / down >7d / unknown). Use to diagnose 'why did the dashboard go flat?' — usually a connector stopped, not a training change.",
+        "Derived from the source column on workouts and meals (BI doesn't hold connector credentials itself). Per source: label, role (primary/fallback/manual/retired/unknown), records_30d, last_write_at, expected_cadence_days, and status. Status is role-aware: a primary source (e.g. garmin) is 'fresh' when its sync recipe ran ok today even with zero new rows (a rest day is not an outage), 'stale'/'down' only when genuinely overdue; a fallback (strava) is 'idle' when quiet, never 'down'; manual is 'manual'; superseded sources are 'retired'. Use to diagnose 'why did the dashboard go flat?' — usually a primary connector stopped, not a training change.",
       inputSchema: listConnectorsInputSchema,
     },
     async () => jsonResult(await listConnectors(ctx.userId)),
