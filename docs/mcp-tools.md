@@ -16,8 +16,17 @@ The surface covers full CRUD for every entity:
 - **Calendar rollup:** `get_calendar(year, month)` returns per-day rollups
 - **Health events:** `resolve_health_event(id, resolved_date?)` (alias around `update_health_event`)
 - **Recipes:** `list_recipes(include_install_state?)`, `get_recipe_status(recipe_id)`, `mark_recipe_run(recipe_id, status, error?)`
-- **Connectors:** `list_connectors` (derived from `source` columns — BI does not hold connector credentials; no `trigger_sync`)
+- **Connectors:** `list_connectors` (role-aware status from `source` columns + recipe heartbeat — BI does not hold connector credentials; no `trigger_sync`)
 - **Onboarding:** `get_setup_guide`
+
+> **Iteration 3 additions (derived layer + threads):**
+> - `log_derived_daily(date, readiness_gate, gate_reason, illness_composite, …)` → **full-row replace** upsert into `derived_daily`. Written by the user's scheduled agent only; the app never computes these values. Opposite write semantics from `log_daily` (omitted fields become NULL).
+> - `add_health_event_update(event_id, date, note, severity_at_time?, on_same_date?)` → dated thread row (default `replace`-per-date for idempotent re-runs; `severity_at_time` also patches the event's current severity). `update_health_event` gained `next_milestone` / `next_milestone_date`; `resolve_health_event(id, resolved_date?, note?)` can record a closing thread entry; `get_health_event` returns the thread; `list_health_events` returns `latest_update` + `update_count`.
+> - `log_workout` / `bulk_log_workouts` / `update_workout` accept a nested `metrics` object → upserts `workout_metrics` (full replace per workout). `get_workout` joins it. `type` is normalized to the canonical vocabulary; `list_workouts`' type filter normalizes too.
+> - `log_daily` / `bulk_log_daily` accept `skin_temp_deviation_c` and `sleep_score`.
+> - `get_recent`'s `kinds` gains `'derived'`. `get_baseline` / `get_stats` metric enums extended with the new daily columns, `workout_*` sensor metrics, and `derived_*` columns.
+> - `get_briefing(date?)` → reads `briefings/YYYY-MM-DD.md` (today's, falling back to the latest).
+> - `list_recipes(include_install_state=true)` also returns `user_recipes` (the caller's `recipes/` docs + non-catalog tracked ids, `catalog:false`).
 
 `update_*` and `delete_*` tools take the entity's `id` (find it via `get_recent` or `search_everything`). They both throw if no row matches the id under the calling user — there's no silent no-op. Prefer `update_*` over `delete_*` when correcting bad data, so history stays intact.
 

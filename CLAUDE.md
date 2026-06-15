@@ -4,13 +4,13 @@ Personal health intelligence — the same shape as Project Intelligence, but for
 
 ## Status
 
-Greenfield. Architecture and schema locked, ready to scaffold. No application code written yet — only design docs in `docs/`.
+Built and deployed (hosted at `bi.vardenlab.com`). Phase 1 (manual capture) and most of Phase 2/3 are live: the eight tables plus `installed_recipes`, `derived_daily`, `workout_metrics`, and `health_event_updates`; ~50 MCP tools; OAuth AS + Supabase Auth; public signup; the marketing/login/`/data`/`/agents`/`/settings`/`/legal` surfaces; the recipe catalog; and a per-user agent layer (the user's own dawn-agent runs daily and reports via `mark_recipe_run`). Migrations auto-apply to production via `.github/workflows/migrate.yml` on push to `main`.
 
 ## The load-bearing constraint
 
-The app is **passive**. It stores data, returns data, and exposes a virtual filesystem of memory files. It never decides whether you should train tomorrow, when to take a recovery week, or whether you're overreaching. Those judgments live in Claude conversations, made by reasoning over the data plus the user's `PRINCIPLES.md`.
+The app is **passive**. It stores data, returns data, exposes a virtual filesystem of memory files, and may **compute statistics** (means, standard deviations, z-scores, date arithmetic, threshold comparisons against constants in code) and **display Claude-authored judgments** read from `derived_daily`. It never **authors a judgment** — no composite that weights signals into a verdict, no "should you rest" logic, no principle selection on the server. The readiness gate the dashboard shows is computed by the user's scheduled Claude agent and parked in `derived_daily`; the app only renders it.
 
-This is the same architectural choice PI makes: keep the system passive so the reasoning stays portable across sessions and improves as Claude does, without app updates. **Do not introduce server-side LLM calls or scoring algorithms.** If a feature requires synthesis, it belongs in a Cowork scheduled-agent recipe (just a prompt template), not in the app.
+This is the same architectural choice PI makes: keep the system passive so the reasoning stays portable across sessions and improves as Claude does, without app updates. **Do not introduce server-side LLM calls or scoring algorithms.** If a feature requires synthesis, it belongs in a Cowork scheduled-agent recipe (just a prompt template) writing to `derived_daily`, not in the app.
 
 ## Integration model
 
@@ -83,50 +83,54 @@ body-intelligence/
 
 ## Data model
 
-Eight Postgres tables. RLS on every user-scoped one, scoped to `auth.uid()`.
+Postgres tables, RLS on every user-scoped one, scoped to `auth.uid()`. Drizzle in `lib/db/schema.ts` is the source of truth; generated SQL lands in `supabase/migrations/`.
 
-- `user_profiles` — one row per user, seeded on signup. `display_name`, `timezone` (IANA), `units_system` (`metric`/`imperial`), `locale`, `preferences` (jsonb forward-compat blob).
-- `workouts` — one row per workout. `date`, free-form `type`, `duration_min`, `distance_km`, `avg_hr`, `max_hr`, `rpe`, `shoes`, `source`, `source_id` (idempotency key for connector writes), `notes`.
-- `daily_entries` — one row per (user, date), enforced by unique. Universal vitals (`sleep_h` + four sleep-stage minute buckets, `hrv_ms`, `rhr_bpm`, `spo2_avg_pct`, `respiration_avg_brpm`), body composition (`weight_kg`, `body_fat_pct`), movement totals (`steps`, `active_calories`, `floors_climbed`, `intensity_min_moderate`, `intensity_min_vigorous`), six 1–5 wellness scales (**5 = best, always, even for fatigue/soreness/stress**), and three free-text notes blocks (sleep, wellness, meals). Vendor-proprietary scores (Body Battery, Readiness, Recovery) stay out — they live in `daily/YYYY-MM-DD.md` documents.
-- `meals` — one row per meal. `eaten_at`, `meal_type`, required `description`, required `calories` + `protein_g` + `carbs_g` + `fat_g`, optional `fiber_g`, `notes`, `source`, `source_id` (same idempotency pattern as `workouts`). Calories and macros are required at the MCP boundary — when no authoritative source is available (label, connector, weighed portion), the calling agent estimates from the description. The DB column itself is still nullable to allow connector backfills that have no description to estimate from, but the tool refuses incomplete writes. Coexists with `daily_entries.meal_notes` (day's prose) and `NUTRITION.md` (dietary philosophy) — same split as workouts/`PRINCIPLES.md` and `health_events`/`HEALTH_LOG.md`.
-- `health_events` — append-only log of injuries, illnesses, symptoms. `date`, `kind`, `body_part`, `severity`, `notes`, `resolved_date`.
-- `documents` — virtual filesystem for memory files, keyed by `(user_id, path)`. Content is text. Standard paths: `MEMORY.md`, `PROFILE.md`, `PRINCIPLES.md`, `GOALS.md`, `CURRENT.md`, `HEALTH_LOG.md`, `NUTRITION.md`, `EQUIPMENT.md`.
-- `oauth_clients` — DCR-registered MCP clients (Cowork instances). Not user-scoped.
-- `oauth_tokens` — issued access + refresh tokens, hashed, with TTLs and revocation.
+- `user_profiles` — one row per user, seeded on signup. `display_name`, `timezone` (IANA — drives `/data`'s day boundaries and the readiness gate; default `UTC` but should be set), `units_system` (`metric`/`imperial`), `locale`, `preferences` (jsonb forward-compat blob).
+- `workouts` — one row per workout. `date`, `type` (canonical vocabulary — aliases normalized at the MCP boundary by `normalizeWorkoutType` in `lib/mcp/tools/shared.ts`), `duration_min`, `distance_km`, `avg_hr`, `max_hr`, `rpe`, `shoes`, `source`, `source_id` (idempotency key for connector writes), `notes` (qualitative only).
+- `workout_metrics` — optional 1:1 side table keyed by `workout_id`. Running dynamics + effort sensor data (`cadence_spm`, `gct_ms`, `gct_balance_pct_left`, vertical oscillation/ratio, `stride_len_m`, `te_aerobic`/`te_anaerobic`, `vendor_training_load`, stamina start/end/min, `decoupling_pct`, elevation, speeds). Written via the nested `metrics` object on the workout write tools. `date` denormalized for cheap trend queries. Lap splits + vendor labels stay in `daily/*.md`.
+- `daily_entries` — one row per (user, date), enforced by unique. Universal vitals (`sleep_h` + four sleep-stage minute buckets, `hrv_ms`, `rhr_bpm`, `spo2_avg_pct`, `respiration_avg_brpm`, `skin_temp_deviation_c`, `sleep_score`), body composition (`weight_kg`, `body_fat_pct`), movement totals (`steps`, `active_calories`, `floors_climbed`, `intensity_min_moderate`, `intensity_min_vigorous`), six 1–5 wellness scales (**5 = best, always, even for fatigue/soreness/stress**), and three free-text notes blocks (sleep, wellness, meals). Vendor-proprietary *composites* (Body Battery, Readiness, Recovery) stay out — they live in `daily/YYYY-MM-DD.md` documents.
+- `derived_daily` — one row per (user, date), **written only by the user's scheduled agent** via `log_derived_daily` (the app never computes it). `readiness_gate` (green/amber/red) + `gate_reason`, `illness_composite` + per-signal flags, `hrv_z`/`rhr_z`/`sleep_z`, `sleep_debt_7d_min`, `sleep_need_min`, `acute_load_7d`, `chronic_load_28d`, `days_to_race`, provenance. **Full-row replace** on write (opposite of `log_daily`'s merge) so a recompute never leaves stale flags. `/data`'s TodayHero renders the gate from this table with a freshness ladder.
+- `meals` — one row per meal. Supported but **optional** — only logged when the user actually tracks food; the dashboard surfaces nothing for meals. `eaten_at`, `meal_type`, required `description`, `calories` + macros required at the MCP boundary (estimate when no authoritative source), optional `fiber_g`. Day-level prose lives in `daily_entries.meal_notes`; dietary philosophy in `NUTRITION.md`.
+- `health_events` — injuries, illnesses, symptoms. `date`, `kind`, `body_part`, `severity`, `notes` (the stable summary), `resolved_date`, `next_milestone` + `next_milestone_date` (the checkpoint gating progression, e.g. an MRI date).
+- `health_event_updates` — dated thread updates on an event (`event_id`, `date`, `note`, `severity_at_time`). Replaces the old pattern of appending "STATUS …" blocks into `health_events.notes`.
+- `documents` — virtual filesystem for memory files, keyed by `(user_id, path)`. Content is text. Standard paths: `MEMORY.md`, `PROFILE.md`, `PRINCIPLES.md`, `GOALS.md`, `CURRENT.md`, `HEALTH_LOG.md`, `NUTRITION.md`, `EQUIPMENT.md`. Convention folders: `daily/`, `briefings/`, `recipes/`.
+- `installed_recipes` — per-user recipe run tracking (`recipe_id`, `last_run_at`, `last_run_status`, `run_count`), written by `mark_recipe_run`. Catalog *and* user-authored recipe ids both land here.
+- `oauth_clients`, `oauth_codes`, `oauth_tokens` — DCR clients, auth codes, and issued access/refresh tokens (hashed, with TTLs and revocation).
 
 Full DDL and RLS policies: `docs/schema.md`.
 
 ## MCP surface
 
-Full CRUD over every entity, plus a virtual filesystem for the memory layer. All tools authenticated via OAuth bearer token. RLS handles user scoping; tools never accept a `user_id` argument.
+~50 tools: full CRUD over every entity, computed/aggregate reads, recipe tracking, and a virtual filesystem for the memory layer. All authenticated via OAuth bearer token. RLS handles user scoping; tools never accept a `user_id` argument. One file per tool under `lib/mcp/tools/`; registered in `lib/mcp/server.ts`.
 
 Capture (insert / upsert):
-- `log_workout(date, type, ...)` → insert/upsert into `workouts`
-- `log_daily(date, ...partial)` → upsert into `daily_entries`; partial fields allowed (also the update path)
-- `log_meal(eaten_at, description, calories, protein_g, carbs_g, fat_g, ...)` → insert/upsert into `meals`; calories and macros required; idempotent via `(source, source_id)` for connector writes
-- `log_health_event(date, kind, body_part, ...)` → insert into `health_events`
-- `fs_write(path, content)` → upsert into `documents`
+- `log_workout(date, type, ..., metrics?)` → insert/upsert `workouts`; `type` normalized to the canonical vocabulary; optional nested `metrics` object upserts `workout_metrics`
+- `log_daily(date, ...partial)` → upsert `daily_entries`; partial merge (also the update path)
+- `log_meal(eaten_at, description, calories, macros, ...)` → insert/upsert `meals`
+- `log_health_event(date, kind, body_part, ...)` → insert `health_events`
+- `add_health_event_update(event_id, date, note, ...)` → append a dated thread update (replace-per-date for idempotency)
+- `log_derived_daily(date, readiness_gate, ...)` → **full-row replace** upsert into `derived_daily` (agents only)
+- `fs_write(path, content)` → upsert `documents`
+- `bulk_log_workouts` / `bulk_log_daily` / `bulk_log_meals` → up to 500 rows for connector backfills
 
-Update by id:
-- `update_workout(id, ...partial)` → patch fields on an existing workout
-- `update_meal(id, ...partial)` → patch fields on an existing meal (macros not required here, unlike `log_meal`)
-- `update_health_event(id, ...partial)` → patch fields; pass `resolved_date` to mark an event resolved (or `null` to re-open)
+Update / resolve by id: `update_workout`, `update_meal`, `update_health_event` (also sets `next_milestone*`; pass `resolved_date` to resolve), `resolve_health_event(id, note?)`.
 
-Delete:
-- `delete_workout(id)`, `delete_daily_entry(date)`, `delete_meal(id)`, `delete_health_event(id)`, `fs_delete(path)` → hard delete; throws if not found
-
-Filesystem ops:
-- `fs_move(from_path, to_path)` → atomic rename / relocate of a document
+Delete: `delete_workout`, `delete_daily_entry(date)`, `delete_meal`, `delete_health_event`, `fs_delete(path)`. Filesystem: `fs_move`.
 
 Read:
-- `fs_read(path)` / `fs_list(prefix?)` / `fs_search(query)` — virtual filesystem over `documents`. `fs_list` returns both files and derived folders (with file counts).
-- `get_recent(days, kinds=['workouts','daily','meals','health_events'])` — typed bundle (use this to find ids for update/delete)
-- `search_everything(query)` — text search across all entity tables + documents
+- `fs_read` / `fs_list(prefix?)` / `fs_search(query)` — virtual filesystem
+- `get_recent(days, kinds=['workouts','daily','meals','health_events','derived'])` — typed bundle
+- `get_workout` (joins `workout_metrics`), `get_daily`, `get_meal`, `get_health_event` (returns the thread), `list_*` range queries
+- `get_briefing(date?)` — reads `briefings/YYYY-MM-DD.md`
+- `search_everything(query)` — text search across entity tables + documents
 
-Onboarding:
-- `get_setup_guide()` → returns the usage guide for new MCP sessions
+Computed (deterministic statistics — allowed by the passive constraint; never judgments):
+- `get_baseline(metric, window_days)` / `get_stats(metric, from, to, agg)` — metric enums cover daily, `workout_*`, `workout_*` sensor, and `derived_*` columns
+- `get_streak(kind)`, `get_calendar(year, month)`, `compute_training_load(days)`
 
-There is no `update_daily_entry` — `log_daily` already serves as both create and update via the `(user, date)` upsert. Prefer `update_*` over `delete_*` when correcting bad data so history stays intact.
+Recipes: `list_recipes(include_install_state?)` (returns the catalog plus the caller's `recipes/` docs as `user_recipes`), `get_recipe_status`, `mark_recipe_run`, `list_connectors` (role-aware source status). Onboarding: `get_setup_guide()`.
+
+There is no `update_daily_entry` — `log_daily` is both create and update via the `(user, date)` upsert. Prefer `update_*` over `delete_*` when correcting data so history stays intact.
 
 Full spec: `docs/mcp-tools.md`.
 
@@ -159,19 +163,16 @@ Each template is markdown with embedded fill-in prompts so a new user knows what
 
 ## Recipe library
 
-`lib/agents/recipe-data.ts` exports a typed array of scheduled-agent recipes. Each recipe is `{ id, title, category, schedule, description, prompt, required_tools, required_connectors }`. The `/agents` page renders them as cards; users click *Install* → modal shows the full prompt + schedule with a copy button. They paste into Cowork's *New Scheduled Task* dialog.
+`lib/agents/recipe-data.ts` exports a typed array of scheduled-agent recipes: `{ id, title, category, schedule, description, prompt, required_tools, required_connectors, covers }`. `category` is one of `autopilot | capture | review | planning | connector`. The `/agents` page renders them as cards; users *Install* → copy the prompt + cron into Cowork's *New Scheduled Task* dialog.
 
-`required_connectors` lists external Claude connectors the recipe expects to find in Cowork (e.g. `["garmin"]`, `["strava"]`). Recipes that need none — pure BI recipes — leave the array empty.
+`/agents` has two layers. **Your agents** (top): the caller's own automation — recipe docs under `recipes/` in the virtual filesystem (parsed by `lib/agents/recipe-doc.ts`, optional YAML front-matter `title`/`schedule`/`covers`) merged with `installed_recipes` run history, plus any non-catalog recipe id tracked via `mark_recipe_run`. **Recipe library** (below): the catalog. A catalog card whose `covers` tags are fully covered by an active user recipe shows "covered by your <recipe>" instead of "not installed" — deterministic tag intersection, no server reasoning.
 
-Starter set (target eight):
-0. Onboarding — user-triggered once, walks first-time users through PROFILE / GOALS / PRINCIPLES (BI-only)
-1. Morning check-in — daily 7am local (BI-only)
-2. Evening reflection — daily 9pm local (BI-only)
-3. Weekly review — Sunday 6pm local (BI-only)
-4. Race countdown — daily during the 14 days before any race in `GOALS.md` (BI-only)
-5. Health-log audit — biweekly (BI-only)
-6. Garmin sync — Phase 2 (requires Garmin connector)
-7. Strava sync — Phase 2 (requires Strava connector)
+Catalog:
+- **Dawn agent** (flagship, `autopilot`, requires Garmin) — daily pass: sync yesterday → compute baselines + readiness gate (`log_derived_daily`) → update health threads (`add_health_event_update`) → write `briefings/YYYY-MM-DD.md`. Reads context from PROFILE/GOALS/PRINCIPLES rather than hardcoding it.
+- Onboarding (user-triggered once) — fills PROFILE / GOALS / PRINCIPLES
+- Morning check-in / Evening reflection (manual path for users without a wearable; the dawn agent supersedes them)
+- Weekly review (reads `derived` rows), Race countdown, Health-log audit
+- Garmin sync, Strava sync (sync-only; subsumed by the dawn agent)
 
 Full prompts: `docs/recipes.md`.
 
@@ -210,37 +211,17 @@ The first time a user adds the BI MCP URL to Cowork, Cowork's MCP client runs DC
 
 ## Build phases
 
-**Phase 1 — MVP (manual capture only).** Scaffolding, schema migrations, Supabase project, the eight MCP tools, OAuth AS + Supabase Auth integration, public signup with abuse hardening, four UI surfaces (marketing/login, /agents, /settings, /legal stubs), six seed recipes (onboarding + five capture/review), memory-file template seeding on user creation.
+**Phase 1 — MVP (manual capture).** Done. Schema + RLS, the MCP surface, OAuth AS + Supabase Auth, public signup, the marketing/login/`/data`/`/agents`/`/settings`/`/legal` surfaces, the recipe catalog, memory-template seeding.
 
-**Phase 2 — Connector recipes.** Garmin sync, Strava sync, and a nutrition-source sync (MyFitnessPal / Cronometer / Apple Health, whichever ships a Claude connector first) that orchestrate external connectors with BI's MCP. No code changes to BI itself; this is pure recipe authoring. Each recipe instructs Claude to read from a connector MCP and persist to BI via `log_workout` / `log_daily` / `log_meal`, using `source` + `source_id` for idempotency.
+**Phase 2 — Connector recipes.** Done as recipe authoring (Garmin sync, Strava sync). The user's dawn-agent supersedes the standalone sync recipes by also computing the derived layer and briefing.
 
-**Phase 3 — Quality of life.** Dashboard page, better recipe library (categories + search), mobile-first capture polish.
+**Phase 3 — Quality of life + intelligence layer.** In progress. The `/data` dashboard leads with a briefing-first **TodayHero** (renders the agent's readiness gate from `derived_daily`), active **health-event threads**, Timeline/Calendar/Trends views, a **briefings feed**, and the memory documents grid. Backed by the `derived_daily` / `workout_metrics` / `health_event_updates` tables and canonical workout types.
 
-## Status tracker
+## Working notes
 
-**Done:**
-- Architecture and schema locked (eight tables including `user_profiles` and `meals`)
-- Design docs written (this `CLAUDE.md` plus `docs/`)
-- Eight memory file templates drafted in `lib/memory/templates/`
-- Onboarding recipe spec written
-- `.claude/` project config seeded
-
-**Next (Phase 1 scaffold):**
-1. `pnpm create next-app body-intelligence --typescript --app --tailwind --eslint` (run inside the existing `body-intelligence/` folder; merge with what's there)
-2. Install runtime deps: `drizzle-orm`, `drizzle-zod`, `postgres`, `@supabase/ssr`, `@supabase/supabase-js`, `@modelcontextprotocol/sdk`, `zod`
-3. Install dev deps: `drizzle-kit`, `vitest`, `@types/node`, `@types/pg`
-4. Initialize shadcn-ui
-5. Create Supabase project (production + test). Configure Resend SMTP for Supabase Auth emails. Copy env vars into `.env.local`.
-6. Write `lib/db/schema.ts` (eight tables); `pnpm drizzle-kit generate` writes SQL to `supabase/migrations/`; commit + push triggers Supabase auto-apply
-7. Add RLS policies as a follow-up migration in `supabase/migrations/` (Drizzle doesn't manage RLS — write the SQL by hand)
-8. Add the signup-trigger function that seeds `user_profiles` + the eight `documents` rows from `lib/memory/templates/`
-9. Implement OAuth AS routes (`/api/oauth/*`)
-10. Stub `/api/mcp/route.ts` with one tool (`fs_read`) end-to-end, validating Bearer tokens against `oauth_tokens`
-11. **Spike: connect Cowork to the stub MCP and verify the OAuth + DCR handshake works.** Highest-risk step in the architecture — do it before building further. See `.claude/commands/spike-oauth.md`.
-12. Implement the remaining seven MCP tools
-13. Write `lib/agents/recipe-data.ts` with all six Phase-1 recipes (onboarding + five capture/review)
-14. Build the four UI surfaces: marketing landing + magic-link login (with Turnstile/hCaptcha), `/agents` (recipe library + install modal + `required_connectors` badges), `/settings` (Connected Applications + profile + Run-Onboarding button), and `/legal/{terms,privacy}` stubs
-15. Deploy to Vercel; rerun the OAuth spike against the deployed URL; sanity-check signup → templates seeded → onboarding recipe → first daily check-in flow end-to-end
+- **Migrations:** Drizzle (`lib/db/schema.ts`) is the source of truth → `pnpm drizzle-kit generate` → SQL in `supabase/migrations/`. RLS policies are hand-written follow-up SQL in the same migration (Drizzle doesn't manage RLS). The migrate workflow and the Vercel deploy race on push to `main`; keep new-table/column reads on `/data` tolerant of a not-yet-applied migration (`isMissingRelation` in `app/(app)/data/page.tsx`).
+- **The passive line (enforced):** the app computes statistics and renders Claude-authored judgments from `derived_daily`; it never authors a verdict. The dashboard's `TodayHero` shows signals only when no derived row exists — it does not invent a gate. UI-side z-score helpers (`lib/data-display/anomalies.ts`) are descriptive day-badges / fallback, never a competing verdict.
+- **Charts** are hand-rolled server-rendered SVG (`components/data/{sparkline,bar-stack,gate-strip}.tsx`) — no chart library, zero client JS. Markdown is `components/data/markdown.tsx` (react-markdown + remark-gfm).
 
 ## Pointers
 

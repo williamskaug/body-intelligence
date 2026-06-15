@@ -3,9 +3,17 @@
 Postgres schema for Body Intelligence. Drizzle is the source of truth — this document mirrors what `lib/db/schema.ts` will declare. RLS policies live alongside the tables in Drizzle migrations.
 
 > **Iteration 2 changes:**
-> - `meals.calories`, `protein_g`, `carbs_g`, `fat_g` are now **NOT NULL** (run `scripts/backfill-meal-macros.ts` before applying the migration on existing data).
+> - `meals.calories`, `protein_g`, `carbs_g`, `fat_g` are now **NOT NULL** (run `scripts/backfill-meal-macros.ts` before applying the migration on existing data). _Superseded by iteration 3 — nutrition is de-scoped; the NOT-NULL follow-up was abandoned and the columns stay nullable._
 > - New `installed_recipes` table mirrors Cowork-side recipe install + run state (see "Tables" below).
 > - `daily_entries` already carried the four `sleep_*_min` columns; iteration 2 added a setup-guide rule + `scripts/backfill-sleep-stages.ts` to ensure those columns are actually populated rather than dumped into `sleep_notes` prose.
+
+> **Iteration 3 — derived layer + threads (migrations `20260612144914_derived_layer` + `..._workout_type_backfill`):**
+> - **`derived_daily`** — agent-computed readiness gate, illness composite + per-signal flags, `hrv_z`/`rhr_z`/`sleep_z`, `sleep_debt_7d_min`, `sleep_need_min`, `acute_load_7d`, `chronic_load_28d`, `days_to_race`, provenance. One row per (user, date), unique. **Full-row replace** on write — BI never computes it; the user's scheduled agent does, via `log_derived_daily`.
+> - **`workout_metrics`** — optional 1:1 side table keyed by `workout_id` for running dynamics / TE / stamina / durability (`date` denormalized for range trends). Lap splits stay in `daily/*.md`.
+> - **`health_event_updates`** — dated thread updates (`event_id`, `date`, `note`, `severity_at_time`); `health_events` gained `next_milestone` + `next_milestone_date`. Replaces appending "STATUS …" blocks into `health_events.notes`.
+> - `daily_entries` gained `skin_temp_deviation_c` and `sleep_score` (cross-vendor vitals; Body Battery / Training Readiness stay in `daily/*.md`).
+> - `workouts.type` canonicalized via a one-time backfill; new writes normalize through `normalizeWorkoutType` (`lib/mcp/tools/shared.ts`). No CHECK constraint — unknown types pass through lowercased + snake_cased.
+> - RLS owner policies on all three new tables, in the same migration.
 
 ## Conventions
 

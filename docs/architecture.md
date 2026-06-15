@@ -18,6 +18,8 @@ The most important architectural decision is what BI deliberately does not do.
 
 By keeping BI passive, every new training principle the user discovers, every new piece of research, every conversation with a real coach becomes immediately usable — they update `PRINCIPLES.md` and the next Claude conversation reads it.
 
+**The compute-vs-author line.** The app *may* compute statistics (means, standard deviations, z-scores, date arithmetic, threshold comparisons against constants declared in code) and *may* display judgments authored by Claude (the readiness gate, gate reason, and briefing prose that the user's scheduled agent writes into `derived_daily` and `briefings/`). It may *never author* a judgment — no composite that weights multiple signals into a verdict, no "should you rest" semantics, no principle selection. So: `lib/data-display/anomalies.ts` computing "RHR 70 vs baseline 57±4" is allowed (descriptive statistic); a server function that picks which of the user's principles applies today and renders a confident conclusion is not — that is the app pretending to reason, and it was removed. The dashboard's `TodayHero` renders the agent's gate verbatim when a fresh `derived_daily` row exists and shows *signals only* (never a fabricated verdict) when it doesn't.
+
 ## Integrations are not BI's problem
 
 A second principle, downstream of the first: **BI does not ingest data from external services.** Garmin, Strava, Apple Health, Whoop, Oura — none of them are BI's responsibility to integrate with. Each is a separate Claude connector (its own MCP), and Claude composes them with BI at conversation time.
