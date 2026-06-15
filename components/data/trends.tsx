@@ -1,10 +1,10 @@
-import Link from "next/link";
+import { BarStack } from "@/components/data/bar-stack";
+import { GateStrip, type GateStripDay } from "@/components/data/gate-strip";
 import { Sparkline } from "@/components/data/sparkline";
 import {
   datesInRange,
   groupByDate,
-  macroTotals,
-  weeklyBuckets,
+  weekStart,
 } from "@/lib/data-display/aggregate";
 import {
   computeBaseline,
@@ -12,7 +12,12 @@ import {
   bandClass,
   type Baseline,
 } from "@/lib/data-display/baseline";
-import { chartColorForType } from "@/lib/data-display/workout-types";
+import { formatZ, type DerivedDailyRow } from "@/lib/data-display/derived";
+import {
+  chartColorForType,
+  displayNameForType,
+  normalizeType,
+} from "@/lib/data-display/workout-types";
 
 export type TrendsDaily = {
   date: string;
@@ -41,32 +46,44 @@ export type TrendsDaily = {
 };
 
 export type TrendsWorkout = {
+  /** Needed to join vendor metrics (workout_id) onto workouts. */
+  id: string;
   date: string;
   type: string;
   duration_min: number | null;
   rpe: number | null;
 };
 
-export type TrendsMeal = {
-  eaten_at: string;
-  calories: number | null;
-  protein_g: string | null;
-  carbs_g: string | null;
-  fat_g: string | null;
+export type TrendsWorkoutMetric = {
+  workout_id: string;
+  date: string;
+  cadence_spm: string | null;
+  gct_balance_pct_left: string | null;
+  vendor_training_load: string | null;
 };
 
-type Props = {
+export type TrendsProps = {
   daily: ReadonlyArray<TrendsDaily>;
   workouts: ReadonlyArray<TrendsWorkout>;
-  meals: ReadonlyArray<TrendsMeal>;
+  /** derived_daily rows for the window. Any order — indexed by date internally. */
+  derived: ReadonlyArray<DerivedDailyRow>;
+  /** Per-workout vendor metrics for the window. Any order — sorted by date internally. */
+  workoutMetrics: ReadonlyArray<TrendsWorkoutMetric>;
   startDate: string;
   endDate: string;
 };
 
-export function Trends({ daily, workouts, meals, startDate, endDate }: Props) {
+export function Trends({
+  daily,
+  workouts,
+  derived,
+  workoutMetrics,
+  startDate,
+  endDate,
+}: TrendsProps) {
   // Align daily to a contiguous date axis so gaps render as gaps in the line.
   const dates = datesInRange(startDate, endDate);
-  const dailyByDate = groupByDate(daily as Array<{ date: string } & TrendsDaily>);
+  const dailyByDate = groupByDate(daily);
 
   const series = {
     sleep_h: dates.map((d) => num(dailyByDate.get(d)?.[0]?.sleep_h)),
@@ -104,13 +121,56 @@ export function Trends({ daily, workouts, meals, startDate, endDate }: Props) {
     { key: "body_fat_pct", label: "Body fat", unit: "%", decimals: 1, higher: null },
   ] as const;
 
-  const totals = macroTotals(meals);
-  const weeks = weeklyBuckets(workouts as TrendsWorkout[], 12, endDate);
-  const typeCounts = countByType(workouts);
-  const distinctMealDays = new Set(meals.map((m) => m.eaten_at.slice(0, 10))).size;
+  // Derived layer — keyed by date; one row per (user, date).
+  const derivedByDate = new Map(derived.map((r) => [r.date, r] as const));
+  const gateDays: GateStripDay[] = dates.map((d) => ({
+    date: d,
+    gate: derivedByDate.get(d)?.readiness_gate ?? null,
+  }));
+  const gateSamples = gateDays.filter((d) => d.gate != null).length;
+
+  const sleepDebt = dates.map(
+    (d) => derivedByDate.get(d)?.sleep_debt_7d_min ?? null,
+  );
+  const sleepDebtSamples = sleepDebt.filter((v) => v != null).length;
+
+  const zRows = [
+    { label: "HRV z", values: dates.map((d) => num(derivedByDate.get(d)?.hrv_z)) },
+    { label: "RHR z", values: dates.map((d) => num(derivedByDate.get(d)?.rhr_z)) },
+    { label: "Sleep z", values: dates.map((d) => num(derivedByDate.get(d)?.sleep_z)) },
+  ].filter((r) => r.values.filter((v) => v != null).length >= 2);
+
+  // Per-workout vendor metrics — sparse series, one point per run, date order.
+  const metricsSorted = [...workoutMetrics].sort((a, b) =>
+    a.date.localeCompare(b.date),
+  );
+  const gctValues: number[] = [];
+  for (const m of metricsSorted) {
+    const left = num(m.gct_balance_pct_left);
+    if (left != null) gctValues.push(Math.abs(left - 50) * 2);
+  }
+  const cadenceValues: number[] = [];
+  for (const m of metricsSorted) {
+    const c = num(m.cadence_spm);
+    if (c != null) cadenceValues.push(c);
+  }
+
+  const vendorLoadByWorkout = new Map<string, number>();
+  for (const m of workoutMetrics) {
+    const load = num(m.vendor_training_load);
+    if (load != null && load > 0) vendorLoadByWorkout.set(m.workout_id, load);
+  }
+  const weeks = weeklyLoadBuckets(workouts, vendorLoadByWorkout, startDate, endDate);
+  const typeHours = hoursByCanonicalType(workouts);
+
+  const showRecovery = gateSamples >= 2 || sleepDebtSamples >= 2 || zRows.length > 0;
+  const showForm = gctValues.length >= 2 || cadenceValues.length >= 2;
 
   const anyData =
-    daily.length > 0 || workouts.length > 0 || meals.length > 0;
+    daily.length > 0 ||
+    workouts.length > 0 ||
+    derived.length > 0 ||
+    workoutMetrics.length > 0;
 
   if (!anyData) {
     return (
@@ -130,34 +190,28 @@ export function Trends({ daily, workouts, meals, startDate, endDate }: Props) {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {metrics
             .filter((m) => {
-              // Wellness has special "need at least 3 days" rules — the empty
-              // card takes its slot in the grid below. Other metrics still
-              // render if they have any data.
+              // Wellness needs a few composite days to be meaningful — below
+              // that threshold the card simply doesn't render.
               if (m.key === "wellness") {
-                return true;
+                return (
+                  series.wellness.filter((v) => v != null).length >=
+                  MIN_WELLNESS_DAYS
+                );
               }
               return series[m.key].some((v) => v != null);
             })
-            .map((m) => {
-              if (m.key === "wellness") {
-                const samples = series.wellness.filter((v) => v != null).length;
-                if (samples < MIN_WELLNESS_DAYS) {
-                  return <WellnessEmpty key={m.key} samples={samples} />;
-                }
-              }
-              return (
-                <MetricCard
-                  key={m.key}
-                  label={m.label}
-                  unit={m.unit}
-                  decimals={m.decimals}
-                  values={series[m.key]}
-                  baseline={baselines[m.key]}
-                  higherIsBetter={m.higher}
-                  latest={latestNonNull(series[m.key])}
-                />
-              );
-            })}
+            .map((m) => (
+              <MetricCard
+                key={m.key}
+                label={m.label}
+                unit={m.unit}
+                decimals={m.decimals}
+                values={series[m.key]}
+                baseline={baselines[m.key]}
+                higherIsBetter={m.higher}
+                latest={latestNonNull(series[m.key])}
+              />
+            ))}
         </div>
       </section>
 
@@ -166,42 +220,48 @@ export function Trends({ daily, workouts, meals, startDate, endDate }: Props) {
           Training load
         </h3>
         <div className="grid gap-3 lg:grid-cols-3">
-          <WeeklyVolumeCard weeks={weeks} />
-          <TypeDistributionCard counts={typeCounts} />
+          <WeeklyLoadCard weeks={weeks} />
+          <TypeDistributionCard
+            entries={typeHours.entries}
+            totalHours={typeHours.totalHours}
+          />
           <ConsistencyCard daily={daily} dates={dates} />
         </div>
       </section>
 
-      <section>
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Nutrition
-        </h3>
-        <MacroCard totals={totals} dayCount={distinctMealDays} />
-      </section>
-    </div>
-  );
-}
+      {showRecovery ? (
+        <section>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Readiness &amp; recovery
+          </h3>
+          <div className="grid gap-3 lg:grid-cols-3">
+            {gateSamples >= 2 ? <GateHistoryCard days={gateDays} /> : null}
+            {sleepDebtSamples >= 2 ? (
+              <SleepDebtCard
+                values={sleepDebt}
+                latest={latestNonNull(sleepDebt)}
+              />
+            ) : null}
+            {zRows.length > 0 ? <ReadinessFactorsCard rows={zRows} /> : null}
+          </div>
+        </section>
+      ) : null}
 
-function WellnessEmpty({ samples }: { samples: number }) {
-  return (
-    <div className="rounded-xl border border-dashed bg-muted/20 p-4 shadow-sm">
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Wellness avg
-        </span>
-        <span className="text-[10px] text-muted-foreground">
-          {samples === 0 ? "no data" : `${samples} day${samples === 1 ? "" : "s"}`}
-        </span>
-      </div>
-      <p className="mt-2 text-sm text-foreground/80">
-        Daily wellness scales not yet logged on ≥3 days with ≥3 fields each.
-      </p>
-      <Link
-        href="/agents?id=morning-checkin"
-        className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-foreground underline-offset-2 hover:underline"
-      >
-        Install morning check-in →
-      </Link>
+      {showForm ? (
+        <section>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Running form
+          </h3>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {gctValues.length >= 2 ? (
+              <GctAsymmetryCard values={gctValues} />
+            ) : null}
+            {cadenceValues.length >= 2 ? (
+              <CadenceCard values={cadenceValues} />
+            ) : null}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }
@@ -270,72 +330,144 @@ function MetricCard({
   );
 }
 
-function WeeklyVolumeCard({
-  weeks,
-}: {
-  weeks: ReadonlyArray<{ weekStart: string; totalMin: number; trimp: number }>;
-}) {
-  const maxLoad = Math.max(1, ...weeks.map((w) => w.trimp));
+type WeekLoad = {
+  weekStart: string;
+  totalMin: number;
+  /** Canonical type → intensity-weighted load for the week. */
+  loadByType: Map<string, number>;
+};
+
+// Contiguous ISO weeks (Monday starts) covering [startDate, endDate]. Per
+// workout, load = vendor_training_load when the connector provided one, else
+// duration_min × (rpe ?? 5) — the TRIMP-lite fallback.
+function weeklyLoadBuckets(
+  workouts: ReadonlyArray<TrendsWorkout>,
+  vendorLoadByWorkout: ReadonlyMap<string, number>,
+  startDate: string,
+  endDate: string,
+): WeekLoad[] {
+  const buckets: WeekLoad[] = [];
+  const cursor = new Date(`${weekStart(startDate)}T00:00:00Z`);
+  const last = new Date(`${weekStart(endDate)}T00:00:00Z`);
+  while (cursor <= last) {
+    buckets.push({
+      weekStart: cursor.toISOString().slice(0, 10),
+      totalMin: 0,
+      loadByType: new Map(),
+    });
+    cursor.setUTCDate(cursor.getUTCDate() + 7);
+  }
+  const byWeek = new Map(buckets.map((b) => [b.weekStart, b] as const));
+  for (const w of workouts) {
+    const bucket = byWeek.get(weekStart(w.date));
+    if (!bucket) continue;
+    bucket.totalMin += w.duration_min ?? 0;
+    const load =
+      vendorLoadByWorkout.get(w.id) ?? (w.duration_min ?? 0) * (w.rpe ?? 5);
+    if (load <= 0) continue;
+    const key = normalizeType(w.type);
+    bucket.loadByType.set(key, (bucket.loadByType.get(key) ?? 0) + load);
+  }
+  return buckets;
+}
+
+function WeeklyLoadCard({ weeks }: { weeks: ReadonlyArray<WeekLoad> }) {
   const totalMin = weeks.reduce((a, w) => a + w.totalMin, 0);
   const avgMinPerWeek = weeks.length > 0 ? totalMin / weeks.length : 0;
-  const hasData = weeks.some((w) => w.totalMin > 0);
+  const hasData = weeks.some((w) => w.totalMin > 0 || w.loadByType.size > 0);
+
+  // Stable stack order: types by total load across the window, descending.
+  const typeTotals = new Map<string, number>();
+  for (const w of weeks) {
+    for (const [t, v] of w.loadByType) {
+      typeTotals.set(t, (typeTotals.get(t) ?? 0) + v);
+    }
+  }
+  const typeOrder = Array.from(typeTotals.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([t]) => t);
+
+  const data = weeks.map((w) => ({
+    x: w.weekStart,
+    segments: typeOrder
+      .map((t) => ({
+        key: displayNameForType(t),
+        value: w.loadByType.get(t) ?? 0,
+        color: chartColorForType(t),
+      }))
+      .filter((s) => s.value > 0),
+  }));
+
   return (
     <div className="rounded-xl border bg-card p-4 shadow-sm">
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           Weekly load
         </span>
-        <span className="text-[10px] text-muted-foreground">last 12 wk</span>
+        <span className="text-[10px] text-muted-foreground">{weeks.length} wk</span>
       </div>
       <div className="mt-1 flex items-baseline gap-1">
         <span className="font-mono text-2xl tabular-nums">
-          {hasData ? Math.round(avgMinPerWeek) : "—"}
+          {hasData ? `~${Math.round(avgMinPerWeek)}` : "—"}
         </span>
-        <span className="text-xs text-muted-foreground">min / wk avg</span>
+        <span className="text-xs text-muted-foreground">
+          min / wk avg · bars show load
+        </span>
       </div>
-      <div
-        className="mt-3 flex h-14 items-end gap-1"
-        role="img"
-        aria-label="Weekly training load, last 12 weeks"
-      >
-        {weeks.map((w) => {
-          const h = w.trimp === 0 ? 0 : Math.max(2, (w.trimp / maxLoad) * 56);
-          return (
-            <div
-              key={w.weekStart}
-              className="flex-1 rounded-sm bg-foreground/80"
-              style={{ height: `${h}px` }}
-              title={`Week of ${w.weekStart}: ${Math.round(w.totalMin)} min · TRIMP ${Math.round(w.trimp)}`}
-            />
-          );
-        })}
+      <div className="mt-3">
+        <BarStack
+          data={data}
+          height={56}
+          ariaLabel={`Weekly training load by type, ${weeks.length} weeks`}
+        />
       </div>
       <div className="mt-2 flex justify-between text-[10px] text-muted-foreground">
         <span>{weeks[0]?.weekStart ?? ""}</span>
         <span>now</span>
       </div>
+      {typeOrder.length > 0 ? (
+        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+          {typeOrder.slice(0, 4).map((t) => (
+            <span key={t} className="flex items-center gap-1">
+              <span
+                className="h-1.5 w-1.5 rounded-full"
+                style={{ backgroundColor: chartColorForType(t) }}
+              />
+              {displayNameForType(t)}
+            </span>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function TypeDistributionCard({ counts }: { counts: Record<string, number> }) {
-  const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  const total = entries.reduce((a, [, n]) => a + n, 0);
-  if (total === 0) {
+function TypeDistributionCard({
+  entries,
+  totalHours,
+}: {
+  entries: ReadonlyArray<{ type: string; hours: number }>;
+  totalHours: number;
+}) {
+  if (totalHours <= 0) {
     return (
       <div className="rounded-xl border bg-card p-4 shadow-sm">
         <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           Workout types
         </span>
-        <div className="mt-4 text-sm text-muted-foreground">No workouts yet.</div>
+        <div className="mt-4 text-sm text-muted-foreground">No workout hours yet.</div>
       </div>
     );
   }
   const r = 28;
   const c = 2 * Math.PI * r;
   const segments = buildSegments(
-    entries.map(([type, n]) => ({ key: type, value: n, color: chartColorForType(type) })),
-    total,
+    entries.map((e) => ({
+      key: e.type,
+      value: e.hours,
+      color: chartColorForType(e.type),
+    })),
+    totalHours,
     c,
   );
   return (
@@ -344,10 +476,12 @@ function TypeDistributionCard({ counts }: { counts: Record<string, number> }) {
         <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           Workout types
         </span>
-        <span className="text-[10px] text-muted-foreground">{total} total</span>
+        <span className="text-[10px] text-muted-foreground">
+          {totalHours.toFixed(1)} h total
+        </span>
       </div>
       <div className="mt-3 flex items-center gap-4">
-        <svg viewBox="0 0 80 80" width={80} height={80} role="img" aria-label="Workout type distribution">
+        <svg viewBox="0 0 80 80" width={80} height={80} role="img" aria-label="Workout hours by type">
           <circle cx={40} cy={40} r={r} fill="none" stroke="currentColor" strokeOpacity={0.08} strokeWidth={14} />
           {segments.map((s) => (
             <circle
@@ -365,16 +499,18 @@ function TypeDistributionCard({ counts }: { counts: Record<string, number> }) {
           ))}
         </svg>
         <ul className="flex-1 space-y-1 text-xs">
-          {entries.slice(0, 6).map(([type, n]) => (
-            <li key={type} className="flex items-center justify-between gap-2">
+          {entries.slice(0, 6).map((e) => (
+            <li key={e.type} className="flex items-center justify-between gap-2">
               <span className="flex items-center gap-2">
                 <span
                   className="h-2 w-2 rounded-full"
-                  style={{ backgroundColor: chartColorForType(type) }}
+                  style={{ backgroundColor: chartColorForType(e.type) }}
                 />
-                <span>{type}</span>
+                <span>{displayNameForType(e.type)}</span>
               </span>
-              <span className="font-mono tabular-nums text-muted-foreground">{n}</span>
+              <span className="font-mono tabular-nums text-muted-foreground">
+                {e.hours.toFixed(1)} h
+              </span>
             </li>
           ))}
           {entries.length > 6 ? (
@@ -434,121 +570,163 @@ function ConsistencyCard({
   );
 }
 
-function MacroCard({
-  totals,
-  dayCount,
-}: {
-  totals: ReturnType<typeof macroTotals>;
-  dayCount: number;
-}) {
-  const sumMacroG = totals.protein_g + totals.carbs_g + totals.fat_g;
-  const slices: Array<{ label: string; grams: number; color: string }> = [
-    { label: "Protein", grams: totals.protein_g, color: "hsl(15 80% 55%)" },
-    { label: "Carbs", grams: totals.carbs_g, color: "hsl(45 85% 55%)" },
-    { label: "Fat", grams: totals.fat_g, color: "hsl(190 70% 50%)" },
-  ];
-  const totalMeals = totals.mealsWithMacros + totals.mealsDescriptionOnly;
-  const avgKcal = dayCount > 0 ? totals.calories / dayCount : 0;
-  // Only render a kcal average when the sample is large enough that the number
-  // is meaningful. One logged day of one logged meal is not a 30-day average.
-  const showAvgKcal =
-    dayCount >= MIN_MACRO_DAYS && totals.mealsWithMacros >= MIN_MACRO_MEALS;
-
+function GateHistoryCard({ days }: { days: ReadonlyArray<GateStripDay> }) {
+  const counts = { green: 0, amber: 0, red: 0 };
+  for (const d of days) {
+    if (d.gate) counts[d.gate] += 1;
+  }
   return (
-    <div className="grid gap-3 lg:grid-cols-3">
-      <div className="rounded-xl border bg-card p-4 shadow-sm">
+    <div className="rounded-xl border bg-card p-4 shadow-sm">
+      <div className="flex items-baseline justify-between gap-2">
         <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Avg kcal / logged day
+          Gate history
         </span>
-        <div className="mt-1 flex items-baseline gap-1">
-          <span className="font-mono text-2xl tabular-nums">
-            {showAvgKcal ? Math.round(avgKcal) : "—"}
-          </span>
-          <span className="text-xs text-muted-foreground">kcal</span>
-        </div>
-        <div className="mt-3 text-xs text-muted-foreground">
-          {totalMeals === 0
-            ? "No meals logged."
-            : showAvgKcal
-              ? `${totalMeals} meal${totalMeals === 1 ? "" : "s"} on ${dayCount} day${dayCount === 1 ? "" : "s"} · ${totals.mealsWithMacros} with macros`
-              : `Need ≥${MIN_MACRO_DAYS} days with ≥${MIN_MACRO_MEALS} macro-logged meals (have ${dayCount}d / ${totals.mealsWithMacros}m).`}
-        </div>
+        <span className="text-[10px] text-muted-foreground">{days.length} d</span>
       </div>
-
-      <div className="rounded-xl border bg-card p-4 shadow-sm lg:col-span-2">
-        <div className="flex items-baseline justify-between gap-2">
-          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Macro split
-          </span>
-          <span className="text-[10px] text-muted-foreground">
-            of {Math.round(sumMacroG)} g logged
-          </span>
-        </div>
-        {sumMacroG === 0 ? (
-          <div className="mt-4 text-sm text-muted-foreground">
-            No macro data logged in this window.
-          </div>
-        ) : (
-          <div className="mt-3 flex items-center gap-4">
-            <MacroPie slices={slices} total={sumMacroG} />
-            <ul className="flex-1 space-y-1 text-xs">
-              {slices.map((s) => {
-                const pct = sumMacroG > 0 ? (s.grams / sumMacroG) * 100 : 0;
-                return (
-                  <li key={s.label} className="flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-2">
-                      <span
-                        className="h-2 w-2 rounded-full"
-                        style={{ backgroundColor: s.color }}
-                      />
-                      <span>{s.label}</span>
-                    </span>
-                    <span className="font-mono tabular-nums text-muted-foreground">
-                      {Math.round(s.grams)} g · {pct.toFixed(0)}%
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        )}
+      <div className="mt-3">
+        <GateStrip days={days} size="md" />
+      </div>
+      <div className="mt-2 text-[10px] text-muted-foreground">
+        {counts.green} G · {counts.amber} A · {counts.red} R
       </div>
     </div>
   );
 }
 
-function MacroPie({
-  slices,
-  total,
+function SleepDebtCard({
+  values,
+  latest,
 }: {
-  slices: ReadonlyArray<{ label: string; grams: number; color: string }>;
-  total: number;
+  values: ReadonlyArray<number | null>;
+  latest: number | null;
 }) {
-  const r = 28;
-  const c = 2 * Math.PI * r;
-  const segments = buildSegments(
-    slices.map((s) => ({ key: s.label, value: s.grams, color: s.color })),
-    total,
-    c,
-  );
   return (
-    <svg viewBox="0 0 80 80" width={80} height={80} role="img" aria-label="Macro split">
-      <circle cx={40} cy={40} r={r} fill="none" stroke="currentColor" strokeOpacity={0.08} strokeWidth={14} />
-      {segments.map((s) => (
-        <circle
-          key={s.key}
-          cx={40}
-          cy={40}
-          r={r}
-          fill="none"
-          stroke={s.color}
-          strokeWidth={14}
-          strokeDasharray={`${s.len} ${c - s.len}`}
-          strokeDashoffset={-s.offset}
-          transform="rotate(-90 40 40)"
+    <div className="rounded-xl border bg-card p-4 shadow-sm">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Sleep debt
+        </span>
+        <span className="text-[10px] text-muted-foreground">7-d rolling</span>
+      </div>
+      <div className="mt-1 flex items-baseline gap-1">
+        <span className="font-mono text-2xl tabular-nums">
+          {latest != null ? Math.round(latest) : "—"}
+        </span>
+        <span className="text-xs text-muted-foreground">min</span>
+      </div>
+      <div className="mt-3 text-foreground/80">
+        <Sparkline
+          values={values}
+          width={260}
+          height={56}
+          fillArea
+          refLines={[{ y: 180, label: "180m", tone: "warn" }]}
+          ariaLabel="7-day rolling sleep debt"
         />
-      ))}
-    </svg>
+      </div>
+    </div>
+  );
+}
+
+function ReadinessFactorsCard({
+  rows,
+}: {
+  rows: ReadonlyArray<{ label: string; values: ReadonlyArray<number | null> }>;
+}) {
+  return (
+    <div className="rounded-xl border bg-card p-4 shadow-sm">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Readiness factors
+        </span>
+        <span className="text-[10px] text-muted-foreground">z-scores</span>
+      </div>
+      <div className="mt-3 space-y-2">
+        {rows.map((r) => (
+          <div key={r.label}>
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                {r.label}
+              </span>
+              <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+                {formatZ(latestNonNull(r.values)) ?? "—"}
+              </span>
+            </div>
+            <div className="text-foreground/80">
+              <Sparkline
+                values={r.values}
+                width={260}
+                height={28}
+                yDomain={[-3, 3]}
+                refLines={[{ y: 0 }]}
+                ariaLabel={`${r.label} trend`}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function GctAsymmetryCard({ values }: { values: ReadonlyArray<number> }) {
+  const latest = latestNonNull(values);
+  const yMax = Math.max(6, Math.max(...values) + 1);
+  return (
+    <div className="rounded-xl border bg-card p-4 shadow-sm">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          GCT asymmetry
+        </span>
+        <span className="text-[10px] text-muted-foreground">
+          injury watch · {values.length} runs
+        </span>
+      </div>
+      <div className="mt-1 flex items-baseline gap-1">
+        <span className="font-mono text-2xl tabular-nums">
+          {latest != null ? latest.toFixed(1) : "—"}
+        </span>
+        <span className="text-xs text-muted-foreground">%</span>
+      </div>
+      <div className="mt-3 text-foreground/80">
+        <Sparkline
+          values={values}
+          width={260}
+          height={56}
+          yDomain={[0, yMax]}
+          refLines={[{ y: 5, label: "5%", tone: "warn" }]}
+          ariaLabel="Ground-contact-time asymmetry per run"
+        />
+      </div>
+    </div>
+  );
+}
+
+function CadenceCard({ values }: { values: ReadonlyArray<number> }) {
+  const latest = latestNonNull(values);
+  return (
+    <div className="rounded-xl border bg-card p-4 shadow-sm">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Cadence
+        </span>
+        <span className="text-[10px] text-muted-foreground">{values.length} runs</span>
+      </div>
+      <div className="mt-1 flex items-baseline gap-1">
+        <span className="font-mono text-2xl tabular-nums">
+          {latest != null ? Math.round(latest) : "—"}
+        </span>
+        <span className="text-xs text-muted-foreground">spm</span>
+      </div>
+      <div className="mt-3 text-foreground/80">
+        <Sparkline
+          values={values}
+          width={260}
+          height={56}
+          ariaLabel="Running cadence per run"
+        />
+      </div>
+    </div>
   );
 }
 
@@ -574,9 +752,6 @@ function buildSegments(
 const MIN_SCALES_PER_DAY = 3;
 // And we need at least 3 such days before showing a wellness trend at all.
 const MIN_WELLNESS_DAYS = 3;
-// Same idea for nutrition — one logged meal-day isn't an average.
-const MIN_MACRO_DAYS = 3;
-const MIN_MACRO_MEALS = 3;
 
 function wellnessComposite(d: TrendsDaily | undefined): number | null {
   if (!d) return null;
@@ -586,13 +761,25 @@ function wellnessComposite(d: TrendsDaily | undefined): number | null {
   return xs.reduce((a, b) => a + b, 0) / xs.length;
 }
 
-function countByType(workouts: ReadonlyArray<TrendsWorkout>): Record<string, number> {
-  const out: Record<string, number> = {};
+// Hours per canonical workout type, consolidated through normalizeType so
+// "run" and "running" merge. Sorted descending by hours.
+function hoursByCanonicalType(workouts: ReadonlyArray<TrendsWorkout>): {
+  entries: Array<{ type: string; hours: number }>;
+  totalHours: number;
+} {
+  const map = new Map<string, number>();
+  let totalMin = 0;
   for (const w of workouts) {
-    const k = w.type.trim().toLowerCase() || "other";
-    out[k] = (out[k] ?? 0) + 1;
+    const min = w.duration_min ?? 0;
+    if (min <= 0) continue;
+    const key = normalizeType(w.type);
+    map.set(key, (map.get(key) ?? 0) + min);
+    totalMin += min;
   }
-  return out;
+  const entries = Array.from(map.entries())
+    .map(([type, min]) => ({ type, hours: min / 60 }))
+    .sort((a, b) => b.hours - a.hours);
+  return { entries, totalHours: totalMin / 60 };
 }
 
 function num(s: string | null | undefined): number | null {

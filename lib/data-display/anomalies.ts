@@ -18,7 +18,9 @@ export type AnomalyKind =
 export type Anomaly = {
   kind: AnomalyKind;
   date: string;
-  severity: "low" | "medium" | "high";
+  // "info" = noteworthy but not a warning (e.g. long recovery sleep) —
+  // renders neutral, never amber/red.
+  severity: "info" | "low" | "medium" | "high";
   message: string;
   // The math behind the call, for tooltips and recipe reasoning.
   evidence: {
@@ -118,11 +120,12 @@ export function detectAnomalies(
     if (sleep != null && sleepBase) {
       const delta = sleep - sleepBase.mean;
       if (sleepBase.sd > 0 && delta > sleepBase.sd * 1.5) {
+        // Long sleep is recovery, not a problem — info tone, never a warning.
         out.push({
           kind: "sleep_long",
           date: d.date,
-          severity: severityFromDelta(delta, sleepBase.sd),
-          message: `Sleep ${sleep.toFixed(1)}h vs baseline ${sleepBase.mean.toFixed(1)}±${sleepBase.sd.toFixed(1)}`,
+          severity: "info",
+          message: `Long sleep ${sleep.toFixed(1)}h vs baseline ${sleepBase.mean.toFixed(1)}±${sleepBase.sd.toFixed(1)}`,
           evidence: {
             metric: "sleep_h",
             value: sleep,
@@ -226,8 +229,23 @@ export function groupAnomaliesByDate(
   return out;
 }
 
-// Helper for the "What's worth your attention" panel: pick the top N anomalies
-// ranked by (severity, recency).
+// Attention surfaces must never resurface weeks-old flags (a 39-day-old RHR
+// spike from a resolved illness is history, not attention). Per-day badges
+// keep the full window; anything panel-like filters through this first.
+export function recentAnomalies(
+  anomalies: ReadonlyArray<Anomaly>,
+  todayDate: string,
+  withinDays = 3,
+): Anomaly[] {
+  const cutoff = Date.parse(todayDate) - withinDays * 86_400_000;
+  return anomalies.filter(
+    (a) => a.severity !== "info" && Date.parse(a.date) >= cutoff,
+  );
+}
+
+// Helper for attention-type surfaces: pick the top N anomalies ranked by
+// (severity, recency). "info" items are excluded — they're day-badge color,
+// not attention.
 export function topAnomalies(
   anomalies: ReadonlyArray<Anomaly>,
   n = 5,
@@ -237,7 +255,10 @@ export function topAnomalies(
     // Newer dates come first; date string lex sort works for ISO.
     return sev * 10_000 + new Date(a.date).getTime() / 86_400_000;
   };
-  return [...anomalies].sort((a, b) => score(b) - score(a)).slice(0, n);
+  return [...anomalies]
+    .filter((a) => a.severity !== "info")
+    .sort((a, b) => score(b) - score(a))
+    .slice(0, n);
 }
 
 export type { Baseline };

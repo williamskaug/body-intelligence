@@ -1,6 +1,12 @@
 import { movingAverage } from "@/lib/data-display/aggregate";
 import type { Baseline } from "@/lib/data-display/baseline";
 
+export type RefLine = {
+  y: number;
+  label?: string;
+  tone?: "neutral" | "warn";
+};
+
 export type SparklineProps = {
   values: ReadonlyArray<number | null>;
   baseline?: Baseline | null;
@@ -9,6 +15,12 @@ export type SparklineProps = {
   // Color of the moving-average line / dots. Default uses primary.
   stroke?: string;
   ariaLabel?: string;
+  /** Horizontal reference lines (thresholds, zero-lines). */
+  refLines?: ReadonlyArray<RefLine>;
+  /** Fixed y-domain (e.g. [1, 5] for severity). Defaults to data-driven. */
+  yDomain?: readonly [number, number];
+  /** Fill the area between the MA line and the bottom (sleep-debt style). */
+  fillArea?: boolean;
 };
 
 // Pure server-rendered SVG sparkline:
@@ -22,6 +34,9 @@ export function Sparkline({
   height = 56,
   stroke = "currentColor",
   ariaLabel,
+  refLines,
+  yDomain,
+  fillArea = false,
 }: SparklineProps) {
   const pad = 4;
   const innerW = width - pad * 2;
@@ -58,13 +73,21 @@ export function Sparkline({
 
   let yMin: number;
   let yMax: number;
-  if (baseline) {
+  if (yDomain) {
+    [yMin, yMax] = yDomain;
+  } else if (baseline) {
     const span = Math.max(baseline.sd * 2.2, (Math.max(...all) - Math.min(...all)) * 0.6, 0.5);
     yMin = Math.min(Math.min(...all), baseline.mean - span);
     yMax = Math.max(Math.max(...all), baseline.mean + span);
   } else {
     yMin = Math.min(...all);
     yMax = Math.max(...all);
+  }
+  if (refLines) {
+    for (const r of refLines) {
+      yMin = Math.min(yMin, r.y);
+      yMax = Math.max(yMax, r.y);
+    }
   }
   if (yMin === yMax) {
     yMin -= 0.5;
@@ -113,6 +136,39 @@ export function Sparkline({
           opacity={0.35}
         />
       ) : null}
+      {refLines?.map((r, i) => (
+        <g key={`ref-${i}`}>
+          <line
+            x1={pad}
+            x2={width - pad}
+            y1={y(r.y)}
+            y2={y(r.y)}
+            stroke={r.tone === "warn" ? "hsl(35 90% 50%)" : stroke}
+            strokeWidth={1}
+            strokeDasharray="3 3"
+            opacity={r.tone === "warn" ? 0.55 : 0.3}
+          />
+          {r.label ? (
+            <text
+              x={width - pad}
+              y={y(r.y) - 2}
+              textAnchor="end"
+              fontSize={7}
+              fill={r.tone === "warn" ? "hsl(35 90% 45%)" : stroke}
+              opacity={0.7}
+            >
+              {r.label}
+            </text>
+          ) : null}
+        </g>
+      ))}
+      {fillArea && linePath ? (
+        <path
+          d={`${linePath} L ${x(lastFiniteIndex(ma))} ${height - pad} L ${x(firstFiniteIndex(ma))} ${height - pad} Z`}
+          fill={stroke}
+          opacity={0.1}
+        />
+      ) : null}
       {values.map((v, i) =>
         v != null && Number.isFinite(v) ? (
           <circle
@@ -137,6 +193,22 @@ export function Sparkline({
       ) : null}
     </svg>
   );
+}
+
+function firstFiniteIndex(values: ReadonlyArray<number | null>): number {
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i];
+    if (v != null && Number.isFinite(v)) return i;
+  }
+  return 0;
+}
+
+function lastFiniteIndex(values: ReadonlyArray<number | null>): number {
+  for (let i = values.length - 1; i >= 0; i--) {
+    const v = values[i];
+    if (v != null && Number.isFinite(v)) return i;
+  }
+  return values.length - 1;
 }
 
 function buildPath(
