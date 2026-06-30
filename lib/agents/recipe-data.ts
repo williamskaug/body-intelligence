@@ -77,6 +77,7 @@ Call get_setup_guide once at the start so field conventions are fresh.
 **Phase 3 — derived layer.** Compute against the user's own history, not population norms:
 - get_baseline(metric, window_days=30) for hrv_ms, rhr_bpm, sleep_h → z = (today − mean) / stdev.
 - Sleep debt: trailing-7-day sum of max(0, sleep_need − sleep_h×60); use the vendor sleep need if available, else 450 min.
+- Training load: call get_load_balance(days=90) → current.atl → acute_load_7d, current.ctl → chronic_load_28d (deterministic CTL/ATL — the gate decision below is still yours, not the load tool's).
 - Illness composite: RED if ≥2 of {skin_temp_deviation_c ≥ +0.5, rhr_z ≥ +1, hrv_z ≤ −1, respiration elevated}; AMBER if exactly 1; GREEN otherwise.
 - Readiness gate (the user's PRINCIPLES.md rules win; defaults): GREEN composite + hrv_z ≥ −0.5 + sleep debt < 180 + no acute thread → quality allowed. AMBER, or hrv_z in [−1, −0.5), or sleep debt 180–300 → easy/Z2 only. RED, or hrv_z < −1, or active acute thread, or sleep debt > 300 → rest.
 - Write it: log_derived_daily(date=DATE_T, readiness_gate, gate_reason, illness_composite, the four signal flags, hrv_z, rhr_z, sleep_z, sleep_debt_7d_min, sleep_need_min, acute_load_7d, chronic_load_28d, days_to_race if GOALS.md has a race, computed_by="dawn-agent"). Full-row replace — pass everything you computed each run. Optionally refresh BASELINES.md as the narrative substrate.
@@ -386,6 +387,47 @@ Based on their replies: resolve_health_event(id, note=<what cleared it / lessons
 If there are no active events, send a one-liner ("Health log clear, nothing to audit") and exit.
 
 After everything else, call mark_recipe_run(recipe_id="health-log-audit", status="ok").`,
+  },
+  {
+    id: "insights",
+    title: "Insights scan",
+    category: "review",
+    schedule: "0 19 * * 0",
+    description:
+      "Weekly statistical scan: reads the deterministic stats engine (correlations, trends, CTL/ATL/TSB, distributions) and writes a plain-language interpretation to insights/YYYY-Www.md — the 'what to optimize' reasoning the app deliberately never does itself.",
+    required_tools: [
+      "get_setup_guide",
+      "get_recipe_status",
+      "get_correlation_matrix",
+      "get_correlation",
+      "get_trend",
+      "get_load_balance",
+      "get_distribution",
+      "get_metric_series",
+      "fs_read",
+      "fs_write",
+      "mark_recipe_run",
+    ],
+    required_connectors: [],
+    covers: ["insights:weekly"],
+    prompt: `Run the weekly insights scan. BI computes the statistics; YOU do the reasoning the app never does — what's moving, what relates to what, what to optimize. Write it to insights/YYYY-Www.md.
+
+Call get_setup_guide once. Set WEEK = the current ISO week (e.g. 2026-W27) and a 90-day window.
+
+**Phase 0 — guard.** get_recipe_status("insights"); if it ran ok in the last 5 days, stop unless re-invoked.
+
+**Phase 1 — context.** fs_read PRINCIPLES.md (the rules you reason against), GOALS.md (what the user is optimizing for), CURRENT.md (active block).
+
+**Phase 2 — read the stats engine** (all deterministic — these return numbers, never verdicts):
+- get_load_balance(days=90) → CTL/ATL/TSB trajectory and current form.
+- get_correlation_matrix(metrics=[hrv_ms, rhr_bpm, sleep_h, derived_sleep_debt_7d_min, derived_acute_load_7d, soreness, weight_kg], window_days=90) → the relationships that are real for THIS athlete.
+- get_trend(metric, window_days=90) for the metrics that matter to GOALS.md (e.g. capacity_vo2max_running, weight_kg, hrv_ms, workout_cadence_spm).
+- get_distribution(metric, window_days=90) for any metric whose spread you want to characterize.
+- get_correlation(a, b, lag_days=1) to probe specific dose→response ideas (e.g. acute load → next-day HRV).
+
+**Phase 3 — interpret and write insights/WEEK.md.** This is the judgment layer the app omits. Cover: (1) the single biggest signal this week, (2) 2–4 relationships worth acting on (with the r and n, and a caveat that correlation isn't causation), (3) load/form read from CTL/ATL/TSB against the user's PRINCIPLES.md, (4) one concrete thing to optimize next, (5) what the data can't yet say (low n, missing capture). Keep it scannable; cite the numbers. fs_read insights/WEEK.md first if it exists; full-document replace.
+
+**Phase 4 — close.** Send the user the top takeaway as a short message. mark_recipe_run(recipe_id="insights", status="ok") — or "failed" with a short error.`,
   },
 ];
 

@@ -252,6 +252,31 @@ Once `auth.uid()` is set, all subsequent Drizzle queries are automatically scope
 
 ## Document seeding on signup
 
-A Postgres trigger on `auth.users` insert calls a function that inserts the eight standard documents from `lib/memory/templates/`. Templates are read at app startup and cached. The trigger writes them with the new user's `user_id` and the standard path.
+A Postgres trigger on `auth.users` insert calls a function that inserts the ten standard documents from `lib/memory/templates/` (the original eight plus `THRESHOLDS.md` and `RECORDS.md`). Templates are read at app startup and cached. The trigger writes them with the new user's `user_id` and the standard path.
 
 Alternative: do this in a Next.js post-signup hook instead of a Postgres trigger. Either works; the trigger is more robust against the app missing the signup event.
+
+## Iteration 4 — capture expansion (statistical redesign)
+
+Additive migration `supabase/migrations/*_capture_expansion.sql`. No drops, no
+NOT-NULL flips, no type changes — old code stays valid against the new DB during
+the migrate↔deploy race.
+
+- `daily_entries` new columns: `stress_score`, `body_battery_morning/high/low/charged/drained`,
+  `training_readiness_score` (all smallint 0–100), `training_status` (text, **no
+  CHECK**), `muscle_mass_kg`, `bone_mass_kg`, `body_water_pct`, `bp_systolic_mmhg`,
+  `bp_diastolic_mmhg`, `hydration_ml`. Range CHECKs in the `daily_*_range` style.
+- `workout_metrics` new columns: `weather_temp_c`, `weather_humidity_pct`,
+  `strength_volume_kg`.
+- New table `workout_zones` (1:1 by `workout_id`, denormalized `date`):
+  `hr_z1_s…hr_z5_s`, `power_z1_s…power_z7_s` (seconds, `>= 0` CHECKs). RLS owner
+  policy hand-appended.
+- New table `capacity_metrics` (wide, unique `(user_id, date)`): VO2max run/bike,
+  lactate threshold (HR / pace s·km⁻¹ / power W), `cycling_ftp_w`,
+  `endurance_score`, `hill_score`, `fitness_age_years`, `running_tolerance_km`,
+  race predictions (5k/10k/half/marathon, seconds). Range/positivity CHECKs; RLS
+  owner policy hand-appended.
+
+The metric registry (`lib/mcp/tools/metrics.ts`) gains `WORKOUT_ZONE_METRICS` and
+`CAPACITY_METRICS`; `resolveMetric` routes `capacity_*` and the `workout_*` zone
+keys **before** the `workouts` fallthrough.

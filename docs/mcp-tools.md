@@ -484,3 +484,46 @@ Tools throw `BiError` with a `code` field:
 - `INTERNAL` — anything else; logged with details server-side, returned generically
 
 The MCP server adapter translates these to MCP error responses with the appropriate JSON-RPC error codes.
+
+## Capture-expansion + statistics-engine tools
+
+Added in the statistical redesign (registered in `lib/mcp/server.ts`). All keep
+the `(userId, input) => result` shape with inline Zod at the boundary.
+
+### Capture
+
+- `log_workout` / `update_workout` / `bulk_log_workouts` gain a nested `zones`
+  object (parallel to `metrics`) → `workout_zones` (full replace per workout).
+  `metrics` gains `weather_temp_c`, `weather_humidity_pct`, `strength_volume_kg`.
+  `get_workout` now joins `workout_zones` too.
+- `log_daily` / `bulk_log_daily` gain the new `daily_entries` columns (stress,
+  Body Battery scalars, training readiness/status, body composition, BP,
+  hydration).
+- `log_capacity(date, ...partial)` / `bulk_log_capacity` → `capacity_metrics`
+  (partial-merge by `(user, date)`; capacity-sync recipe only).
+- `get_capacity(as_of?)` → latest known value per capacity metric, each with its
+  observation date. A pure selection, not a judgment.
+- `get_recent` gains a `capacity` kind.
+
+### Statistics engine (deterministic — each returns a statistic + a provenance `note`, never a verdict)
+
+- `get_correlation(metric_a, metric_b, window_days|from+to, lag_days?, agg_a?, agg_b?)`
+  → Pearson + Spearman r, n, and an OLS regression of metric_b on metric_a.
+  Positive `lag_days` pairs metric_a at day d with metric_b at d+lag.
+- `get_correlation_matrix(metrics[2–8], window_days, lag_days?, method?)` →
+  pairwise r matrix + n matrix (heatmap). lag 0 is symmetric.
+- `get_distribution(metric, window_days, bins?)` → histogram (edges/counts) +
+  p5/p25/p50/p75/p95 + min/max/mean/median/stdev, over raw values in range.
+- `get_trend(metric, window_days, agg?)` → OLS slope (per day/week/30d), R², and
+  `direction` = sign of the slope (rising/flat/falling, no magnitude threshold).
+- `get_load_balance(days)` → daily CTL/ATL/TSB (EWMA τ=42d/7d, TSB = yesterday's
+  CTL−ATL) with a 42-day warm-up, the series + current values + the constants
+  used. No form-zone bucketing, no ramp flag — strictly descriptive.
+- `get_metric_series(metrics[1–8], window_days, agg_overrides?)` → date-aligned
+  dense daily series (gaps = null) for overlays/scatter.
+- `compute_training_load` is retained (coarse weekly buckets); its note now points
+  to `get_load_balance` for daily CTL/ATL/TSB.
+
+Metric keys come from `METRIC_KEYS` (`lib/mcp/tools/metrics.ts`), now covering
+daily, `workout_*` (basic + sensor + zone), `capacity_*`, and `derived_*`. Tools
+delegate math to `lib/data-display/statistics.ts` + `metric-series.ts`.

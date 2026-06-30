@@ -306,3 +306,36 @@ If Strava returns no activities, exit silently.`
 - Cron expressions in UTC. Document the user's local-time intent in the description so they can adjust if their timezone differs.
 - Keep recipes additive. If two recipes overlap (e.g. evening reflection and weekly review both ask about today's workout), the user will skip one. Better to have non-overlapping recipes than redundant ones.
 - For connector recipes: name the external MCP and its capabilities in the prompt by their public names. Don't assume a specific tool name — say "fetch yesterday's activities from the Strava connector" rather than `strava.list_activities()`. The prompt should survive the connector renaming a tool.
+
+---
+
+## Statistical-redesign recipes
+
+Two recipes added in the statistical redesign (full prompts live in
+`lib/agents/recipe-data.ts`).
+
+### Capacity sync (`capacity-sync`, connector, weekly Mon 08:00, requires Garmin)
+
+Pulls slow-moving fitness capacity (VO2max, lactate threshold, FTP, endurance/hill
+score, fitness age, running tolerance, race predictions) from the wearable into
+`capacity_metrics` via `log_capacity`. Then derives training zones into
+`THRESHOLDS.md` (Claude computes the zones from LTHR/FTP — BI stores nothing
+derived) and updates `RECORDS.md` PR blocks from `get_personal_record`. Covers:
+`capacity:sync`, `thresholds:zones`, `records:prs`.
+
+### Insights scan (`insights`, review, weekly Sun 19:00)
+
+The intelligence layer. Reads the deterministic statistics engine
+(`get_correlation_matrix`, `get_trend`, `get_load_balance`, `get_distribution`,
+`get_correlation`) and writes a plain-language interpretation to
+`insights/YYYY-Www.md`: the biggest signal of the week, the relationships worth
+acting on (with r and n, and the correlation-isn't-causation caveat), the load/form
+read against `PRINCIPLES.md`, one thing to optimize next, and what the data can't
+yet say. This is the "what to optimize" reasoning the app deliberately never does
+itself — it lives in the recipe (Claude), and the dashboard's Insights band renders
+the prose. Covers: `insights:weekly`.
+
+The **dawn-agent** Phase 2/3 were also extended: capture the new daily scalars
+(stress, Body Battery, training readiness/status, body composition) and per-activity
+HR/power zones + weather + gear + strength volume; and read `get_load_balance` to
+fill `acute_load_7d` / `chronic_load_28d` (the gate decision stays the agent's).

@@ -116,3 +116,38 @@ Seven tools, organized by capture vs. read. The principle: each tool does one we
 - **Connector availability is the user's problem.** If a user installs the Garmin sync recipe but doesn't have a Garmin MCP connected to Cowork, the recipe will fail at runtime. The `/agents` page surfaces `required_connectors` to make this discoverable, but we don't gate installation. Users can install BI, then later connect Garmin, then re-run the recipe. Worse UX than auto-installing connectors, but vastly simpler app and no coupling we'd come to regret.
 
 - **Auth flow complexity.** Custom OAuth AS is more code than a token check. We took the cost for the long-term wins (revocation, expiry, multi-install).
+
+## The statistics engine and the stats-vs-verdict line
+
+The passive principle says BI may compute statistics but never author a verdict.
+The statistics engine (Phase 3) extends "statistics" from means/SDs/z-scores to
+**correlations, regressions, distributions, and EWMA training load (CTL/ATL/TSB)**
+— all still deterministic math, the same family as the z-scores the app already
+computed. The line is sharp: computing a correlation coefficient, a regression
+slope, or a CTL value is a statistic; turning it into "you're overtrained / sleep
+more / do this workout" is a verdict and stays with Claude.
+
+Concretely:
+
+- The engine (`lib/data-display/statistics.ts` + `metric-series.ts`, surfaced as
+  `get_correlation`/`_matrix`, `get_distribution`, `get_trend`, `get_load_balance`,
+  `get_metric_series`) emits only numbers + provenance. It writes nothing to
+  `derived_daily`, classifies nothing, colors nothing. `get_load_balance` in
+  particular returns CTL/ATL/TSB with **no form-zone bucketing and no ramp flag**
+  — that classification would be a verdict.
+- `derived_daily` stays the single judgment sink (agent-written, full-row
+  replace, `computed_by` provenance). The Analyze charts render statistics; the
+  gate and the `insights/` prose are the only authored judgments shown.
+- **Stats now, model later.** The engine is the substrate a future server-side
+  model could read from. If one is ever added it must write through
+  `log_derived_daily` with `computed_by='model'` — the render path is already
+  provenance-agnostic. Until then, the "what to optimize" reasoning is done by the
+  `insights` recipe (Claude), not the app.
+
+## The chart-library departure
+
+Phase 3 adopts **shadcn charts (Recharts v3)** for the Analyze view and the
+per-metric drilldown — a deliberate, scoped break from the original
+"hand-rolled SVG, zero client JS" rule. Inline micro-charts stay SVG; only the two
+analytical surfaces ship client JS, and even there all statistics are computed
+server-side and passed as plain props. See `docs/analyze.md` for the boundary.
