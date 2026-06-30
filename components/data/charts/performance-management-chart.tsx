@@ -5,6 +5,7 @@ import {
   CartesianGrid,
   ComposedChart,
   Line,
+  ReferenceArea,
   ReferenceLine,
   XAxis,
   YAxis,
@@ -26,6 +27,7 @@ export type PerformanceManagementChartProps = {
     atl: number | null;
     tsb: number | null;
   }>;
+  ramp?: number | null; // ctl_ramp_7d
   minDays?: number;
 };
 
@@ -37,6 +39,7 @@ const config = {
 
 export function PerformanceManagementChart({
   data,
+  ramp,
   minDays = 14,
 }: PerformanceManagementChartProps) {
   if (data.length < minDays) {
@@ -70,6 +73,24 @@ export function PerformanceManagementChart({
           />
           <ChartTooltip content={<ChartTooltipContent />} />
           <ChartLegend content={<ChartLegendContent />} />
+          {/* Descriptive TSB context bands (fixed constants): high-fatigue
+              below −10, fresh above +5. Context only — not a recommendation. */}
+          <ReferenceArea
+            yAxisId="form"
+            y1={-1000}
+            y2={-10}
+            fill="var(--chart-atl)"
+            fillOpacity={0.06}
+            ifOverflow="hidden"
+          />
+          <ReferenceArea
+            yAxisId="form"
+            y1={5}
+            y2={1000}
+            fill="var(--chart-tsb)"
+            fillOpacity={0.06}
+            ifOverflow="hidden"
+          />
           <ReferenceLine yAxisId="form" y={0} stroke="var(--border)" />
           <Area
             yAxisId="form"
@@ -109,8 +130,15 @@ export function PerformanceManagementChart({
         <p className="mt-1 text-[11px] text-muted-foreground">
           <span className="font-mono">CTL {fmt(last.ctl)}</span> ·{" "}
           <span className="font-mono">ATL {fmt(last.atl)}</span> ·{" "}
-          <span className="font-mono">TSB {fmtSigned(last.tsb)}</span> — fitness,
-          fatigue, and form (a load statistic, not a verdict)
+          <span className="font-mono">TSB {fmtSigned(last.tsb)}</span>
+          {ramp != null ? (
+            <>
+              {" "}
+              · <span className="font-mono">ramp {fmtSigned(ramp)}/wk</span>
+            </>
+          ) : null}{" "}
+          — fitness, fatigue, form, and 7-day fitness ramp (load statistics, not a
+          verdict). Shaded: high-fatigue (below) / fresh (above).
         </p>
       ) : null}
     </div>

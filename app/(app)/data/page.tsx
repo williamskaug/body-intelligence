@@ -64,8 +64,10 @@ export default async function DataPage({
   if (!user) return null;
 
   const params = await searchParams;
-  const days = parseDays(params.days);
   const view = parseView(params.view);
+  // Analyze leans on wider windows for steadier statistics, so default it to 90d
+  // when the user hasn't picked a range explicitly.
+  const days = parseDays(params.days, view === "analyze" ? 90 : 30);
   const trainingOnly = params.nogolf === "1";
 
   // Resolve "today" in the user's timezone (profile default Europe/Oslo
@@ -708,9 +710,10 @@ function formatHours(h: number): string {
   return h.toFixed(1);
 }
 
-function parseDays(raw: string | undefined): number {
-  const n = Number(raw ?? "30");
-  if (!Number.isFinite(n)) return 30;
+function parseDays(raw: string | undefined, fallback = 30): number {
+  if (raw == null) return fallback;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return fallback;
   return Math.max(1, Math.min(365, Math.floor(n)));
 }
 

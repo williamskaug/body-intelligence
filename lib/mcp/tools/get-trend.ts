@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { linregress } from "@/lib/data-display/statistics";
+import { computeBaseline, linregress } from "@/lib/data-display/statistics";
 import { dailySeriesForMetric, type DailyAgg } from "@/lib/data-display/metric-series";
 import { dateString } from "./shared";
 import { METRIC_KEYS } from "./metrics";
@@ -35,8 +35,22 @@ export async function getTrend(userId: string, input: GetTrendInput) {
     ys.push(map.get(d)!);
   }
   const reg = linregress(xs, ys);
+  // Only call it rising/falling when the modeled change across the observed span
+  // is material — at least 0.15·SD of the values. Otherwise it's "flat", so a
+  // +0.0001 slope on a noisy metric doesn't read as a real trend.
+  const sd = computeBaseline(ys)?.sd ?? 0;
+  const span = xs.length > 1 ? xs[xs.length - 1]! - xs[0]! : 0;
+  const modeledChange = reg ? Math.abs(reg.slope * span) : 0;
   const direction =
-    reg == null ? null : reg.slope > 0 ? "rising" : reg.slope < 0 ? "falling" : "flat";
+    reg == null
+      ? null
+      : sd > 0 && modeledChange < 0.15 * sd
+        ? "flat"
+        : reg.slope > 0
+          ? "rising"
+          : reg.slope < 0
+            ? "falling"
+            : "flat";
 
   return {
     metric: input.metric,

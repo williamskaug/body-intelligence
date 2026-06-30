@@ -15,6 +15,9 @@ export type MetricDef = {
   // in raw terms); null → neutral (weight). Drives band coloring only.
   higherIsBetter: boolean | null;
   domain: MetricDomain;
+  // Special display formatting. "pace" → m:ss per unit; "duration" → h:mm:ss /
+  // m:ss from seconds. Default (undefined) is numeric with decimals + unit.
+  kind?: "pace" | "duration";
 };
 
 const DEFS: MetricDef[] = [
@@ -71,8 +74,29 @@ const DEFS: MetricDef[] = [
   { key: "capacity_vo2max_cycling", label: "VO₂max (bike)", unit: "", decimals: 1, higherIsBetter: true, domain: "endurance" },
   { key: "capacity_cycling_ftp_w", label: "FTP", unit: "W", decimals: 0, higherIsBetter: true, domain: "endurance" },
   { key: "capacity_lactate_threshold_hr_bpm", label: "Lactate threshold HR", unit: "bpm", decimals: 0, higherIsBetter: true, domain: "endurance" },
+  { key: "capacity_lactate_threshold_pace_s_per_km", label: "Threshold pace", unit: "/km", decimals: 0, higherIsBetter: false, domain: "endurance", kind: "pace" },
+  { key: "capacity_lactate_threshold_power_w", label: "Threshold power", unit: "W", decimals: 0, higherIsBetter: true, domain: "endurance" },
   { key: "capacity_endurance_score", label: "Endurance score", unit: "", decimals: 0, higherIsBetter: true, domain: "endurance" },
+  { key: "capacity_hill_score", label: "Hill score", unit: "", decimals: 0, higherIsBetter: true, domain: "endurance" },
   { key: "capacity_fitness_age_years", label: "Fitness age", unit: "yr", decimals: 1, higherIsBetter: false, domain: "endurance" },
+  { key: "capacity_running_tolerance_km", label: "Running tolerance", unit: "km", decimals: 1, higherIsBetter: true, domain: "endurance" },
+  { key: "capacity_race_pred_5k_s", label: "5k prediction", unit: "", decimals: 0, higherIsBetter: false, domain: "endurance", kind: "duration" },
+  { key: "capacity_race_pred_10k_s", label: "10k prediction", unit: "", decimals: 0, higherIsBetter: false, domain: "endurance", kind: "duration" },
+  { key: "capacity_race_pred_half_s", label: "Half-marathon prediction", unit: "", decimals: 0, higherIsBetter: false, domain: "endurance", kind: "duration" },
+  { key: "capacity_race_pred_marathon_s", label: "Marathon prediction", unit: "", decimals: 0, higherIsBetter: false, domain: "endurance", kind: "duration" },
+  // ---- workout HR / power time-in-zone (seconds) ----
+  { key: "workout_hr_z1_s", label: "Time in HR Z1", unit: "", decimals: 0, higherIsBetter: null, domain: "endurance", kind: "duration" },
+  { key: "workout_hr_z2_s", label: "Time in HR Z2", unit: "", decimals: 0, higherIsBetter: null, domain: "endurance", kind: "duration" },
+  { key: "workout_hr_z3_s", label: "Time in HR Z3", unit: "", decimals: 0, higherIsBetter: null, domain: "endurance", kind: "duration" },
+  { key: "workout_hr_z4_s", label: "Time in HR Z4", unit: "", decimals: 0, higherIsBetter: null, domain: "endurance", kind: "duration" },
+  { key: "workout_hr_z5_s", label: "Time in HR Z5", unit: "", decimals: 0, higherIsBetter: null, domain: "endurance", kind: "duration" },
+  { key: "workout_power_z1_s", label: "Time in power Z1", unit: "", decimals: 0, higherIsBetter: null, domain: "endurance", kind: "duration" },
+  { key: "workout_power_z2_s", label: "Time in power Z2", unit: "", decimals: 0, higherIsBetter: null, domain: "endurance", kind: "duration" },
+  { key: "workout_power_z3_s", label: "Time in power Z3", unit: "", decimals: 0, higherIsBetter: null, domain: "endurance", kind: "duration" },
+  { key: "workout_power_z4_s", label: "Time in power Z4", unit: "", decimals: 0, higherIsBetter: null, domain: "endurance", kind: "duration" },
+  { key: "workout_power_z5_s", label: "Time in power Z5", unit: "", decimals: 0, higherIsBetter: null, domain: "endurance", kind: "duration" },
+  { key: "workout_power_z6_s", label: "Time in power Z6", unit: "", decimals: 0, higherIsBetter: null, domain: "endurance", kind: "duration" },
+  { key: "workout_power_z7_s", label: "Time in power Z7", unit: "", decimals: 0, higherIsBetter: null, domain: "endurance", kind: "duration" },
 ];
 
 export const METRICS: Record<string, MetricDef> = Object.fromEntries(
@@ -94,9 +118,22 @@ export function metricLabel(key: string): string {
     .replace(/_/g, " ");
 }
 
+// Seconds → "h:mm:ss" (with hours) or "m:ss". Used for race predictions and
+// time-in-zone.
+export function formatSeconds(total: number): string {
+  const s = Math.max(0, Math.round(total));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+  return `${m}:${String(sec).padStart(2, "0")}`;
+}
+
 export function formatMetricValue(key: string, value: number | null): string {
   if (value == null || !Number.isFinite(value)) return "—";
   const def = METRICS[key];
+  if (def?.kind === "pace") return `${formatSeconds(value)}${def.unit || "/km"}`;
+  if (def?.kind === "duration") return formatSeconds(value);
   const decimals = def?.decimals ?? 1;
   const unit = def?.unit ?? "";
   return `${value.toFixed(decimals)}${unit ? ` ${unit}` : ""}`;

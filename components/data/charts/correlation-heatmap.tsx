@@ -12,9 +12,12 @@ export type CorrelationHeatmapProps = {
   n: ReadonlyArray<ReadonlyArray<number>>; // pairwise sample counts
 };
 
-function cellStyle(r: number | null): React.CSSProperties {
+// Saturation ∝ |r|, dampened by a confidence factor so a 4-pair r doesn't look
+// as strong as a 100-pair r (it fades toward transparent below ~12 pairs).
+function cellStyle(r: number | null, n: number): React.CSSProperties {
   if (r == null) return {};
-  const pct = Math.round(Math.abs(r) * 100);
+  const conf = Math.min(1, n / 12);
+  const pct = Math.round(Math.abs(r) * conf * 100);
   const base = r >= 0 ? "var(--chart-pos)" : "var(--chart-neg)";
   return { backgroundColor: `color-mix(in oklab, ${base} ${pct}%, transparent)` };
 }
@@ -54,27 +57,44 @@ export function CorrelationHeatmap({ metrics, matrix, n }: CorrelationHeatmapPro
                   {i + 1}. {metricLabel(mi)}
                 </Link>
               </th>
-              {matrix[i]!.map((r, j) => (
-                <td
-                  key={j}
-                  className="h-9 w-9 rounded text-center font-mono tabular-nums"
-                  style={cellStyle(r)}
-                  title={`${metricLabel(mi)} × ${metricLabel(metrics[j]!)}: r=${
-                    r == null ? "n/a" : r.toFixed(2)
-                  }, n=${n[i]?.[j] ?? 0}`}
-                >
-                  {r == null ? "·" : r.toFixed(2)}
-                </td>
-              ))}
+              {matrix[i]!.map((r, j) => {
+                // Lower triangle only — the upper triangle is the mirror image
+                // and the diagonal is a trivial r=1.
+                if (j > i) return <td key={j} className="h-10 w-9" />;
+                if (i === j) {
+                  return (
+                    <td key={j} className="h-10 w-9 text-center align-middle text-muted-foreground/30">
+                      —
+                    </td>
+                  );
+                }
+                const nij = n[i]?.[j] ?? 0;
+                return (
+                  <td
+                    key={j}
+                    className="h-10 w-9 rounded text-center align-middle"
+                    style={cellStyle(r, nij)}
+                    title={`${metricLabel(mi)} × ${metricLabel(metrics[j]!)}: r=${
+                      r == null ? "n/a" : r.toFixed(2)
+                    }, n=${nij}`}
+                  >
+                    <div className="font-mono text-[11px] leading-tight tabular-nums">
+                      {r == null ? "·" : r.toFixed(2)}
+                    </div>
+                    <div className="text-[8px] leading-tight text-muted-foreground">n{nij}</div>
+                  </td>
+                );
+              })}
             </tr>
           ))}
         </tbody>
       </table>
       <p className="mt-2 text-[11px] text-muted-foreground">
-        Pearson r over the window.{" "}
+        Pearson r over the window across {(metrics.length * (metrics.length - 1)) / 2} pairs.{" "}
         <span className="text-emerald-500">green = positive</span>,{" "}
-        <span className="text-rose-500">red = negative</span>; saturation ∝ |r|. A
-        coefficient, not causation.
+        <span className="text-rose-500">red = negative</span>; saturation ∝ |r| ×
+        confidence (cells under ~12 paired days are faded). A coefficient, not
+        causation — with this many pairs, expect some to look strong by chance.
       </p>
     </div>
   );

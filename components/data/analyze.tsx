@@ -1,14 +1,22 @@
+import Link from "next/link";
 import { Trends } from "./trends";
 import { InsightsFeed, type InsightDoc } from "./insights-feed";
 import { CorrelationHeatmap } from "./charts/correlation-heatmap";
 import { HistogramChart } from "./charts/histogram-chart";
 import { MultiSeriesLine } from "./charts/multi-series-line";
 import { PerformanceManagementChart } from "./charts/performance-management-chart";
+import { RatioBandChart } from "./charts/ratio-band-chart";
 import { ScatterRegression } from "./charts/scatter-regression";
+import { ChartEmpty } from "./charts/chart-empty";
 import { detectAnomalies, topAnomalies } from "@/lib/data-display/anomalies";
-import { metricLabel } from "@/lib/data-display/metric-registry";
+import {
+  formatMetricValue,
+  formatSeconds,
+  metricDef,
+  metricLabel,
+} from "@/lib/data-display/metric-registry";
 import { dailySeriesForMetric } from "@/lib/data-display/metric-series";
-import { alignByDate, linregress, pearson } from "@/lib/data-display/statistics";
+import { alignByDate, computeBaseline, linregress, pearson } from "@/lib/data-display/statistics";
 import type { MetricKey } from "@/lib/mcp/tools/metrics";
 import { getCorrelationMatrix } from "@/lib/mcp/tools/get-correlation-matrix";
 import { getDistribution } from "@/lib/mcp/tools/get-distribution";
@@ -36,10 +44,29 @@ const HEATMAP_METRICS: MetricKey[] = [
 
 const DIST_METRICS: MetricKey[] = ["hrv_ms", "rhr_bpm", "sleep_h", "weight_kg"];
 
+const CAPACITY_KEYS: MetricKey[] = [
+  "capacity_vo2max_running",
+  "capacity_vo2max_cycling",
+  "capacity_cycling_ftp_w",
+  "capacity_lactate_threshold_pace_s_per_km",
+  "capacity_race_pred_5k_s",
+  "capacity_race_pred_10k_s",
+  "capacity_race_pred_half_s",
+  "capacity_race_pred_marathon_s",
+];
+
+const ZONE_KEYS: MetricKey[] = [
+  "workout_hr_z1_s",
+  "workout_hr_z2_s",
+  "workout_hr_z3_s",
+  "workout_hr_z4_s",
+  "workout_hr_z5_s",
+];
+
 const PAIRS: Array<{ a: MetricKey; b: MetricKey; lag: number; title: string }> = [
   { a: "sleep_h", b: "hrv_ms", lag: 1, title: "Sleep → next-day HRV" },
-  { a: "derived_acute_load_7d", b: "hrv_ms", lag: 1, title: "Acute load → next-day HRV" },
-  { a: "workout_cadence_spm", b: "workout_vertical_oscillation_mm", lag: 0, title: "Cadence → vertical oscillation" },
+  { a: "derived_acute_load_7d", b: "soreness", lag: 1, title: "Acute load → next-day soreness" },
+  { a: "workout_weather_temp_c", b: "workout_decoupling_pct", lag: 0, title: "Heat → HR-pace decoupling" },
   { a: "rhr_bpm", b: "sleep_quality", lag: 0, title: "Resting HR → sleep quality" },
 ];
 
@@ -47,10 +74,25 @@ async function safe<T>(p: Promise<T>): Promise<T | null> {
   try {
     return await p;
   } catch {
-    // Tolerate a not-yet-applied migration or an empty table — the band just
-    // renders its low-data state instead of crashing the page.
     return null;
   }
+}
+
+function latestNonNull(arr: ReadonlyArray<number | null> | undefined): number | null {
+  if (!arr) return null;
+  for (let i = arr.length - 1; i >= 0; i--) if (arr[i] != null) return arr[i]!;
+  return null;
+}
+function firstNonNull(arr: ReadonlyArray<number | null> | undefined): number | null {
+  if (!arr) return null;
+  for (let i = 0; i < arr.length; i++) if (arr[i] != null) return arr[i]!;
+  return null;
+}
+function sumNonNull(arr: ReadonlyArray<number | null> | undefined): number {
+  if (!arr) return 0;
+  let s = 0;
+  for (const v of arr) if (v != null) s += v;
+  return s;
 }
 
 async function buildScatter(
@@ -109,17 +151,30 @@ export async function Analyze(props: AnalyzeProps) {
   const from = trends.startDate;
   const to = trends.endDate;
 
-  const [load, matrix, overlay, dists, scatters] = await Promise.all([
-    safe(getLoadBalance(userId, { days: Math.max(days, 84) })),
-    safe(getCorrelationMatrix(userId, { metrics: HEATMAP_METRICS, window_days: days })),
-    safe(getMetricSeries(userId, { metrics: ["sleep_h", "hrv_ms"], window_days: days })),
-    Promise.all(
-      DIST_METRICS.map((m) =>
-        safe(getDistribution(userId, { metric: m, window_days: days, bins: 12 })),
+  const [load, matrix, overlay, dists, scatters, capacity, zones, head, distLatest] =
+    await Promise.all([
+      safe(getLoadBalance(userId, { days: Math.max(days, 84) })),
+      safe(getCorrelationMatrix(userId, { metrics: HEATMAP_METRICS, window_days: days })),
+      safe(getMetricSeries(userId, { metrics: ["sleep_h", "hrv_ms"], window_days: days })),
+      Promise.all(
+        DIST_METRICS.map((m) =>
+          safe(getDistribution(userId, { metric: m, window_days: days, bins: 12 })),
+        ),
       ),
-    ),
-    Promise.all(PAIRS.map((p) => safe(buildScatter(userId, p.a, p.b, from, to, p.lag)))),
-  ]);
+      Promise.all(PAIRS.map((p) => safe(buildScatter(userId, p.a, p.b, from, to, p.lag)))),
+      safe(getMetricSeries(userId, { metrics: CAPACITY_KEYS, window_days: days })),
+      safe(getMetricSeries(userId, { metrics: ZONE_KEYS, window_days: days })),
+      safe(getMetricSeries(userId, { metrics: ["hrv_ms", "derived_sleep_debt_7d_min"], window_days: days })),
+      safe(getMetricSeries(userId, { metrics: DIST_METRICS, window_days: days })),
+    ]);
+
+  // ---- Headline strip inputs (all deterministic differences) ----
+  const hrvSeries = head?.series["hrv_ms"];
+  const hrvLatest = latestNonNull(hrvSeries);
+  const hrvBaseline = computeBaseline(hrvSeries ?? [])?.mean ?? null;
+  const sleepDebtLatest = latestNonNull(head?.series["derived_sleep_debt_7d_min"]);
+  const vo2Latest = latestNonNull(capacity?.series["capacity_vo2max_running"]);
+  const vo2First = firstNonNull(capacity?.series["capacity_vo2max_running"]);
 
   const pmcData = (load?.series ?? []).map((s) => ({
     date: s.date,
@@ -127,6 +182,7 @@ export async function Analyze(props: AnalyzeProps) {
     atl: s.atl,
     tsb: s.tsb,
   }));
+  const acwrData = (load?.series ?? []).map((s) => ({ date: s.date, value: s.acwr }));
 
   const overlayData = overlay
     ? overlay.dates.map((date, i) => ({
@@ -144,101 +200,53 @@ export async function Analyze(props: AnalyzeProps) {
     6,
   );
 
+  // ---- Polarization (HR time-in-zone over the window) ----
+  const z1 = sumNonNull(zones?.series["workout_hr_z1_s"]);
+  const z2 = sumNonNull(zones?.series["workout_hr_z2_s"]);
+  const z3 = sumNonNull(zones?.series["workout_hr_z3_s"]);
+  const z4 = sumNonNull(zones?.series["workout_hr_z4_s"]);
+  const z5 = sumNonNull(zones?.series["workout_hr_z5_s"]);
+  const zoneTotal = z1 + z2 + z3 + z4 + z5;
+
   return (
     <div className="flex flex-col gap-10">
       {insights.length > 0 ? <InsightsFeed insights={insights} /> : null}
 
-      {days < 90 ? (
-        <p className="rounded-md border border-dashed bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-          Wider window = stronger statistics. These cards compute over the{" "}
-          {days}-day range above — try 90d or 1y for steadier correlations.
-        </p>
-      ) : null}
-
-      {/* Overview — the folded Trends band (each metric links to its drilldown). */}
-      <Trends {...trends} />
-
-      <Band
-        title="Training load balance"
-        sub="CTL (fitness) / ATL (fatigue) / TSB (form) — EWMA τ=42d/7d. A load statistic, not a verdict."
-      >
-        <PerformanceManagementChart data={pmcData} />
-      </Band>
-
-      <Band title="Sleep vs HRV" sub="Two recovery signals on a shared timeline (dual axis).">
-        <MultiSeriesLine
-          data={overlayData}
-          series={[
-            { key: "sleep_h", label: "Sleep (h)", color: "var(--chart-sleep)", axis: "left", kind: "area" },
-            { key: "hrv_ms", label: "HRV (ms)", color: "var(--chart-hrv)", axis: "right" },
-          ]}
-        />
-      </Band>
-
-      <Band
-        title="Correlation matrix"
-        sub="Pairwise Pearson r across recovery, load, and body signals."
-      >
-        {matrix ? (
-          <CorrelationHeatmap
-            metrics={matrix.metrics}
-            matrix={matrix.matrix}
-            n={matrix.n_matrix}
+      {/* Headline strip — state + trajectory in the first 3 seconds. Each chip is
+          the sign of a single deterministic delta; never a fused readiness verdict. */}
+      <section>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <HeadStat
+            label="Fitness (CTL)"
+            value={fmt0(load?.current.ctl)}
+            delta={deltaChip(load?.current.ctl_ramp_7d ?? null, 0, true, 0, "/wk")}
           />
-        ) : (
-          <p className="text-xs text-muted-foreground">Not enough data yet.</p>
-        )}
-      </Band>
-
-      <Band title="Distributions" sub="Histogram + median marker over the window.">
-        <div className="grid gap-4 sm:grid-cols-2">
-          {DIST_METRICS.map((m, i) => {
-            const d = dists[i];
-            return (
-              <div key={m} className="rounded-xl border bg-card p-4 shadow-sm">
-                <div className="mb-2 text-sm font-medium">{metricLabel(m)}</div>
-                <HistogramChart
-                  bins={toHistBins(d?.histogram ?? null)}
-                  percentiles={{
-                    p5: d?.percentiles.p5 ?? null,
-                    p50: d?.percentiles.p50 ?? null,
-                    p95: d?.percentiles.p95 ?? null,
-                  }}
-                  label={metricLabel(m)}
-                />
-              </div>
-            );
-          })}
+          <HeadStat label="Form (TSB)" value={fmtSigned0(load?.current.tsb)} tone="neutral" />
+          <HeadStat
+            label="Acute:chronic"
+            value={load?.current.acwr != null ? load.current.acwr.toFixed(2) : "—"}
+            sub="0.8–1.3 typical"
+            tone="neutral"
+          />
+          <HeadStat
+            label="HRV"
+            value={hrvLatest != null ? `${Math.round(hrvLatest)} ms` : "—"}
+            delta={deltaChip(hrvLatest, hrvBaseline, true, 0, "")}
+          />
+          <HeadStat
+            label="Sleep debt"
+            value={sleepDebtLatest != null ? `${Math.round(sleepDebtLatest)}m` : "—"}
+            tone={sleepDebtLatest != null && sleepDebtLatest >= 180 ? "warn" : "neutral"}
+          />
+          <HeadStat
+            label="VO₂max"
+            value={vo2Latest != null ? vo2Latest.toFixed(1) : "—"}
+            delta={deltaChip(vo2Latest, vo2First, true, 1, "")}
+          />
         </div>
-      </Band>
+      </section>
 
-      <Band
-        title="Relationships worth watching"
-        sub="Scatter + OLS fit. r is a coefficient, never causation or advice."
-      >
-        <div className="grid gap-4 sm:grid-cols-2">
-          {PAIRS.map((p, i) => {
-            const s = scatters[i];
-            return (
-              <div key={p.title} className="rounded-xl border bg-card p-4 shadow-sm">
-                <div className="mb-2 text-sm font-medium">{p.title}</div>
-                {s ? (
-                  <ScatterRegression
-                    points={s.points}
-                    line={s.line}
-                    stats={s.stats}
-                    xLabel={metricLabel(p.a)}
-                    yLabel={metricLabel(p.b)}
-                  />
-                ) : (
-                  <p className="text-xs text-muted-foreground">Not enough paired data.</p>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </Band>
-
+      {/* Notable days — promoted near the top; the most engaging glance. */}
       <Band title="Notable days" sub="Largest deviations from your baseline in the window.">
         {anomalies.length > 0 ? (
           <ul className="flex flex-col divide-y rounded-xl border bg-card shadow-sm">
@@ -266,9 +274,192 @@ export async function Analyze(props: AnalyzeProps) {
           </p>
         )}
       </Band>
+
+      {/* Overview — the folded Trends band (each metric links to its drilldown). */}
+      <Trends {...trends} />
+
+      <Band
+        title="Training load balance"
+        sub="CTL (fitness) / ATL (fatigue) / TSB (form) — EWMA τ=42d/7d. Load statistics, not a verdict."
+      >
+        <PerformanceManagementChart data={pmcData} ramp={load?.current.ctl_ramp_7d ?? null} />
+      </Band>
+
+      <Band
+        title="Acute:chronic workload ratio"
+        sub="ATL ÷ CTL. The shaded 0.8–1.3 band is a commonly-cited range — context, not a verdict; interpretation is Claude's job."
+      >
+        <RatioBandChart data={acwrData} band={[0.8, 1.3]} refLine={1} label="ACWR" />
+      </Band>
+
+      {/* Fitness & capacity — "is my engine getting bigger?" */}
+      <Band
+        title="Fitness & capacity"
+        sub="VO₂max, FTP, and race-time predictions over the window — the clearest proof training is working."
+      >
+        {capacity && CAPACITY_KEYS.some((k) => firstNonNull(capacity.series[k]) != null) ? (
+          <div className="flex flex-col gap-4">
+            <MultiSeriesLine
+              data={capacity.dates.map((date, i) => ({
+                date,
+                capacity_vo2max_running: capacity.series["capacity_vo2max_running"]?.[i] ?? null,
+                capacity_cycling_ftp_w: capacity.series["capacity_cycling_ftp_w"]?.[i] ?? null,
+              }))}
+              series={[
+                { key: "capacity_vo2max_running", label: "VO₂max (run)", color: "var(--chart-hrv)", axis: "left" },
+                { key: "capacity_cycling_ftp_w", label: "FTP (W)", color: "var(--chart-load)", axis: "right" },
+              ]}
+              minN={2}
+            />
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {CAPACITY_KEYS.map((k) => {
+                const series = capacity.series[k];
+                const latest = latestNonNull(series);
+                const first = firstNonNull(series);
+                if (latest == null) return null;
+                const def = metricDef(k);
+                const lowerIsBetter = def?.higherIsBetter === false;
+                return (
+                  <Link
+                    key={k}
+                    href={`/data/metric/${k}`}
+                    className="rounded-lg border bg-card px-3 py-2 shadow-sm transition-colors hover:bg-muted/40"
+                  >
+                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                      {metricLabel(k)}
+                    </div>
+                    <div className="mt-0.5 flex items-baseline gap-2">
+                      <span className="font-mono text-sm tabular-nums">
+                        {formatMetricValue(k, latest)}
+                      </span>
+                      {capacityDelta(k, latest, first, lowerIsBetter)}
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <ChartEmpty label="No capacity snapshots yet — install the capacity-sync recipe to pull VO₂max / FTP / predictions." />
+        )}
+      </Band>
+
+      {/* Intensity distribution / polarization */}
+      <Band
+        title="Intensity distribution"
+        sub="Time in HR zones over the window. ≈80% easy is the commonly-cited polarized target — descriptive, not advice."
+      >
+        {zoneTotal > 0 ? (
+          <div className="rounded-xl border bg-card p-4 shadow-sm">
+            <div className="flex h-6 w-full overflow-hidden rounded-md">
+              <Seg pct={(z1 + z2) / zoneTotal} color="var(--chart-tsb)" />
+              <Seg pct={z3 / zoneTotal} color="var(--chart-load)" />
+              <Seg pct={(z4 + z5) / zoneTotal} color="var(--chart-atl)" />
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-3 text-xs">
+              <ZoneLegend label="Easy (Z1–2)" color="var(--chart-tsb)" secs={z1 + z2} total={zoneTotal} />
+              <ZoneLegend label="Threshold (Z3)" color="var(--chart-load)" secs={z3} total={zoneTotal} />
+              <ZoneLegend label="Hard (Z4–5)" color="var(--chart-atl)" secs={z4 + z5} total={zoneTotal} />
+            </div>
+          </div>
+        ) : (
+          <ChartEmpty label="No HR-zone data yet — the dawn agent captures it per activity from Garmin." />
+        )}
+      </Band>
+
+      <Band title="Sleep vs HRV" sub="Two recovery signals on a shared timeline (dual axis).">
+        <MultiSeriesLine
+          data={overlayData}
+          series={[
+            { key: "sleep_h", label: "Sleep (h)", color: "var(--chart-sleep)", axis: "left", kind: "area" },
+            { key: "hrv_ms", label: "HRV (ms)", color: "var(--chart-hrv)", axis: "right" },
+          ]}
+        />
+      </Band>
+
+      <Band
+        title="Correlation matrix"
+        sub="Pairwise Pearson r across recovery, load, and body signals — saturation ∝ |r|, low-n cells faded."
+      >
+        {matrix ? (
+          <CorrelationHeatmap
+            metrics={matrix.metrics}
+            matrix={matrix.matrix}
+            n={matrix.n_matrix}
+          />
+        ) : (
+          <p className="text-xs text-muted-foreground">Not enough data yet.</p>
+        )}
+      </Band>
+
+      <Band title="Distributions" sub="Histogram + median + your latest value over the window.">
+        <div className="grid gap-4 sm:grid-cols-2">
+          {DIST_METRICS.map((m, i) => {
+            const d = dists[i];
+            return (
+              <div key={m} className="rounded-xl border bg-card p-4 shadow-sm">
+                <div className="mb-2 flex items-baseline justify-between">
+                  <span className="text-sm font-medium">{metricLabel(m)}</span>
+                  {d?.percentiles.p50 != null ? (
+                    <span className="text-[10px] text-muted-foreground">
+                      median {formatMetricValue(m, d.percentiles.p50)}
+                    </span>
+                  ) : null}
+                </div>
+                <HistogramChart
+                  bins={toHistBins(d?.histogram ?? null)}
+                  percentiles={{
+                    p5: d?.percentiles.p5 ?? null,
+                    p50: d?.percentiles.p50 ?? null,
+                    p95: d?.percentiles.p95 ?? null,
+                  }}
+                  latest={latestNonNull(distLatest?.series[m as string])}
+                  label={metricLabel(m)}
+                  decimals={metricDef(m)?.decimals ?? 1}
+                />
+              </div>
+            );
+          })}
+        </div>
+      </Band>
+
+      <Band
+        title="Relationships worth watching"
+        sub="Scatter + OLS fit. r is a coefficient with its n, never causation or advice."
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          {PAIRS.map((p, i) => {
+            const s = scatters[i];
+            return (
+              <div key={p.title} className="rounded-xl border bg-card p-4 shadow-sm">
+                <div className="mb-2 text-sm font-medium">{p.title}</div>
+                {s ? (
+                  <ScatterRegression
+                    points={s.points}
+                    line={s.line}
+                    stats={s.stats}
+                    xLabel={metricLabel(p.a)}
+                    yLabel={metricLabel(p.b)}
+                  />
+                ) : (
+                  <p className="text-xs text-muted-foreground">Not enough paired data.</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </Band>
+
+      {days < 90 ? (
+        <p className="text-center text-[11px] text-muted-foreground">
+          Correlation and distribution cards strengthen with a wider window — try 90d or 1y.
+        </p>
+      ) : null}
     </div>
   );
 }
+
+// ---- small presentational helpers ----
 
 function Band({
   title,
@@ -288,4 +479,120 @@ function Band({
       {children}
     </section>
   );
+}
+
+function HeadStat({
+  label,
+  value,
+  delta,
+  sub,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string;
+  delta?: React.ReactNode;
+  sub?: string;
+  tone?: "neutral" | "warn";
+}) {
+  return (
+    <div className="rounded-xl border bg-card px-3 py-2.5 shadow-sm">
+      <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </div>
+      <div className="mt-1 flex items-baseline gap-1.5">
+        <span
+          className={`font-mono text-lg tabular-nums ${tone === "warn" ? "text-amber-500" : ""}`}
+        >
+          {value}
+        </span>
+        {delta}
+      </div>
+      {sub ? <div className="mt-0.5 text-[10px] text-muted-foreground">{sub}</div> : null}
+    </div>
+  );
+}
+
+function deltaChip(
+  curr: number | null,
+  ref: number | null,
+  higherIsBetter: boolean | null,
+  decimals: number,
+  unit: string,
+): React.ReactNode {
+  if (curr == null || ref == null) return null;
+  const d = curr - ref;
+  if (Math.abs(d) < Math.pow(10, -decimals - 1)) return null;
+  const tone =
+    higherIsBetter == null ? "text-muted-foreground" : (d > 0) === higherIsBetter ? "text-emerald-500" : "text-rose-500";
+  const arrow = d > 0 ? "↑" : "↓";
+  return (
+    <span className={`text-[11px] font-medium ${tone}`}>
+      {arrow}
+      {Math.abs(d).toFixed(decimals)}
+      {unit}
+    </span>
+  );
+}
+
+function capacityDelta(
+  key: string,
+  latest: number,
+  first: number | null,
+  lowerIsBetter: boolean,
+): React.ReactNode {
+  if (first == null) return null;
+  const d = latest - first;
+  if (d === 0) return null;
+  const improving = lowerIsBetter ? d < 0 : d > 0;
+  const tone = improving ? "text-emerald-500" : "text-rose-500";
+  const arrow = d > 0 ? "↑" : "↓";
+  const def = metricDef(key);
+  const mag =
+    def?.kind === "duration" || def?.kind === "pace"
+      ? formatSeconds(Math.abs(d))
+      : Math.abs(d).toFixed(def?.decimals ?? 1);
+  return (
+    <span className={`text-[11px] font-medium ${tone}`}>
+      {arrow}
+      {mag}
+    </span>
+  );
+}
+
+function Seg({ pct, color }: { pct: number; color: string }) {
+  if (pct <= 0) return null;
+  return <div style={{ width: `${pct * 100}%`, backgroundColor: color }} />;
+}
+
+function ZoneLegend({
+  label,
+  color,
+  secs,
+  total,
+}: {
+  label: string;
+  color: string;
+  secs: number;
+  total: number;
+}) {
+  const pct = total > 0 ? Math.round((secs / total) * 100) : 0;
+  return (
+    <div className="flex flex-col gap-0.5">
+      <div className="flex items-center gap-1.5">
+        <span className="h-2 w-2 rounded-[2px]" style={{ backgroundColor: color }} />
+        <span className="text-muted-foreground">{label}</span>
+      </div>
+      <span className="font-mono tabular-nums">
+        {pct}% · {formatSeconds(secs)}
+      </span>
+    </div>
+  );
+}
+
+function fmt0(x: number | null | undefined): string {
+  return x == null ? "—" : Math.round(x).toString();
+}
+function fmtSigned0(x: number | null | undefined): string {
+  if (x == null) return "—";
+  return `${x >= 0 ? "+" : "−"}${Math.abs(Math.round(x))}`;
 }

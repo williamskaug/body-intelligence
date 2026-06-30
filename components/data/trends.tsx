@@ -9,7 +9,6 @@ import {
 import {
   computeBaseline,
   classify,
-  bandClass,
   type Baseline,
 } from "@/lib/data-display/baseline";
 import { formatZ, type DerivedDailyRow } from "@/lib/data-display/derived";
@@ -121,6 +120,18 @@ export function Trends({
     { key: "body_fat_pct", label: "Body fat", unit: "%", decimals: 1, higher: null },
   ] as const;
 
+  // Sleep architecture — stage minutes per night (already fetched into daily).
+  const sleepArch = dates.map((d) => {
+    const row = dailyByDate.get(d)?.[0];
+    const deep = row?.sleep_deep_min ?? null;
+    const light = row?.sleep_light_min ?? null;
+    const rem = row?.sleep_rem_min ?? null;
+    const awake = row?.sleep_awake_min ?? null;
+    const has = deep != null || light != null || rem != null || awake != null;
+    return { x: d, deep: deep ?? 0, light: light ?? 0, rem: rem ?? 0, awake: awake ?? 0, has };
+  });
+  const sleepArchDays = sleepArch.filter((s) => s.has);
+
   // Derived layer — keyed by date; one row per (user, date).
   const derivedByDate = new Map(derived.map((r) => [r.date, r] as const));
   const gateDays: GateStripDay[] = dates.map((d) => ({
@@ -215,6 +226,15 @@ export function Trends({
         </div>
       </section>
 
+      {sleepArchDays.length >= 3 ? (
+        <section>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Sleep architecture
+          </h3>
+          <SleepArchitectureCard days={sleepArchDays} />
+        </section>
+      ) : null}
+
       <section>
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Training load
@@ -285,6 +305,13 @@ function MetricCard({
 }) {
   const cls = classify(latest, baseline, higherIsBetter);
   const samples = values.filter((v) => v != null).length;
+  const delta = latest != null && baseline ? latest - baseline.mean : null;
+  const deltaTone =
+    cls.direction === "good"
+      ? "text-emerald-500"
+      : cls.direction === "warn"
+        ? "text-rose-500"
+        : "text-muted-foreground";
   return (
     <div className="rounded-xl border bg-card p-4 shadow-sm">
       <div className="flex items-baseline justify-between gap-2">
@@ -302,13 +329,16 @@ function MetricCard({
           </span>
           <span className="text-xs text-muted-foreground">{unit}</span>
         </div>
-        {baseline ? (
+        {delta != null && Math.abs(delta) >= Math.pow(10, -decimals - 1) ? (
           <span
-            className={`rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${bandClass(cls.direction)}`}
-            title={`baseline ${baseline.mean.toFixed(decimals)} ${unit} · sd ${baseline.sd.toFixed(decimals)}`}
+            className={`text-[11px] font-medium ${deltaTone}`}
+            title={`baseline ${baseline!.mean.toFixed(decimals)} ${unit} · sd ${baseline!.sd.toFixed(decimals)}`}
           >
-            {label === "Weight" ? "" : cls.band === "above" ? "above" : cls.band === "below" ? "below" : cls.band === "in" ? "in band" : "—"}
+            {delta > 0 ? "↑" : "↓"}
+            {Math.abs(delta).toFixed(decimals)} vs base
           </span>
+        ) : baseline ? (
+          <span className="text-[11px] text-muted-foreground">≈ baseline</span>
         ) : null}
       </div>
       <div className="mt-3 text-foreground/80">
@@ -369,6 +399,68 @@ function weeklyLoadBuckets(
     bucket.loadByType.set(key, (bucket.loadByType.get(key) ?? 0) + load);
   }
   return buckets;
+}
+
+function SleepArchitectureCard({
+  days,
+}: {
+  days: ReadonlyArray<{ x: string; deep: number; light: number; rem: number; awake: number }>;
+}) {
+  const last = days[days.length - 1];
+  const restorative = last ? last.deep + last.rem : null;
+  const asleep = last ? last.deep + last.light + last.rem : 0;
+  const efficiency =
+    last && asleep + last.awake > 0 ? (asleep / (asleep + last.awake)) * 100 : null;
+  const data = days.map((s) => ({
+    x: s.x,
+    segments: [
+      { key: "Deep", value: s.deep, color: "var(--chart-sleep)" },
+      { key: "REM", value: s.rem, color: "var(--chart-hrv)" },
+      { key: "Light", value: s.light, color: "var(--muted-foreground)" },
+      { key: "Awake", value: s.awake, color: "var(--chart-atl)" },
+    ].filter((seg) => seg.value > 0),
+  }));
+  return (
+    <div className="rounded-xl border bg-card p-4 shadow-sm">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Per-night stages
+        </span>
+        <span className="text-[10px] text-muted-foreground">{days.length} nights</span>
+      </div>
+      <div className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+        <span className="flex items-baseline gap-1">
+          <span className="font-mono text-2xl tabular-nums">
+            {restorative != null ? Math.round(restorative) : "—"}
+          </span>
+          <span className="text-xs text-muted-foreground">min restorative (deep+REM)</span>
+        </span>
+        {efficiency != null ? (
+          <span className="text-xs text-muted-foreground">
+            efficiency {Math.round(efficiency)}%
+          </span>
+        ) : null}
+      </div>
+      <div className="mt-3">
+        <BarStack data={data} height={64} width={520} ariaLabel="Sleep stages per night" />
+      </div>
+      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+        <Legend color="var(--chart-sleep)" label="Deep" />
+        <Legend color="var(--chart-hrv)" label="REM" />
+        <Legend color="var(--muted-foreground)" label="Light" />
+        <Legend color="var(--chart-atl)" label="Awake" />
+      </div>
+    </div>
+  );
+}
+
+function Legend({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="flex items-center gap-1">
+      <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} />
+      {label}
+    </span>
+  );
 }
 
 function WeeklyLoadCard({ weeks }: { weeks: ReadonlyArray<WeekLoad> }) {
