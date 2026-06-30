@@ -78,6 +78,15 @@ import {
   bulkLogCapacityInputSchema,
 } from "./tools/bulk-log-capacity";
 import { getCapacity, getCapacityInputSchema } from "./tools/get-capacity";
+import { getCorrelation, getCorrelationInputSchema } from "./tools/get-correlation";
+import {
+  getCorrelationMatrix,
+  getCorrelationMatrixInputSchema,
+} from "./tools/get-correlation-matrix";
+import { getDistribution, getDistributionInputSchema } from "./tools/get-distribution";
+import { getTrend, getTrendInputSchema } from "./tools/get-trend";
+import { getLoadBalance, getLoadBalanceInputSchema } from "./tools/get-load-balance";
+import { getMetricSeries, getMetricSeriesInputSchema } from "./tools/get-metric-series";
 
 export type McpContext = {
   userId: string;
@@ -506,6 +515,74 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     async (input) => jsonResult(await getStreak(ctx.userId, input)),
   );
 
+  // ---------- stats engine (deterministic — statistics, never verdicts) ----------
+
+  server.registerTool(
+    "get_correlation",
+    {
+      title: "Correlation + regression between two metrics",
+      description:
+        "Pearson + Spearman correlation and an OLS regression of metric_b on metric_a over the window, with an optional day lag (lag_days=1 pairs metric_a today with metric_b tomorrow — e.g. training load → next-day HRV). Per-workout metrics are collapsed to a daily value (sum/mean/max) before aligning with daily metrics. Returns the coefficients + n + provenance. These are descriptive statistics, not causation and not a recommendation — interpretation is yours, not BI's.",
+      inputSchema: getCorrelationInputSchema,
+    },
+    async (input) => jsonResult(await getCorrelation(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "get_correlation_matrix",
+    {
+      title: "Pairwise correlation matrix (heatmap)",
+      description:
+        "A pairwise correlation matrix (Pearson or Spearman) for 2–8 metrics over the window, plus the per-pair sample counts — the data behind a correlation heatmap. lag_days=0 is symmetric; a nonzero lag makes it directional. Cells with n<3 are null. Descriptive only — no ranking of 'most important driver'.",
+      inputSchema: getCorrelationMatrixInputSchema,
+    },
+    async (input) => jsonResult(await getCorrelationMatrix(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "get_distribution",
+    {
+      title: "Distribution of a metric (histogram + percentiles)",
+      description:
+        "Empirical distribution of a metric over the window: an equal-width histogram, percentiles (p5/p25/p50/p75/p95), and moments (min/max/mean/median/stdev). Operates on raw values (one per workout for workout metrics, one per day for daily metrics). Descriptive only.",
+      inputSchema: getDistributionInputSchema,
+    },
+    async (input) => jsonResult(await getDistribution(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "get_trend",
+    {
+      title: "OLS trend line for a metric",
+      description:
+        "Ordinary-least-squares trend of a metric over time: slope (per day / week / 30 days), R², and the sign of the slope as a neutral direction (rising / flat / falling). Null days are skipped, not imputed. 'direction' is a description of the number — there is no good/bad labeling and no magnitude threshold (that would be a judgment).",
+      inputSchema: getTrendInputSchema,
+    },
+    async (input) => jsonResult(await getTrend(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "get_load_balance",
+    {
+      title: "Training load balance (CTL / ATL / TSB)",
+      description:
+        "Daily fitness/fatigue/form series: training impulse (vendor_training_load, else duration×(rpe??5)), ATL (acute, EWMA τ=7d), CTL (chronic, EWMA τ=42d), and TSB = yesterday's CTL − ATL, with a 42-day warm-up so the chronic EWMA is primed. Returns the series + current values + the constants used. These are deterministic load statistics (same family as z-score/stdev) — NOT a verdict that you're fresh/fatigued/overtrained and NOT advice to train or rest.",
+      inputSchema: getLoadBalanceInputSchema,
+    },
+    async (input) => jsonResult(await getLoadBalance(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "get_metric_series",
+    {
+      title: "Aligned multi-metric daily series",
+      description:
+        "Date-aligned daily series for 1–8 metrics over the window, on a dense axis (gaps = null), with per-metric sample counts and the daily-collapse used. The raw substrate for overlays/scatter and for your own reasoning — no interpretation, just aligned numbers.",
+      inputSchema: getMetricSeriesInputSchema,
+    },
+    async (input) => jsonResult(await getMetricSeries(ctx.userId, input)),
+  );
+
   // ---------- recipes ----------
 
   server.registerTool(
@@ -581,7 +658,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     {
       title: "Compute weekly training load",
       description:
-        "Return weekly buckets over the trailing N days. v1 each bucket has weekStart, totalMin, trimp (duration × (rpe ?? 5)), and countByType. CTL/ATL/TSB are future work. Pair with get_baseline for ramp-rate reasoning.",
+        "Return weekly buckets over the trailing N days. Each bucket has weekStart, totalMin, trimp (duration × (rpe ?? 5)), and countByType — a coarse weekly view. For daily CTL/ATL/TSB (fitness/fatigue/form), use get_load_balance instead.",
       inputSchema: computeTrainingLoadInputSchema,
     },
     async (input) => jsonResult(await computeTrainingLoad(ctx.userId, input)),

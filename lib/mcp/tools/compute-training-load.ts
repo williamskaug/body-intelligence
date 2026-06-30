@@ -42,6 +42,6 @@ export async function computeTrainingLoad(userId: string, input: ComputeTraining
     days: input.days,
     computed_as_of: todayIso,
     buckets,
-    note: "v1: weekly buckets using duration × (rpe ?? 5) as a TRIMP-lite intensity-weighted load. CTL/ATL/TSB are future work.",
+    note: "Weekly buckets using duration × (rpe ?? 5) as a TRIMP-lite intensity-weighted load. For daily CTL/ATL/TSB (fitness/fatigue/form), use get_load_balance.",
   };
 }
