@@ -282,6 +282,42 @@ export function correlationReport(
   };
 }
 
+// Edwards' TRIMP — a published zone-weighted training-load formula: minutes in
+// HR zone i count i× (Z1×1 … Z5×5). zoneSeconds is [z1..z5] in seconds. Pure
+// math with constants in code, like any other statistic here.
+export function edwardsTrimp(zoneSeconds: ReadonlyArray<number | null>): number {
+  let trimp = 0;
+  for (let i = 0; i < zoneSeconds.length && i < 5; i++) {
+    const s = zoneSeconds[i];
+    if (s != null && Number.isFinite(s) && s > 0) trimp += (s / 60) * (i + 1);
+  }
+  return trimp;
+}
+
+export type LagPoint = { lag: number; r: number | null; n: number };
+
+// Pearson r of (a vs b) at each lag (b shifted +lag days). Returns the full
+// profile plus the strongest lag by |r| among lags meeting minN. Cheap — it
+// re-aligns the already-fetched maps in memory, no extra queries.
+export function lagScan(
+  a: ReadonlyMap<string, number>,
+  b: ReadonlyMap<string, number>,
+  lags: ReadonlyArray<number>,
+  minN = 8,
+): { profile: LagPoint[]; best: LagPoint | null } {
+  const profile: LagPoint[] = [];
+  for (const lag of lags) {
+    const { xs, ys } = alignByDate(a, b, lag);
+    profile.push({ lag, r: pearson(xs, ys), n: xs.length });
+  }
+  let best: LagPoint | null = null;
+  for (const p of profile) {
+    if (p.r == null || p.n < minN) continue;
+    if (best == null || Math.abs(p.r) > Math.abs(best.r!)) best = p;
+  }
+  return { profile, best };
+}
+
 // Keep computeBaseline reachable from this module for callers that want the
 // univariate mean/median/sd alongside the new primitives.
 export const baseline = computeBaseline;

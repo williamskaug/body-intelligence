@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   alignByDate,
+  edwardsTrimp,
   ewma,
   histogram,
+  lagScan,
   linregress,
   pearson,
   percentile,
@@ -84,6 +86,42 @@ describe("histogram", () => {
   });
   it("returns null on empty input", () => {
     expect(histogram([], 10)).toBeNull();
+  });
+});
+
+describe("edwardsTrimp", () => {
+  it("weights zone minutes 1..5", () => {
+    // 10 min Z1 → 10; 20 min Z2 ×2 = 40; 5 min Z3 ×3 = 15 → 65
+    expect(edwardsTrimp([600, 1200, 300, 0, 0])).toBeCloseTo(65, 10);
+  });
+  it("is 0 for an empty/zero session", () => {
+    expect(edwardsTrimp([0, 0, 0, 0, 0])).toBe(0);
+  });
+});
+
+describe("lagScan", () => {
+  it("finds the lag at which two series align best", () => {
+    // Non-monotonic so only the true lag aligns (a monotonic series would
+    // correlate at every lag). b[d+1] = a[d], so lag 1 is a perfect match.
+    const a = new Map([
+      ["2026-06-01", 3],
+      ["2026-06-02", 1],
+      ["2026-06-03", 4],
+      ["2026-06-04", 1],
+      ["2026-06-05", 5],
+      ["2026-06-06", 9],
+    ]);
+    const b = new Map([
+      ["2026-06-02", 3],
+      ["2026-06-03", 1],
+      ["2026-06-04", 4],
+      ["2026-06-05", 1],
+      ["2026-06-06", 5],
+      ["2026-06-07", 9],
+    ]);
+    const { best } = lagScan(a, b, [0, 1, 2], 3);
+    expect(best?.lag).toBe(1);
+    expect(best?.r).toBeCloseTo(1, 10);
   });
 });
 

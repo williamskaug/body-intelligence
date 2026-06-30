@@ -26,6 +26,8 @@ export type ScatterRegressionProps = {
     n: number;
     lagDays?: number;
   };
+  // Optional r-by-lag profile (the chosen lag is stats.lagDays).
+  lagProfile?: ReadonlyArray<{ lag: number; r: number | null }>;
   xLabel: string;
   yLabel: string;
   minN?: number;
@@ -64,6 +66,7 @@ export function ScatterRegression({
   points,
   line,
   stats,
+  lagProfile,
   xLabel,
   yLabel,
   minN = 10,
@@ -128,8 +131,39 @@ export function ScatterRegression({
         </span>{" "}
         · R² {stats.r2 == null ? "—" : stats.r2.toFixed(2)} · slope{" "}
         {stats.slope == null ? "—" : fmtSigned(stats.slope, 3)} · n {stats.n}
-        {stats.lagDays ? ` · lag ${stats.lagDays}d` : ""}
+        {stats.lagDays ? ` · best lag ${stats.lagDays}d` : " · lag 0d"}
       </p>
+      {lagProfile && lagProfile.length > 1 ? (
+        <div className="mt-1.5 flex items-end gap-1" aria-label="correlation strength by lag">
+          {lagProfile.map((p) => {
+            const mag = p.r == null ? 0 : Math.abs(p.r);
+            const chosen = p.lag === stats.lagDays;
+            return (
+              <div key={p.lag} className="flex flex-col items-center gap-0.5" title={`lag ${p.lag}d: r ${p.r == null ? "n/a" : fmtSigned(p.r)}`}>
+                <div className="flex h-6 w-3 items-end">
+                  <div
+                    className="w-full rounded-sm"
+                    style={{
+                      height: `${Math.max(6, mag * 100)}%`,
+                      backgroundColor:
+                        p.r == null
+                          ? "var(--muted)"
+                          : p.r >= 0
+                            ? "var(--chart-pos)"
+                            : "var(--chart-neg)",
+                      opacity: chosen ? 1 : 0.4,
+                    }}
+                  />
+                </div>
+                <span className={`text-[8px] ${chosen ? "font-semibold text-foreground" : "text-muted-foreground"}`}>
+                  {p.lag}
+                </span>
+              </div>
+            );
+          })}
+          <span className="ml-1 self-center text-[9px] text-muted-foreground">|r| by lag (days)</span>
+        </div>
+      ) : null}
     </div>
   );
 }

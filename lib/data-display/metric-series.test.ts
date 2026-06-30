@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { collapseDaily, defaultDailyAgg, impulseForWorkout } from "./metric-series";
+import { collapseDaily, defaultDailyAgg, impulseForWorkout, workoutLoad } from "./metric-series";
 
 describe("defaultDailyAgg", () => {
   it("sums accumulating quantities", () => {
@@ -44,5 +44,22 @@ describe("impulseForWorkout", () => {
     expect(
       impulseForWorkout({ duration_min: 30, rpe: 4, vendor_training_load: 0 }),
     ).toBe(120);
+  });
+});
+
+describe("workoutLoad precedence", () => {
+  const w = { duration_min: 60, rpe: 6, vendor_training_load: 180 };
+  it("prefers Edwards zone-weighted TRIMP when HR-zone time exists", () => {
+    const r = workoutLoad(w, [600, 1200, 300, 0, 0]); // 10 + 40 + 15 = 65
+    expect(r.source).toBe("zones");
+    expect(r.load).toBeCloseTo(65, 10);
+  });
+  it("falls back to vendor load when no zones", () => {
+    expect(workoutLoad(w, null)).toEqual({ load: 180, source: "vendor" });
+  });
+  it("falls back to duration×rpe when neither", () => {
+    expect(
+      workoutLoad({ duration_min: 60, rpe: 6, vendor_training_load: null }, null),
+    ).toEqual({ load: 360, source: "rpe" });
   });
 });

@@ -6,7 +6,7 @@
 import { adminClient } from "@/lib/supabase/admin";
 import { type MetricKey, resolveMetric } from "@/lib/mcp/tools/metrics";
 import { datesInRange } from "./aggregate";
-import { denseSeries, toFinite } from "./statistics";
+import { denseSeries, edwardsTrimp, toFinite } from "./statistics";
 
 export type DailyAgg = "sum" | "mean" | "max";
 
@@ -95,9 +95,9 @@ export async function dailySeriesForMetric(
   return { map, agg: usedAgg, n: map.size };
 }
 
-// Per-workout training impulse: prefer the vendor load when present (>0), else
-// duration × (rpe ?? 5). This precedence matches the existing UI rule in
-// components/data/trends.tsx so the MCP load and the chart load stay identical.
+// Per-workout training impulse fallback: vendor load when present (>0), else
+// duration × (rpe ?? 5). The vendor/rpe path matches the existing UI rule in
+// components/data/trends.tsx.
 export function impulseForWorkout(w: {
   duration_min: number | null;
   rpe: number | null;
@@ -110,6 +110,34 @@ export function impulseForWorkout(w: {
   return dur * rpe;
 }
 
+export type LoadSource = "zones" | "vendor" | "rpe";
+
+// Per-workout load with precedence: Edwards zone-weighted TRIMP when HR-zone
+// time exists (the most physiological, used for most Garmin runs) → vendor
+// training load → duration×(rpe??5). Returns the source so the load tool can
+// report provenance (the three are similar in scale, but the rpe fallback runs
+// higher, so callers surface how many days used which).
+export function workoutLoad(
+  w: { duration_min: number | null; rpe: number | null; vendor_training_load: number | string | null },
+  zoneSeconds: ReadonlyArray<number | null> | null | undefined,
+): { load: number; source: LoadSource } {
+  if (zoneSeconds && zoneSeconds.some((v) => v != null && Number(v) > 0)) {
+    return { load: edwardsTrimp(zoneSeconds.map((v) => toFinite(v) ?? 0)), source: "zones" };
+  }
+  const vendor = toFinite(w.vendor_training_load);
+  if (vendor != null && vendor > 0) return { load: vendor, source: "vendor" };
+  const dur = toFinite(w.duration_min) ?? 0;
+  const rpe = toFinite(w.rpe) ?? 5;
+  return { load: dur * rpe, source: "rpe" };
+}
+
+type ZoneEmbed = {
+  hr_z1_s: number | null;
+  hr_z2_s: number | null;
+  hr_z3_s: number | null;
+  hr_z4_s: number | null;
+  hr_z5_s: number | null;
+};
 type ImpulseRow = {
   date: string;
   duration_min: number | null;
@@ -120,37 +148,57 @@ type ImpulseRow = {
     | { vendor_training_load: number | string | null }
     | Array<{ vendor_training_load: number | string | null }>
     | null;
+  workout_zones: ZoneEmbed | ZoneEmbed[] | null;
 };
 
-// Sparse date→summed-impulse map over [from, to]. Days with no workout are
-// absent (the load tool 0-fills onto a dense axis before the EWMA).
+export type ImpulseResult = {
+  map: Map<string, number>;
+  sources: Record<LoadSource, number>;
+};
+
+// Sparse date→summed-impulse map over [from, to] plus a per-source workout count
+// (provenance). Days with no workout are absent (the load tool 0-fills onto a
+// dense axis before the EWMA).
 export async function dailyImpulseSeries(
   userId: string,
   from: string,
   to: string,
-): Promise<Map<string, number>> {
+): Promise<ImpulseResult> {
   const sb = adminClient();
   const { data, error } = await sb
     .from("workouts")
-    .select("date, duration_min, rpe, workout_metrics(vendor_training_load)")
+    .select(
+      "date, duration_min, rpe, workout_metrics(vendor_training_load), workout_zones(hr_z1_s,hr_z2_s,hr_z3_s,hr_z4_s,hr_z5_s)",
+    )
     .eq("user_id", userId)
     .gte("date", from)
     .lte("date", to);
   if (error) throw new Error(`dailyImpulseSeries: ${error.message}`);
 
   const map = new Map<string, number>();
+  const sources: Record<LoadSource, number> = { zones: 0, vendor: 0, rpe: 0 };
   for (const row of (data ?? []) as unknown as ImpulseRow[]) {
     const wm = Array.isArray(row.workout_metrics)
       ? (row.workout_metrics[0] ?? null)
       : row.workout_metrics;
-    const load = impulseForWorkout({
-      duration_min: row.duration_min ?? null,
-      rpe: row.rpe ?? null,
-      vendor_training_load: wm?.vendor_training_load ?? null,
-    });
+    const wz = Array.isArray(row.workout_zones)
+      ? (row.workout_zones[0] ?? null)
+      : row.workout_zones;
+    const zoneSecs = wz
+      ? [wz.hr_z1_s, wz.hr_z2_s, wz.hr_z3_s, wz.hr_z4_s, wz.hr_z5_s]
+      : null;
+    const { load, source } = workoutLoad(
+      {
+        duration_min: row.duration_min ?? null,
+        rpe: row.rpe ?? null,
+        vendor_training_load: wm?.vendor_training_load ?? null,
+      },
+      zoneSecs,
+    );
+    sources[source] += 1;
     map.set(row.date, (map.get(row.date) ?? 0) + load);
   }
-  return map;
+  return { map, sources };
 }
 
 export type MultiSeriesResult = {

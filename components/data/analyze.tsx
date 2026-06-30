@@ -7,6 +7,7 @@ import { MultiSeriesLine } from "./charts/multi-series-line";
 import { PerformanceManagementChart } from "./charts/performance-management-chart";
 import { RatioBandChart } from "./charts/ratio-band-chart";
 import { ScatterRegression } from "./charts/scatter-regression";
+import { BaselineBandChart } from "./charts/baseline-band-chart";
 import { ChartEmpty } from "./charts/chart-empty";
 import { detectAnomalies, topAnomalies } from "@/lib/data-display/anomalies";
 import {
@@ -16,7 +17,7 @@ import {
   metricLabel,
 } from "@/lib/data-display/metric-registry";
 import { dailySeriesForMetric } from "@/lib/data-display/metric-series";
-import { alignByDate, computeBaseline, linregress, pearson } from "@/lib/data-display/statistics";
+import { alignByDate, computeBaseline, lagScan, linregress, pearson } from "@/lib/data-display/statistics";
 import type { MetricKey } from "@/lib/mcp/tools/metrics";
 import { getCorrelationMatrix } from "@/lib/mcp/tools/get-correlation-matrix";
 import { getDistribution } from "@/lib/mcp/tools/get-distribution";
@@ -63,12 +64,15 @@ const ZONE_KEYS: MetricKey[] = [
   "workout_hr_z5_s",
 ];
 
-const PAIRS: Array<{ a: MetricKey; b: MetricKey; lag: number; title: string }> = [
-  { a: "sleep_h", b: "hrv_ms", lag: 1, title: "Sleep → next-day HRV" },
-  { a: "derived_acute_load_7d", b: "soreness", lag: 1, title: "Acute load → next-day soreness" },
-  { a: "workout_weather_temp_c", b: "workout_decoupling_pct", lag: 0, title: "Heat → HR-pace decoupling" },
-  { a: "rhr_bpm", b: "sleep_quality", lag: 0, title: "Resting HR → sleep quality" },
+const PAIRS: Array<{ a: MetricKey; b: MetricKey; title: string }> = [
+  { a: "sleep_h", b: "hrv_ms", title: "Sleep → HRV" },
+  { a: "derived_acute_load_7d", b: "soreness", title: "Acute load → soreness" },
+  { a: "workout_weather_temp_c", b: "workout_decoupling_pct", title: "Heat → HR-pace decoupling" },
+  { a: "rhr_bpm", b: "sleep_quality", title: "Resting HR → sleep quality" },
 ];
+
+// Lags (days) scanned for each relationship — b shifted forward by the lag.
+const SCAN_LAGS = [0, 1, 2, 3];
 
 async function safe<T>(p: Promise<T>): Promise<T | null> {
   try {
@@ -95,18 +99,15 @@ function sumNonNull(arr: ReadonlyArray<number | null> | undefined): number {
   return s;
 }
 
-async function buildScatter(
-  userId: string,
-  a: MetricKey,
-  b: MetricKey,
-  from: string,
-  to: string,
-  lag: number,
-) {
+async function buildScatter(userId: string, a: MetricKey, b: MetricKey, from: string, to: string) {
   const [sa, sb] = await Promise.all([
     dailySeriesForMetric(userId, a, from, to),
     dailySeriesForMetric(userId, b, from, to),
   ]);
+  // Scan forward lags and plot the strongest — reveals the athlete's real
+  // response lag instead of assuming same-day.
+  const { profile, best } = lagScan(sa.map, sb.map, SCAN_LAGS, 8);
+  const lag = best?.lag ?? 0;
   const { xs, ys, dates } = alignByDate(sa.map, sb.map, lag);
   const reg = linregress(xs, ys);
   const r = pearson(xs, ys);
@@ -130,7 +131,21 @@ async function buildScatter(
     points,
     line,
     stats: { r, r2: reg?.r2 ?? null, slope: reg?.slope ?? null, n: xs.length, lagDays: lag },
+    lagProfile: profile.map((p) => ({ lag: p.lag, r: p.r })),
   };
+}
+
+function buildBaselineBand(
+  key: string,
+  ms: { dates: string[]; series: Record<string, Array<number | null>> } | null,
+) {
+  const series = ms?.series[key];
+  if (!series || !ms) return null;
+  const data = ms.dates.map((date, i) => ({ date, value: series[i] ?? null }));
+  const base = computeBaseline(series);
+  const latest = latestNonNull(series);
+  const z = base && base.sd > 0 && latest != null ? (latest - base.mean) / base.sd : null;
+  return { data, mean: base?.mean ?? null, sd: base?.sd ?? null, z };
 }
 
 function toHistBins(hist: { edges: number[]; counts: number[] } | null) {
@@ -161,7 +176,7 @@ export async function Analyze(props: AnalyzeProps) {
           safe(getDistribution(userId, { metric: m, window_days: days, bins: 12 })),
         ),
       ),
-      Promise.all(PAIRS.map((p) => safe(buildScatter(userId, p.a, p.b, from, to, p.lag)))),
+      Promise.all(PAIRS.map((p) => safe(buildScatter(userId, p.a, p.b, from, to)))),
       safe(getMetricSeries(userId, { metrics: CAPACITY_KEYS, window_days: days })),
       safe(getMetricSeries(userId, { metrics: ZONE_KEYS, window_days: days })),
       safe(getMetricSeries(userId, { metrics: ["hrv_ms", "derived_sleep_debt_7d_min"], window_days: days })),
@@ -283,6 +298,23 @@ export async function Analyze(props: AnalyzeProps) {
         sub="CTL (fitness) / ATL (fatigue) / TSB (form) — EWMA τ=42d/7d. Load statistics, not a verdict."
       >
         <PerformanceManagementChart data={pmcData} ramp={load?.current.ctl_ramp_7d ?? null} />
+        {load ? (
+          <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2">
+            <span className="text-xs text-muted-foreground">
+              Monotony{" "}
+              <span className="font-mono text-foreground">
+                {load.current.monotony != null ? load.current.monotony.toFixed(2) : "—"}
+              </span>{" "}
+              · Strain{" "}
+              <span className="font-mono text-foreground">{fmt0(load.current.strain)}</span>{" "}
+              (Foster — 7-day mean/SD of load × weekly load)
+            </span>
+            <span className="text-[11px] text-muted-foreground">
+              Load source: {load.load_sources.zones} zone-TRIMP · {load.load_sources.vendor}{" "}
+              vendor · {load.load_sources.rpe} RPE-estimated
+            </span>
+          </div>
+        ) : null}
       </Band>
 
       <Band
@@ -378,6 +410,36 @@ export async function Analyze(props: AnalyzeProps) {
       </Band>
 
       <Band
+        title="Recovery baselines"
+        sub="Each signal against its own ±1 SD normal range, with today's z-score. Descriptive — never a readiness gate (that stays the agent's call)."
+      >
+        <div className="grid gap-4">
+          {[
+            { key: "hrv_ms", color: "var(--chart-hrv)", dec: 0, unit: "ms" },
+            { key: "rhr_bpm", color: "var(--chart-rhr)", dec: 0, unit: "bpm" },
+            { key: "sleep_h", color: "var(--chart-sleep)", dec: 1, unit: "h" },
+          ].map((cfg) => {
+            const bb = buildBaselineBand(cfg.key, distLatest);
+            if (!bb) return null;
+            return (
+              <div key={cfg.key} className="rounded-xl border bg-card p-4 shadow-sm">
+                <BaselineBandChart
+                  data={bb.data}
+                  mean={bb.mean}
+                  sd={bb.sd}
+                  label={metricLabel(cfg.key)}
+                  unit={cfg.unit}
+                  color={cfg.color}
+                  decimals={cfg.dec}
+                  todayZ={bb.z}
+                />
+              </div>
+            );
+          })}
+        </div>
+      </Band>
+
+      <Band
         title="Correlation matrix"
         sub="Pairwise Pearson r across recovery, load, and body signals — saturation ∝ |r|, low-n cells faded."
       >
@@ -438,6 +500,7 @@ export async function Analyze(props: AnalyzeProps) {
                     points={s.points}
                     line={s.line}
                     stats={s.stats}
+                    lagProfile={s.lagProfile}
                     xLabel={metricLabel(p.a)}
                     yLabel={metricLabel(p.b)}
                   />
