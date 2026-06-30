@@ -73,6 +73,21 @@
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
+  /* Semantic chart colors for the stats-engine views (Analyze + drilldown).
+     Defined once here; they cascade into .dark since .dark doesn't override
+     them. Lightness/chroma chosen to read on both light and dark cards. */
+  --chart-hrv: oklch(0.7 0.13 180);
+  --chart-rhr: oklch(0.64 0.19 25);
+  --chart-sleep: oklch(0.62 0.15 265);
+  --chart-load: oklch(0.7 0.16 50);
+  --chart-ctl: oklch(0.62 0.15 265);
+  --chart-atl: oklch(0.64 0.19 25);
+  --chart-tsb: oklch(0.7 0.15 150);
+  --chart-weight: oklch(0.72 0.12 90);
+  --chart-pos: oklch(0.7 0.15 150);
+  --chart-neg: oklch(0.64 0.19 25);
+  --chart-point: oklch(0.66 0.14 230);
+  --chart-fit: oklch(0.55 0 0);
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);

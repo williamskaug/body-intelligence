@@ -6,7 +6,7 @@ import { EmptyDataState } from "@/components/data/empty-state";
 import { HealthThreads } from "@/components/data/health-threads";
 import { Timeline } from "@/components/data/timeline";
 import { TodayHero } from "@/components/data/today-hero";
-import { Trends } from "@/components/data/trends";
+import { Analyze } from "@/components/data/analyze";
 import { hoursByType } from "@/lib/data-display/aggregate";
 import { computeBaseline } from "@/lib/data-display/baseline";
 import type { DerivedDailyRow, Gate } from "@/lib/data-display/derived";
@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
 
 type SearchParams = Promise<{ days?: string; view?: string; nogolf?: string }>;
 
-type ViewKey = "timeline" | "calendar" | "trends";
+type ViewKey = "timeline" | "calendar" | "analyze";
 
 // Full workout_metrics row as selected below — a superset of what Timeline
 // (WorkoutMetricsRow) and Trends (TrendsWorkoutMetric) each consume.
@@ -299,10 +299,15 @@ export default async function DataPage({
     .filter((d) => d.path.startsWith("briefings/"))
     .sort((a, b) => b.path.localeCompare(a.path));
   const latestBriefingPath = briefingMeta[0]?.path ?? null;
-  // Full content only for standard docs + the latest briefing.
+  const insightsMeta = docMeta
+    .filter((d) => d.path.startsWith("insights/"))
+    .sort((a, b) => b.path.localeCompare(a.path));
+  const latestInsightPath = insightsMeta[0]?.path ?? null;
+  // Full content only for standard docs + the latest briefing + latest insight.
   const contentPaths = [
     ...docMeta.filter((d) => STANDARD.has(d.path)).map((d) => d.path),
     ...(latestBriefingPath ? [latestBriefingPath] : []),
+    ...(latestInsightPath ? [latestInsightPath] : []),
   ];
   const contentRows = contentPaths.length
     ? await sb
@@ -341,6 +346,15 @@ export default async function DataPage({
     date: d.path.replace(/^briefings\//, "").replace(/\.md$/, ""),
     updated_at: d.updated_at,
     content: d.path === latestBriefingPath ? (contentByPath.get(d.path) ?? null) : null,
+  }));
+
+  // Insights feed (rendered atop the Analyze view): Claude-authored
+  // interpretation docs under insights/. Latest carries content.
+  const insights = insightsMeta.map((d) => ({
+    path: d.path,
+    label: d.path.replace(/^insights\//, "").replace(/\.md$/, ""),
+    updated_at: d.updated_at,
+    content: d.path === latestInsightPath ? (contentByPath.get(d.path) ?? null) : null,
   }));
 
   // ---- Hero inputs ----
@@ -418,7 +432,7 @@ export default async function DataPage({
           <h1 className="text-3xl font-semibold tracking-tight">Your data</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Everything Body Intelligence has captured — day-by-day on the
-            Timeline, by month on the Calendar, summarized over time in Trends.
+            Timeline, by month on the Calendar, analyzed statistically in Analyze.
           </p>
         </div>
 
@@ -459,12 +473,15 @@ export default async function DataPage({
             endDate={todayDate}
           />
         ) : (
-          <Trends
-            daily={(daily.data ?? []) as Parameters<typeof Trends>[0]["daily"]}
-            workouts={filteredWorkouts as Parameters<typeof Trends>[0]["workouts"]}
+          <Analyze
+            userId={user.id}
+            days={days}
+            insights={insights}
+            daily={(daily.data ?? []) as Parameters<typeof Analyze>[0]["daily"]}
+            workouts={filteredWorkouts as Parameters<typeof Analyze>[0]["workouts"]}
             derived={derived}
             workoutMetrics={
-              metrics as Parameters<typeof Trends>[0]["workoutMetrics"]
+              metrics as Parameters<typeof Analyze>[0]["workoutMetrics"]
             }
             startDate={sinceDate}
             endDate={todayDate}
@@ -485,7 +502,7 @@ export default async function DataPage({
         </div>
         <Documents
           rows={docRows as Parameters<typeof Documents>[0]["rows"]}
-          excludeFolders={["briefings/"]}
+          excludeFolders={["briefings/", "insights/"]}
         />
       </section>
     </div>
@@ -537,7 +554,7 @@ function Tabs({ current, days }: { current: ViewKey; days: number }) {
   const tabs: Array<{ key: ViewKey; label: string }> = [
     { key: "timeline", label: "Timeline" },
     { key: "calendar", label: "Calendar" },
-    { key: "trends", label: "Trends" },
+    { key: "analyze", label: "Analyze" },
   ];
   return (
     <nav className="inline-flex rounded-lg border bg-muted/30 p-1 text-sm">
@@ -698,7 +715,8 @@ function parseDays(raw: string | undefined): number {
 }
 
 function parseView(raw: string | undefined): ViewKey {
-  if (raw === "trends") return "trends";
+  // "trends" is kept as an alias so existing bookmarks/links don't 404.
+  if (raw === "analyze" || raw === "trends") return "analyze";
   if (raw === "calendar") return "calendar";
   return "timeline";
 }
