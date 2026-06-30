@@ -564,9 +564,9 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   server.registerTool(
     "get_load_balance",
     {
-      title: "Training load balance (CTL / ATL / TSB)",
+      title: "Training load balance (CTL / ATL / TSB / ACWR / monotony)",
       description:
-        "Daily fitness/fatigue/form series: training impulse (vendor_training_load, else duration×(rpe??5)), ATL (acute, EWMA τ=7d), CTL (chronic, EWMA τ=42d), and TSB = yesterday's CTL − ATL, with a 42-day warm-up so the chronic EWMA is primed. Returns the series + current values + the constants used. These are deterministic load statistics (same family as z-score/stdev) — NOT a verdict that you're fresh/fatigued/overtrained and NOT advice to train or rest.",
+        "Daily fitness/fatigue/form series. Training impulse uses Edwards zone-weighted TRIMP when HR-zone time exists, else vendor_training_load, else duration×(rpe??5) (load_sources reports the per-source counts). Returns ATL (acute, EWMA τ=7d), CTL (chronic, EWMA τ=42d), TSB = yesterday's CTL−ATL, acwr = ATL/CTL, ctl_ramp_7d, and Foster monotony/strain — with a 42-day warm-up (EWMA seeded at the warm-up mean) so the chronic EWMA is primed. All deterministic load statistics (same family as z-score/stdev) — NOT a verdict that you're fresh/fatigued/overtrained and NOT advice to train or rest.",
       inputSchema: getLoadBalanceInputSchema,
     },
     async (input) => jsonResult(await getLoadBalance(ctx.userId, input)),

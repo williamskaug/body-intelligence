@@ -45,19 +45,27 @@ the fitness/fatigue/form chart) earns the interactivity on these two surfaces.
 | Band | Component | Stat source | Domain |
 |------|-----------|-------------|--------|
 | Insights | `InsightsFeed` | `insights/` markdown (Claude) | all |
-| Overview | `Trends` (folded in) | `computeBaseline` | all |
-| Training load balance | `PerformanceManagementChart` | `get_load_balance` (CTL/ATL/TSB) | endurance + recovery |
-| Sleep vs HRV | `MultiSeriesLine` | `get_metric_series` | recovery |
-| Correlation matrix | `CorrelationHeatmap` | `get_correlation_matrix` | cross-domain |
-| Distributions | `HistogramChart` ×4 | `get_distribution` | recovery + body |
-| Relationships worth watching | `ScatterRegression` ×4 | `dailySeriesForMetric` + `linregress`/`pearson` | per pair |
+| Headline strip | inline stat chips | `get_load_balance.current` + baseline deltas + capacity latest | all |
 | Notable days | list | `detectAnomalies` + `topAnomalies` | recovery + injury |
+| Overview | `Trends` (folded in) | `computeBaseline` (+ Δ arrows, sleep architecture) | all |
+| Training load balance | `PerformanceManagementChart` | `get_load_balance` (CTL/ATL/TSB + TSB context bands, ramp, monotony/strain, load-source provenance) | endurance + recovery |
+| Acute:chronic ratio | `RatioBandChart` | `get_load_balance` acwr + constant 0.8–1.3 band | injury |
+| Fitness & capacity | `MultiSeriesLine` + tiles | `get_metric_series` over `capacity_*` | endurance |
+| Intensity distribution | inline stacked bar | summed `workout_hr_z*_s` (80/20 polarization) | endurance |
+| Sleep vs HRV | `MultiSeriesLine` | `get_metric_series` | recovery |
+| Recovery baselines | `BaselineBandChart` ×3 | `computeBaseline` ±1 SD band + today z (descriptive, never a gate) | recovery |
+| Correlation matrix | `CorrelationHeatmap` | `get_correlation_matrix` (lower triangle, n shown, low-n faded) | cross-domain |
+| Distributions | `HistogramChart` ×4 | `get_distribution` (+ "you are here" percentile) | recovery + body |
+| Relationships worth watching | `ScatterRegression` ×4 | `dailySeriesForMetric` + `lagScan` (best of lags 0–3) + `linregress`/`pearson` | per pair |
+
+**Load impulse precedence:** Edwards zone-weighted TRIMP (HR zones) → vendor
+training load → duration×(rpe??5); `load_sources` reports the per-source counts.
 
 **Heatmap metric set:** `hrv_ms`, `rhr_bpm`, `sleep_h`, `derived_sleep_debt_7d_min`,
 `derived_acute_load_7d`, `soreness`, `weight_kg`, `body_fat_pct`.
 
-**Relationship pairs:** sleep→next-day HRV (lag 1), acute load→next-day HRV
-(lag 1), cadence→vertical oscillation, resting HR→sleep quality.
+**Relationship pairs (lag auto-scanned 0–3):** sleep→HRV, acute load→soreness,
+heat→HR-pace decoupling, resting HR→sleep quality.
 
 ## min-n / resilience
 
