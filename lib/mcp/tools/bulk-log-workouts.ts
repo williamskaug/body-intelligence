@@ -3,6 +3,7 @@ import { adminClient } from "@/lib/supabase/admin";
 import { logWorkoutInputSchema } from "./log-workout";
 import { normalizeWorkoutType } from "./shared";
 import { upsertWorkoutMetrics } from "./workout-metrics";
+import { upsertWorkoutZones } from "./workout-zones";
 
 const MAX_BATCH = 500;
 
@@ -75,6 +76,14 @@ export async function bulkLogWorkouts(userId: string, input: BulkLogWorkoutsInpu
             continue;
           }
         }
+        if (it.zones) {
+          try {
+            await upsertWorkoutZones(sb, userId, existing.data.id, it.date, it.zones);
+          } catch (e) {
+            errors.push({ index: i, error: e instanceof Error ? e.message : String(e) });
+            continue;
+          }
+        }
         updated++;
         continue;
       }
@@ -92,6 +101,14 @@ export async function bulkLogWorkouts(userId: string, input: BulkLogWorkoutsInpu
     if (it.metrics) {
       try {
         await upsertWorkoutMetrics(sb, userId, insertedRow.id, it.date, it.metrics);
+      } catch (e) {
+        errors.push({ index: i, error: e instanceof Error ? e.message : String(e) });
+        continue;
+      }
+    }
+    if (it.zones) {
+      try {
+        await upsertWorkoutZones(sb, userId, insertedRow.id, it.date, it.zones);
       } catch (e) {
         errors.push({ index: i, error: e instanceof Error ? e.message : String(e) });
         continue;

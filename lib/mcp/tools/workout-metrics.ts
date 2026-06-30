@@ -30,6 +30,11 @@ export const workoutMetricsSchema = z.object({
   elevation_loss_m: z.number().int().min(0).max(20_000).optional(),
   avg_speed_kmh: z.number().min(0).max(150).optional(),
   max_speed_kmh: z.number().min(0).max(150).optional(),
+  weather_temp_c: z.number().min(-60).max(60).optional()
+    .describe("Apparent/feels-like temperature during the activity, °C."),
+  weather_humidity_pct: z.number().int().min(0).max(100).optional(),
+  strength_volume_kg: z.number().min(0).max(1_000_000).optional()
+    .describe("Total strength-session volume, Σ(reps × load) in kg. Per-exercise set detail stays in daily/YYYY-MM-DD.md."),
 });
 
 export type WorkoutMetricsInput = z.infer<typeof workoutMetricsSchema>;
@@ -52,6 +57,9 @@ const METRIC_COLUMNS = [
   "elevation_loss_m",
   "avg_speed_kmh",
   "max_speed_kmh",
+  "weather_temp_c",
+  "weather_humidity_pct",
+  "strength_volume_kg",
 ] as const;
 
 /**

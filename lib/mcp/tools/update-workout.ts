@@ -6,6 +6,11 @@ import {
   workoutMetricsSchema,
   type WorkoutMetricsInput,
 } from "./workout-metrics";
+import {
+  upsertWorkoutZones,
+  workoutZonesSchema,
+  type WorkoutZonesInput,
+} from "./workout-zones";
 
 export const updateWorkoutInputSchema = {
   id: z.string().uuid(),
@@ -23,6 +28,11 @@ export const updateWorkoutInputSchema = {
     .describe(
       "Attach or replace sensor metrics for this workout after the fact. Full replace — pass the complete set.",
     ),
+  zones: workoutZonesSchema
+    .optional()
+    .describe(
+      "Attach or replace time-in-zone for this workout after the fact. Full replace — pass the complete set.",
+    ),
 };
 
 export type UpdateWorkoutInput = {
@@ -37,6 +47,7 @@ export type UpdateWorkoutInput = {
   shoes?: string | null;
   notes?: string | null;
   metrics?: WorkoutMetricsInput;
+  zones?: WorkoutZonesInput;
 };
 
 const UPDATABLE_KEYS = [
@@ -72,9 +83,14 @@ export async function updateWorkout(userId: string, input: UpdateWorkoutInput) {
   if (error) throw new Error(`update_workout: ${error.message}`);
   if (!data) throw new Error(`update_workout: workout ${input.id} not found`);
 
-  if (input.metrics) {
-    const metrics = await upsertWorkoutMetrics(sb, userId, data.id, data.date, input.metrics);
-    return { ...data, metrics };
+  const metrics = input.metrics
+    ? await upsertWorkoutMetrics(sb, userId, data.id, data.date, input.metrics)
+    : undefined;
+  const zones = input.zones
+    ? await upsertWorkoutZones(sb, userId, data.id, data.date, input.zones)
+    : undefined;
+  if (metrics || zones) {
+    return { ...data, ...(metrics ? { metrics } : {}), ...(zones ? { zones } : {}) };
   }
   return data;
 }

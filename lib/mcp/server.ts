@@ -72,6 +72,12 @@ import {
   getSetupGuideInputSchema,
   SETUP_GUIDE,
 } from "./tools/get-setup-guide";
+import { logCapacity, logCapacityInputSchema } from "./tools/log-capacity";
+import {
+  bulkLogCapacity,
+  bulkLogCapacityInputSchema,
+} from "./tools/bulk-log-capacity";
+import { getCapacity, getCapacityInputSchema } from "./tools/get-capacity";
 
 export type McpContext = {
   userId: string;
@@ -150,7 +156,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     {
       title: "Log or update the daily entry",
       description:
-        "Upsert the daily entry for (user, date). All wellness scales follow 5 = best (fatigue/soreness/stress are inverted relative to their natural meaning so 5 is always the good direction). Upsert merge semantics: only the fields you pass are touched; omitted fields keep their existing values. The schema does not accept null to clear — to wipe a field, use delete_daily_entry and re-log. Accepts Garmin/Whoop/Oura-derived vitals including skin_temp_deviation_c and sleep_score; vendor-branded composites (Body Battery, Training Readiness) stay in daily/YYYY-MM-DD.md documents.",
+        "Upsert the daily entry for (user, date). All wellness scales follow 5 = best (fatigue/soreness/stress are inverted relative to their natural meaning so 5 is always the good direction). Upsert merge semantics: only the fields you pass are touched; omitted fields keep their existing values. The schema does not accept null to clear — to wipe a field, use delete_daily_entry and re-log. Accepts Garmin/Whoop/Oura-derived vitals including skin_temp_deviation_c, sleep_score, stress_score, the Body Battery scalars (morning/high/low/charged/drained), training_readiness_score, training_status, and body composition (body_fat_pct, muscle_mass_kg, bone_mass_kg, body_water_pct). Vendor composite SCALARS now live in columns so they can be trended/correlated; the factor breakdowns, hourly curves, and vendor labels stay in daily/YYYY-MM-DD.md documents. training_readiness_score is a captured observation — NOT BI's readiness gate, which stays the agent's authored call in derived_daily.",
       inputSchema: logDailyInputSchema,
     },
     async (input) => jsonResult(await logDaily(ctx.userId, input)),
@@ -244,6 +250,17 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    "log_capacity",
+    {
+      title: "Store a fitness-capacity snapshot for a date",
+      description:
+        "Upsert a capacity_metrics snapshot (VO2max, lactate threshold, FTP, endurance/hill score, fitness age, running tolerance, race-time predictions) for (user, date). BI STORES the vendor estimate you pass — it never computes capacity. Partial-merge by (user, date): only the fields you pass are touched, so a mid-week re-run patches the same row. Intended for the weekly capacity-sync recipe; pass seconds for paces/predictions.",
+      inputSchema: logCapacityInputSchema,
+    },
+    async (input) => jsonResult(await logCapacity(ctx.userId, input)),
+  );
+
+  server.registerTool(
     "add_health_event_update",
     {
       title: "Add a dated thread update to a health event",
@@ -320,6 +337,17 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       inputSchema: getDailyInputSchema,
     },
     async (input) => jsonResult(await getDaily(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "get_capacity",
+    {
+      title: "Get the latest known capacity metrics",
+      description:
+        "Return the most recent non-null value at or before as_of (default today) for each capacity metric (VO2max, LT, FTP, endurance/hill score, fitness age, running tolerance, race predictions), each with the date it was observed. A pure selection over stored snapshots — 'latest known VO2max/FTP/LTHR' in one call. Use to set workout targets or contextualize a briefing.",
+      inputSchema: getCapacityInputSchema,
+    },
+    async (input) => jsonResult(await getCapacity(ctx.userId, input)),
   );
 
   server.registerTool(
@@ -535,6 +563,17 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       inputSchema: bulkLogMealsInputSchema,
     },
     async (input) => jsonResult(await bulkLogMeals(ctx.userId, input)),
+  );
+
+  server.registerTool(
+    "bulk_log_capacity",
+    {
+      title: "Bulk log capacity snapshots",
+      description:
+        "Insert or upsert up to 500 capacity_metrics rows in one call. Keyed by (user, date) — on_conflict='update' merges fields per the same partial-update semantics as log_capacity; 'ignore' skips existing rows. Use for a 12-month capacity backfill.",
+      inputSchema: bulkLogCapacityInputSchema,
+    },
+    async (input) => jsonResult(await bulkLogCapacity(ctx.userId, input)),
   );
 
   server.registerTool(

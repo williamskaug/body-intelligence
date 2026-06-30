@@ -1,65 +1,21 @@
 import { z } from "zod";
 import { adminClient } from "@/lib/supabase/admin";
-import { logDailyInputSchema } from "./log-daily";
+import { CAPACITY_FIELDS, logCapacityInputSchema } from "./log-capacity";
 
 const MAX_BATCH = 500;
-const itemSchema = z.object(logDailyInputSchema);
+const itemSchema = z.object(logCapacityInputSchema);
 
-export const bulkLogDailyInputSchema = {
+export const bulkLogCapacityInputSchema = {
   items: z.array(itemSchema).min(1).max(MAX_BATCH),
   on_conflict: z.enum(["ignore", "update"]).default("update"),
 };
 
-export type BulkLogDailyInput = {
+export type BulkLogCapacityInput = {
   items: z.infer<typeof itemSchema>[];
   on_conflict?: "ignore" | "update";
 };
 
-const DAILY_FIELDS = [
-  "sleep_h",
-  "sleep_deep_min",
-  "sleep_light_min",
-  "sleep_rem_min",
-  "sleep_awake_min",
-  "hrv_ms",
-  "rhr_bpm",
-  "spo2_avg_pct",
-  "respiration_avg_brpm",
-  "weight_kg",
-  "body_fat_pct",
-  "muscle_mass_kg",
-  "bone_mass_kg",
-  "body_water_pct",
-  "bp_systolic_mmhg",
-  "bp_diastolic_mmhg",
-  "hydration_ml",
-  "skin_temp_deviation_c",
-  "sleep_score",
-  "stress_score",
-  "body_battery_morning",
-  "body_battery_high",
-  "body_battery_low",
-  "body_battery_charged",
-  "body_battery_drained",
-  "training_readiness_score",
-  "training_status",
-  "steps",
-  "active_calories",
-  "floors_climbed",
-  "intensity_min_moderate",
-  "intensity_min_vigorous",
-  "fatigue",
-  "soreness",
-  "mood",
-  "stress",
-  "motivation",
-  "sleep_quality",
-  "sleep_notes",
-  "wellness_notes",
-  "meal_notes",
-] as const;
-
-export async function bulkLogDaily(userId: string, input: BulkLogDailyInput) {
+export async function bulkLogCapacity(userId: string, input: BulkLogCapacityInput) {
   const sb = adminClient();
   const onConflict = input.on_conflict ?? "update";
   const nowIso = new Date().toISOString();
@@ -70,13 +26,13 @@ export async function bulkLogDaily(userId: string, input: BulkLogDailyInput) {
   for (let i = 0; i < input.items.length; i++) {
     const it = input.items[i]!;
     const partial: Record<string, unknown> = { updated_at: nowIso };
-    for (const key of DAILY_FIELDS) {
+    for (const key of CAPACITY_FIELDS) {
       const v = (it as Record<string, unknown>)[key];
       if (v !== undefined) partial[key] = v;
     }
 
     const existing = await sb
-      .from("daily_entries")
+      .from("capacity_metrics")
       .select("id")
       .eq("user_id", userId)
       .eq("date", it.date)
@@ -88,14 +44,14 @@ export async function bulkLogDaily(userId: string, input: BulkLogDailyInput) {
     if (existing.data) {
       if (onConflict === "ignore") continue;
       const { error: upErr } = await sb
-        .from("daily_entries")
+        .from("capacity_metrics")
         .update(partial)
         .eq("id", existing.data.id);
       if (upErr) errors.push({ index: i, error: upErr.message });
       else updated++;
     } else {
       const { error: inErr } = await sb
-        .from("daily_entries")
+        .from("capacity_metrics")
         .insert({ user_id: userId, date: it.date, ...partial });
       if (inErr) errors.push({ index: i, error: inErr.message });
       else inserted++;

@@ -15,6 +15,12 @@ export const logDailyInputSchema = {
   respiration_avg_brpm: z.number().min(4).max(40).optional(),
   weight_kg: z.number().min(20).max(400).optional(),
   body_fat_pct: z.number().min(2).max(70).optional(),
+  muscle_mass_kg: z.number().min(0).max(100).optional(),
+  bone_mass_kg: z.number().min(0).max(20).optional(),
+  body_water_pct: z.number().min(0).max(100).optional(),
+  bp_systolic_mmhg: z.number().int().min(50).max(260).optional(),
+  bp_diastolic_mmhg: z.number().int().min(30).max(200).optional(),
+  hydration_ml: z.number().int().min(0).max(20_000).optional(),
   skin_temp_deviation_c: z
     .number()
     .min(-10)
@@ -31,6 +37,45 @@ export const logDailyInputSchema = {
     .optional()
     .describe(
       "Vendor 0-100 last-night sleep score. The factor breakdown stays in daily/YYYY-MM-DD.md.",
+    ),
+  stress_score: z
+    .number()
+    .int()
+    .min(0)
+    .max(100)
+    .optional()
+    .describe(
+      "Vendor daily average stress score 0-100. The stress curve stays in daily/YYYY-MM-DD.md.",
+    ),
+  body_battery_morning: z
+    .number()
+    .int()
+    .min(0)
+    .max(100)
+    .optional()
+    .describe(
+      "Body Battery (or equivalent) on waking, 0-100. The hourly curve + charge/drain events stay in daily/YYYY-MM-DD.md.",
+    ),
+  body_battery_high: z.number().int().min(0).max(100).optional(),
+  body_battery_low: z.number().int().min(0).max(100).optional(),
+  body_battery_charged: z.number().int().min(0).max(100).optional(),
+  body_battery_drained: z.number().int().min(0).max(100).optional(),
+  training_readiness_score: z
+    .number()
+    .int()
+    .min(0)
+    .max(100)
+    .optional()
+    .describe(
+      "Vendor MORNING training-readiness score 0-100. The factor breakdown stays in daily/YYYY-MM-DD.md. A captured observation — NOT BI's readiness gate (that stays the agent's authored call in derived_daily).",
+    ),
+  training_status: z
+    .string()
+    .trim()
+    .max(50)
+    .optional()
+    .describe(
+      "Vendor training-status string (e.g. productive, recovery, overreaching). Store lowercased; free-form, no enum.",
     ),
   steps: z.number().int().min(0).max(200_000).optional(),
   active_calories: z.number().int().min(0).max(20_000).optional(),
@@ -73,8 +118,22 @@ export type LogDailyInput = {
   respiration_avg_brpm?: number;
   weight_kg?: number;
   body_fat_pct?: number;
+  muscle_mass_kg?: number;
+  bone_mass_kg?: number;
+  body_water_pct?: number;
+  bp_systolic_mmhg?: number;
+  bp_diastolic_mmhg?: number;
+  hydration_ml?: number;
   skin_temp_deviation_c?: number;
   sleep_score?: number;
+  stress_score?: number;
+  body_battery_morning?: number;
+  body_battery_high?: number;
+  body_battery_low?: number;
+  body_battery_charged?: number;
+  body_battery_drained?: number;
+  training_readiness_score?: number;
+  training_status?: string;
   steps?: number;
   active_calories?: number;
   floors_climbed?: number;
@@ -109,8 +168,22 @@ export async function logDaily(userId: string, input: LogDailyInput) {
     "respiration_avg_brpm",
     "weight_kg",
     "body_fat_pct",
+    "muscle_mass_kg",
+    "bone_mass_kg",
+    "body_water_pct",
+    "bp_systolic_mmhg",
+    "bp_diastolic_mmhg",
+    "hydration_ml",
     "skin_temp_deviation_c",
     "sleep_score",
+    "stress_score",
+    "body_battery_morning",
+    "body_battery_high",
+    "body_battery_low",
+    "body_battery_charged",
+    "body_battery_drained",
+    "training_readiness_score",
+    "training_status",
     "steps",
     "active_calories",
     "floors_climbed",

@@ -6,6 +6,11 @@ import {
   workoutMetricsSchema,
   type WorkoutMetricsInput,
 } from "./workout-metrics";
+import {
+  upsertWorkoutZones,
+  workoutZonesSchema,
+  type WorkoutZonesInput,
+} from "./workout-zones";
 
 export const logWorkoutInputSchema = {
   date: dateString,
@@ -45,6 +50,11 @@ export const logWorkoutInputSchema = {
     .describe(
       "Optional sensor metrics (running dynamics, training effect, stamina, durability). Upserted into the workout_metrics side table — full replace per workout, so pass the complete set each time.",
     ),
+  zones: workoutZonesSchema
+    .optional()
+    .describe(
+      "Optional time-in-zone (HR + cycling power), seconds per zone. Upserted into the workout_zones side table — full replace per workout.",
+    ),
 };
 
 export type LogWorkoutInput = {
@@ -60,6 +70,7 @@ export type LogWorkoutInput = {
   source?: string;
   source_id?: string;
   metrics?: WorkoutMetricsInput;
+  zones?: WorkoutZonesInput;
 };
 
 export async function logWorkout(userId: string, input: LogWorkoutInput) {
@@ -104,7 +115,15 @@ export async function logWorkout(userId: string, input: LogWorkoutInput) {
       const metrics = input.metrics
         ? await upsertWorkoutMetrics(sb, userId, data.id, data.date, input.metrics)
         : undefined;
-      return { row: data, action: "updated" as const, ...(metrics ? { metrics } : {}) };
+      const zones = input.zones
+        ? await upsertWorkoutZones(sb, userId, data.id, data.date, input.zones)
+        : undefined;
+      return {
+        row: data,
+        action: "updated" as const,
+        ...(metrics ? { metrics } : {}),
+        ...(zones ? { zones } : {}),
+      };
     }
   }
 
@@ -113,5 +132,13 @@ export async function logWorkout(userId: string, input: LogWorkoutInput) {
   const metrics = input.metrics
     ? await upsertWorkoutMetrics(sb, userId, data.id, data.date, input.metrics)
     : undefined;
-  return { row: data, action: "inserted" as const, ...(metrics ? { metrics } : {}) };
+  const zones = input.zones
+    ? await upsertWorkoutZones(sb, userId, data.id, data.date, input.zones)
+    : undefined;
+  return {
+    row: data,
+    action: "inserted" as const,
+    ...(metrics ? { metrics } : {}),
+    ...(zones ? { zones } : {}),
+  };
 }

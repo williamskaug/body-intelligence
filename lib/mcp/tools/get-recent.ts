@@ -1,7 +1,14 @@
 import { z } from "zod";
 import { adminClient } from "@/lib/supabase/admin";
 
-const KIND_VALUES = ["workouts", "daily", "meals", "health_events", "derived"] as const;
+const KIND_VALUES = [
+  "workouts",
+  "daily",
+  "meals",
+  "health_events",
+  "derived",
+  "capacity",
+] as const;
 
 export const getRecentInputSchema = {
   days: z.number().int().min(1).max(90),
@@ -9,7 +16,7 @@ export const getRecentInputSchema = {
     .array(z.enum(KIND_VALUES))
     .optional()
     .describe(
-      "Subset of kinds to return. Omit for all five. 'derived' returns agent-computed derived_daily rows (readiness gate, z-scores, sleep debt). Unresolved health events are ALWAYS returned regardless of the date window when 'health_events' is in kinds.",
+      "Subset of kinds to return. Omit for all six. 'derived' returns agent-computed derived_daily rows (readiness gate, z-scores, sleep debt); 'capacity' returns capacity_metrics snapshots (VO2max, LT, FTP, race predictions). Unresolved health events are ALWAYS returned regardless of the date window when 'health_events' is in kinds.",
     ),
 };
 
@@ -33,7 +40,15 @@ export async function getRecent(userId: string, input: GetRecentInput) {
     meals: unknown[];
     health_events: unknown[];
     derived: unknown[];
-  } = { workouts: [], daily: [], meals: [], health_events: [], derived: [] };
+    capacity: unknown[];
+  } = {
+    workouts: [],
+    daily: [],
+    meals: [],
+    health_events: [],
+    derived: [],
+    capacity: [],
+  };
 
   if (wanted.has("workouts")) {
     const { data, error } = await sb
@@ -77,6 +92,17 @@ export async function getRecent(userId: string, input: GetRecentInput) {
       .order("date", { ascending: false });
     if (error) throw new Error(`get_recent derived: ${error.message}`);
     result.derived = data ?? [];
+  }
+
+  if (wanted.has("capacity")) {
+    const { data, error } = await sb
+      .from("capacity_metrics")
+      .select("*")
+      .eq("user_id", userId)
+      .gte("date", sinceDate)
+      .order("date", { ascending: false });
+    if (error) throw new Error(`get_recent capacity: ${error.message}`);
+    result.capacity = data ?? [];
   }
 
   if (wanted.has("health_events")) {
