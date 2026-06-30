@@ -292,6 +292,8 @@ export default async function DataPage({
     "NUTRITION.md",
     "EQUIPMENT.md",
     "BASELINES.md",
+    "THRESHOLDS.md",
+    "RECORDS.md",
   ]);
   const briefingMeta = docMeta
     .filter((d) => d.path.startsWith("briefings/"))

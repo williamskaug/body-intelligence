@@ -30,17 +30,27 @@ decisions to BI — there is no logic on the server side beyond CRUD.
   nested metrics object on log_workout / bulk_log_workouts / update_workout:
   cadence_spm, gct_ms, gct_balance_pct_left, vertical oscillation/ratio,
   stride_len_m, te_aerobic/anaerobic, vendor_training_load, stamina
-  start/end/min, decoupling_pct, elevation gain/loss, avg/max speed.
+  start/end/min, decoupling_pct, elevation gain/loss, avg/max speed,
+  weather_temp_c, weather_humidity_pct, strength_volume_kg (Σ reps×load).
   Full replace per workout. Lap splits + vendor labels stay in daily/*.md.
+- workout_zones — optional time-in-zone per workout (seconds per zone),
+  written via the nested zones object parallel to metrics: hr_z1_s…hr_z5_s and
+  power_z1_s…power_z7_s. Full replace per workout.
 - daily_entries — one row per (user, date). Universal vitals (sleep_h, four
   sleep-stage minutes, hrv_ms, rhr_bpm, spo2_avg_pct, respiration_avg_brpm,
-  skin_temp_deviation_c, sleep_score), body composition (weight_kg,
-  body_fat_pct), movement totals (steps, active_calories, floors_climbed,
+  skin_temp_deviation_c, sleep_score), recovery vendor SCALARS (stress_score,
+  body_battery_morning/high/low/charged/drained, training_readiness_score,
+  training_status — a free lowercased string, no enum), body composition
+  (weight_kg, body_fat_pct, muscle_mass_kg, bone_mass_kg, body_water_pct),
+  optional health vitals (bp_systolic_mmhg, bp_diastolic_mmhg, hydration_ml),
+  movement totals (steps, active_calories, floors_climbed,
   intensity_min_moderate, intensity_min_vigorous), six 1–5 wellness scales,
   and three free-text blocks (sleep_notes, wellness_notes, meal_notes).
   Partial updates allowed — write whatever the source has, leave the rest.
-  Vendor-proprietary composites (Body Battery, Readiness, Recovery) do NOT
-  belong here — they go in daily/YYYY-MM-DD.md.
+  Store the single vendor composite SCALAR in its column so it can be trended;
+  the factor BREAKDOWN / hourly curve / vendor label still goes in
+  daily/YYYY-MM-DD.md. training_readiness_score is a captured observation —
+  NOT BI's readiness gate (that stays your authored call in derived_daily).
 - derived_daily — one row per (user, date), written ONLY by your scheduled
   agent via log_derived_daily (BI never computes anything): readiness_gate
   green/amber/red + gate_reason, illness_composite + per-signal flags
@@ -48,6 +58,14 @@ decisions to BI — there is no logic on the server side beyond CRUD.
   sleep_need_min, acute_load_7d, chronic_load_28d, days_to_race.
   FULL-ROW REPLACE per date (opposite of log_daily's merge). The dashboard
   renders today's gate from this table — keep it fresh from the daily recipe.
+- capacity_metrics — slow-moving fitness-capacity snapshots, one row per
+  (user, date), written via log_capacity (partial-merge): vo2max_running/
+  cycling, lactate_threshold_hr_bpm / pace_s_per_km / power_w, cycling_ftp_w,
+  endurance_score, hill_score, fitness_age_years, running_tolerance_km,
+  race_pred_5k/10k/half/marathon_s (all paces/predictions in SECONDS). These
+  are captured vendor estimates — BI never computes capacity. get_capacity
+  returns the latest known value per metric. Written weekly by capacity-sync;
+  derived training zones go in THRESHOLDS.md, achieved PRs in RECORDS.md.
 - meals — one row per meal. Supported but OPTIONAL — only prompt for meals if
   the user has been logging them; day-level food prose can go in
   daily_entries.meal_notes if the user volunteers it. When writing a meal,
@@ -75,9 +93,12 @@ decisions to BI — there is no logic on the server side beyond CRUD.
   notes. sleep_notes / wellness_notes / meal_notes / workout notes are for
   QUALITATIVE commentary only ("woke once at 3am", "knee felt tight the
   first mile"), not as a dump zone for values that have homes.
-- Vendor-proprietary scores (Garmin Body Battery, Whoop Recovery, Oura
-  Readiness) belong in daily/YYYY-MM-DD.md via fs_write — not in
-  sleep_notes, not as new columns. Universal vitals (sleep_h, hrv_ms,
+- Vendor composite SCALARS that you'll want to trend/correlate (the single
+  Body Battery / stress / training-readiness number) now have columns on
+  daily_entries — write the number there. The vendor's factor BREAKDOWN,
+  hourly curve, and labels (Garmin readiness factors, Whoop Recovery
+  contributors, Oura Readiness factors) still belong in daily/YYYY-MM-DD.md
+  via fs_write — never in sleep_notes. Universal vitals (sleep_h, hrv_ms,
   rhr_bpm, sleep_deep_min, etc.) still go in daily_entries.
 - Wellness scales (fatigue, soreness, mood, stress, motivation, sleep_quality) use
   5 = best, ALWAYS. Even for fatigue / soreness / stress — 5 means "no fatigue",
@@ -100,7 +121,7 @@ decisions to BI — there is no logic on the server side beyond CRUD.
 
 # Memory layer
 
-Eight standard markdown documents per user, seeded on signup:
+Ten standard markdown documents per user, seeded on signup:
 
 - MEMORY.md     — one-line index over the other files
 - PROFILE.md    — anthropometrics, training history, equipment
@@ -110,6 +131,10 @@ Eight standard markdown documents per user, seeded on signup:
 - HEALTH_LOG.md — narrative history of injuries / illnesses / niggles
 - NUTRITION.md  — what works, what wrecks them, dietary preferences
 - EQUIPMENT.md  — gear inventory, mileage, condition
+- THRESHOLDS.md — derived training zones (LTHR, threshold pace, FTP, HR/power
+  zones), refreshed weekly by capacity-sync; recipes parse the block shapes
+- RECORDS.md    — achieved personal records (distinct from capacity_metrics'
+  moving predictions), one parseable '## PR: …' block each
 
 The documents table is a virtual filesystem. Paths are slash-separated and end
 in .md. Folders are implicit — you create them by writing to a nested path.

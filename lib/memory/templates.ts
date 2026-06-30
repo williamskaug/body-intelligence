@@ -10,6 +10,8 @@ export const TEMPLATE_PATHS = [
   "HEALTH_LOG.md",
   "NUTRITION.md",
   "EQUIPMENT.md",
+  "THRESHOLDS.md",
+  "RECORDS.md",
 ] as const;
 
 export type TemplatePath = (typeof TEMPLATE_PATHS)[number];

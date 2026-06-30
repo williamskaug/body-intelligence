@@ -68,8 +68,10 @@ Call get_setup_guide once at the start so field conventions are fresh.
 
 **Phase 2 — sync DATE_Y from the wearable connector.**
 - Vitals → log_daily(date=DATE_Y, ...): sleep_h + the four sleep-stage minutes, hrv_ms, rhr_bpm, spo2_avg_pct, respiration_avg_brpm, skin_temp_deviation_c, sleep_score, weight_kg (if a weigh-in exists), steps, active_calories, floors_climbed, intensity minutes. Also log_daily(DATE_T) with this morning's sleep + recovery vitals (movement totals stay null — they self-heal on tomorrow's run).
+- Also capture, when the connector exposes them (all SCALARS, columns now): daily stress (get_stress) → stress_score; Body Battery (get_body_battery) → body_battery_morning/high/low/charged/drained; morning readiness (get_morning_training_readiness) → training_readiness_score; training status (get_training_status) → training_status (store the lowercase status string, e.g. "productive"); on a weigh-in day, body composition (get_body_composition / get_weigh_ins) → body_fat_pct, muscle_mass_kg, bone_mass_kg, body_water_pct. If the user logs them, get_blood_pressure → bp_systolic_mmhg/bp_diastolic_mmhg and get_hydration → hydration_ml. The Body Battery curve, the readiness factor breakdown, and the HRV-status label still go to daily/DATE_Y.md — only the scalar lands in a column.
 - Activities → log_workout per activity with source + source_id (idempotent), canonical type (the server normalizes aliases), and the metrics object for sensor data: cadence_spm, gct_ms, gct_balance_pct_left, vertical oscillation/ratio, stride_len_m, te_aerobic/anaerobic, vendor_training_load, stamina start/end/min, decoupling_pct (compute first-half vs second-half efficiency for sessions ≥ 60 min), elevation, speeds. notes = qualitative commentary ONLY.
-- Vendor-branded composites (Body Battery, Training Readiness + factors, sleep-score breakdown) → daily/DATE_Y.md via fs_write (fs_read first — full-document replace; preserve non-Garmin sections). Lap splits and vendor labels go here too.
+- For each activity also fetch and pass: HR zones (get_activity_hr_zones) → the zones object hr_z1_s…hr_z5_s (seconds in zone); for rides, power zones (get_activity_power_zones) → power_z1_s…power_z7_s; weather (get_activity_weather) → metrics.weather_temp_c (feels-like) + metrics.weather_humidity_pct; gear (get_activity_gear) → the workout's shoes field (canonical shoe name); for strength sessions, get_activity_exercise_sets → metrics.strength_volume_kg (Σ reps×load), with the per-exercise breakdown written to daily/DATE_Y.md.
+- Vendor composite BREAKDOWNS (Body Battery hourly curve + charge/drain events, the Training Readiness factor list, the sleep-score factor breakdown, HRV-status label) → daily/DATE_Y.md via fs_write (fs_read first — full-document replace; preserve non-Garmin sections). The trendable scalars already went to columns above. Lap splits and vendor labels go here too.
 - If a Strava connector is available, pull only activities the wearable never saw (phone-only recordings); skip mirrored duplicates.
 
 **Phase 3 — derived layer.** Compute against the user's own history, not population norms:
@@ -318,6 +320,47 @@ Call get_setup_guide once at the start.
 **5. Confirm.** One short line summarising activity count and total minutes.
 
 **6. Mark the run.** Call mark_recipe_run(recipe_id="strava-sync", status="ok"). On error, pass status="failed".`,
+  },
+  {
+    id: "capacity-sync",
+    title: "Capacity sync",
+    category: "connector",
+    schedule: "0 8 * * 1",
+    description:
+      "Weekly ingest of slow-moving fitness capacity from your wearable — VO2max, lactate threshold, FTP, endurance/hill score, fitness age, race predictions — into capacity_metrics, and refreshes THRESHOLDS.md (zones) and RECORDS.md (PRs).",
+    required_tools: [
+      "get_setup_guide",
+      "get_recipe_status",
+      "log_capacity",
+      "fs_read",
+      "fs_write",
+      "mark_recipe_run",
+    ],
+    required_connectors: ["garmin"],
+    covers: ["capacity:sync", "thresholds:zones", "records:prs"],
+    prompt: `Sync this week's fitness-capacity snapshot from the wearable connector into Body Intelligence. One idempotent pass — safe to re-run.
+
+Call get_setup_guide once. Set DATE = today in the user's timezone (fs_read PROFILE.md if unclear).
+
+**Phase 0 — guard.** get_recipe_status("capacity-sync"); if it ran ok in the last 5 days, stop unless explicitly re-invoked.
+
+**Phase 1 — fetch capacity from the connector** (skip any the connector doesn't expose; never invent a value):
+- VO2max: get_vo2_max → vo2max_running, vo2max_cycling
+- Lactate threshold: get_lactate_threshold → lactate_threshold_hr_bpm, lactate_threshold_pace_s_per_km (convert pace to seconds/km — 4:00/km = 240), and cycling LT power if present → lactate_threshold_power_w
+- Cycling FTP: get_cycling_ftp → cycling_ftp_w
+- Endurance score: get_endurance_score → endurance_score
+- Hill score: get_hill_score → hill_score
+- Fitness age: get_fitness_age → fitness_age_years
+- Running tolerance: get_running_tolerance → running_tolerance_km
+- Race predictions: get_race_predictions → race_pred_5k_s, race_pred_10k_s, race_pred_half_s, race_pred_marathon_s (all in seconds)
+
+**Phase 2 — write the snapshot.** Call log_capacity(date=DATE, ...every value you have). Partial-merge by (user, date) — a re-run the same week patches the same row. Leave a metric out if the connector didn't return it.
+
+**Phase 3 — derive zones into THRESHOLDS.md.** fs_read THRESHOLDS.md first (preserve user edits and section shapes — recipes parse them). Using the user's PRINCIPLES.md zone model (or standard %LTHR / %FTP if none), translate the captured LTHR / threshold pace / FTP into the fixed THRESHOLDS.md blocks. YOU compute the zones — BI stores nothing derived here. fs_write the result.
+
+**Phase 4 — personal records.** get_personal_record (and get_progress_summary for context). Update RECORDS.md's parseable PR blocks for any new bests, keeping one block per record. fs_write.
+
+**Phase 5 — close.** Send the user one short line noting any meaningful capacity move (e.g. "VO2max 52→53, predicted HM −22s"). No verdicts. mark_recipe_run(recipe_id="capacity-sync", status="ok") — or "failed" with a short error.`,
   },
   {
     id: "health-log-audit",
