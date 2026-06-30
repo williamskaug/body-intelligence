@@ -1,0 +1,2705 @@
+{
+  "id": "c31b0910-4c05-4134-8b3b-b6cbca9670a5",
+  "prevId": "226d3892-c1d3-426f-bbe2-d2f91e65352d",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.capacity_metrics": {
+      "name": "capacity_metrics",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vo2max_running": {
+          "name": "vo2max_running",
+          "type": "numeric(4, 1)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "vo2max_cycling": {
+          "name": "vo2max_cycling",
+          "type": "numeric(4, 1)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lactate_threshold_hr_bpm": {
+          "name": "lactate_threshold_hr_bpm",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lactate_threshold_pace_s_per_km": {
+          "name": "lactate_threshold_pace_s_per_km",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lactate_threshold_power_w": {
+          "name": "lactate_threshold_power_w",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cycling_ftp_w": {
+          "name": "cycling_ftp_w",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "endurance_score": {
+          "name": "endurance_score",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "hill_score": {
+          "name": "hill_score",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fitness_age_years": {
+          "name": "fitness_age_years",
+          "type": "numeric(4, 1)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "running_tolerance_km": {
+          "name": "running_tolerance_km",
+          "type": "numeric(5, 1)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "race_pred_5k_s": {
+          "name": "race_pred_5k_s",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "race_pred_10k_s": {
+          "name": "race_pred_10k_s",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "race_pred_half_s": {
+          "name": "race_pred_half_s",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "race_pred_marathon_s": {
+          "name": "race_pred_marathon_s",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "capacity_metrics_user_date_key": {
+          "name": "capacity_metrics_user_date_key",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "capacity_metrics_user_date_idx": {
+          "name": "capacity_metrics_user_date_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "capacity_metrics_user_id_users_id_fk": {
+          "name": "capacity_metrics_user_id_users_id_fk",
+          "tableFrom": "capacity_metrics",
+          "tableTo": "users",
+          "schemaTo": "auth",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "capacity_vo2max_run_range": {
+          "name": "capacity_vo2max_run_range",
+          "value": "\"capacity_metrics\".\"vo2max_running\" is null or (\"capacity_metrics\".\"vo2max_running\" between 10 and 90)"
+        },
+        "capacity_vo2max_cyc_range": {
+          "name": "capacity_vo2max_cyc_range",
+          "value": "\"capacity_metrics\".\"vo2max_cycling\" is null or (\"capacity_metrics\".\"vo2max_cycling\" between 10 and 90)"
+        },
+        "capacity_lthr_range": {
+          "name": "capacity_lthr_range",
+          "value": "\"capacity_metrics\".\"lactate_threshold_hr_bpm\" is null or (\"capacity_metrics\".\"lactate_threshold_hr_bpm\" between 60 and 220)"
+        },
+        "capacity_hill_range": {
+          "name": "capacity_hill_range",
+          "value": "\"capacity_metrics\".\"hill_score\" is null or (\"capacity_metrics\".\"hill_score\" between 0 and 100)"
+        },
+        "capacity_fitness_age_range": {
+          "name": "capacity_fitness_age_range",
+          "value": "\"capacity_metrics\".\"fitness_age_years\" is null or (\"capacity_metrics\".\"fitness_age_years\" between 10 and 100)"
+        },
+        "capacity_ftp_nonneg": {
+          "name": "capacity_ftp_nonneg",
+          "value": "\"capacity_metrics\".\"cycling_ftp_w\" is null or \"capacity_metrics\".\"cycling_ftp_w\" >= 0"
+        },
+        "capacity_lt_power_nonneg": {
+          "name": "capacity_lt_power_nonneg",
+          "value": "\"capacity_metrics\".\"lactate_threshold_power_w\" is null or \"capacity_metrics\".\"lactate_threshold_power_w\" >= 0"
+        },
+        "capacity_endurance_nonneg": {
+          "name": "capacity_endurance_nonneg",
+          "value": "\"capacity_metrics\".\"endurance_score\" is null or \"capacity_metrics\".\"endurance_score\" >= 0"
+        },
+        "capacity_run_tolerance_nonneg": {
+          "name": "capacity_run_tolerance_nonneg",
+          "value": "\"capacity_metrics\".\"running_tolerance_km\" is null or \"capacity_metrics\".\"running_tolerance_km\" >= 0"
+        },
+        "capacity_lt_pace_pos": {
+          "name": "capacity_lt_pace_pos",
+          "value": "\"capacity_metrics\".\"lactate_threshold_pace_s_per_km\" is null or \"capacity_metrics\".\"lactate_threshold_pace_s_per_km\" > 0"
+        },
+        "capacity_pred_5k_pos": {
+          "name": "capacity_pred_5k_pos",
+          "value": "\"capacity_metrics\".\"race_pred_5k_s\" is null or \"capacity_metrics\".\"race_pred_5k_s\" > 0"
+        },
+        "capacity_pred_10k_pos": {
+          "name": "capacity_pred_10k_pos",
+          "value": "\"capacity_metrics\".\"race_pred_10k_s\" is null or \"capacity_metrics\".\"race_pred_10k_s\" > 0"
+        },
+        "capacity_pred_half_pos": {
+          "name": "capacity_pred_half_pos",
+          "value": "\"capacity_metrics\".\"race_pred_half_s\" is null or \"capacity_metrics\".\"race_pred_half_s\" > 0"
+        },
+        "capacity_pred_marathon_pos": {
+          "name": "capacity_pred_marathon_pos",
+          "value": "\"capacity_metrics\".\"race_pred_marathon_s\" is null or \"capacity_metrics\".\"race_pred_marathon_s\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.daily_entries": {
+      "name": "daily_entries",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sleep_h": {
+          "name": "sleep_h",
+          "type": "numeric(4, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sleep_deep_min": {
+          "name": "sleep_deep_min",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sleep_light_min": {
+          "name": "sleep_light_min",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sleep_rem_min": {
+          "name": "sleep_rem_min",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sleep_awake_min": {
+          "name": "sleep_awake_min",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "hrv_ms": {
+          "name": "hrv_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rhr_bpm": {
+          "name": "rhr_bpm",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "spo2_avg_pct": {
+          "name": "spo2_avg_pct",
+          "type": "numeric(4, 1)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "respiration_avg_brpm": {
+          "name": "respiration_avg_brpm",
+          "type": "numeric(4, 1)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "weight_kg": {
+          "name": "weight_kg",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "body_fat_pct": {
+          "name": "body_fat_pct",
+          "type": "numeric(4, 1)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "muscle_mass_kg": {
+          "name": "muscle_mass_kg",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bone_mass_kg": {
+          "name": "bone_mass_kg",
+          "type": "numeric(4, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "body_water_pct": {
+          "name": "body_water_pct",
+          "type": "numeric(4, 1)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bp_systolic_mmhg": {
+          "name": "bp_systolic_mmhg",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bp_diastolic_mmhg": {
+          "name": "bp_diastolic_mmhg",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "hydration_ml": {
+          "name": "hydration_ml",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "skin_temp_deviation_c": {
+          "name": "skin_temp_deviation_c",
+          "type": "numeric(4, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sleep_score": {
+          "name": "sleep_score",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "stress_score": {
+          "name": "stress_score",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "body_battery_morning": {
+          "name": "body_battery_morning",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "body_battery_high": {
+          "name": "body_battery_high",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "body_battery_low": {
+          "name": "body_battery_low",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "body_battery_charged": {
+          "name": "body_battery_charged",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "body_battery_drained": {
+          "name": "body_battery_drained",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "training_readiness_score": {
+          "name": "training_readiness_score",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "training_status": {
+          "name": "training_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "steps": {
+          "name": "steps",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "active_calories": {
+          "name": "active_calories",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "floors_climbed": {
+          "name": "floors_climbed",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "intensity_min_moderate": {
+          "name": "intensity_min_moderate",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "intensity_min_vigorous": {
+          "name": "intensity_min_vigorous",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fatigue": {
+          "name": "fatigue",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "soreness": {
+          "name": "soreness",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "mood": {
+          "name": "mood",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "stress": {
+          "name": "stress",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "motivation": {
+          "name": "motivation",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sleep_quality": {
+          "name": "sleep_quality",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sleep_notes": {
+          "name": "sleep_notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "wellness_notes": {
+          "name": "wellness_notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "meal_notes": {
+          "name": "meal_notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "daily_entries_user_date_key": {
+          "name": "daily_entries_user_date_key",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "daily_entries_user_date_idx": {
+          "name": "daily_entries_user_date_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "daily_entries_user_id_users_id_fk": {
+          "name": "daily_entries_user_id_users_id_fk",
+          "tableFrom": "daily_entries",
+          "tableTo": "users",
+          "schemaTo": "auth",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "daily_fatigue_range": {
+          "name": "daily_fatigue_range",
+          "value": "\"daily_entries\".\"fatigue\" is null or (\"daily_entries\".\"fatigue\" between 1 and 5)"
+        },
+        "daily_soreness_range": {
+          "name": "daily_soreness_range",
+          "value": "\"daily_entries\".\"soreness\" is null or (\"daily_entries\".\"soreness\" between 1 and 5)"
+        },
+        "daily_mood_range": {
+          "name": "daily_mood_range",
+          "value": "\"daily_entries\".\"mood\" is null or (\"daily_entries\".\"mood\" between 1 and 5)"
+        },
+        "daily_stress_range": {
+          "name": "daily_stress_range",
+          "value": "\"daily_entries\".\"stress\" is null or (\"daily_entries\".\"stress\" between 1 and 5)"
+        },
+        "daily_motivation_range": {
+          "name": "daily_motivation_range",
+          "value": "\"daily_entries\".\"motivation\" is null or (\"daily_entries\".\"motivation\" between 1 and 5)"
+        },
+        "daily_sleep_quality_range": {
+          "name": "daily_sleep_quality_range",
+          "value": "\"daily_entries\".\"sleep_quality\" is null or (\"daily_entries\".\"sleep_quality\" between 1 and 5)"
+        },
+        "daily_sleep_score_range": {
+          "name": "daily_sleep_score_range",
+          "value": "\"daily_entries\".\"sleep_score\" is null or (\"daily_entries\".\"sleep_score\" between 0 and 100)"
+        },
+        "daily_stress_score_range": {
+          "name": "daily_stress_score_range",
+          "value": "\"daily_entries\".\"stress_score\" is null or (\"daily_entries\".\"stress_score\" between 0 and 100)"
+        },
+        "daily_bb_morning_range": {
+          "name": "daily_bb_morning_range",
+          "value": "\"daily_entries\".\"body_battery_morning\" is null or (\"daily_entries\".\"body_battery_morning\" between 0 and 100)"
+        },
+        "daily_bb_high_range": {
+          "name": "daily_bb_high_range",
+          "value": "\"daily_entries\".\"body_battery_high\" is null or (\"daily_entries\".\"body_battery_high\" between 0 and 100)"
+        },
+        "daily_bb_low_range": {
+          "name": "daily_bb_low_range",
+          "value": "\"daily_entries\".\"body_battery_low\" is null or (\"daily_entries\".\"body_battery_low\" between 0 and 100)"
+        },
+        "daily_bb_charged_range": {
+          "name": "daily_bb_charged_range",
+          "value": "\"daily_entries\".\"body_battery_charged\" is null or (\"daily_entries\".\"body_battery_charged\" between 0 and 100)"
+        },
+        "daily_bb_drained_range": {
+          "name": "daily_bb_drained_range",
+          "value": "\"daily_entries\".\"body_battery_drained\" is null or (\"daily_entries\".\"body_battery_drained\" between 0 and 100)"
+        },
+        "daily_training_readiness_range": {
+          "name": "daily_training_readiness_range",
+          "value": "\"daily_entries\".\"training_readiness_score\" is null or (\"daily_entries\".\"training_readiness_score\" between 0 and 100)"
+        },
+        "daily_body_water_range": {
+          "name": "daily_body_water_range",
+          "value": "\"daily_entries\".\"body_water_pct\" is null or (\"daily_entries\".\"body_water_pct\" between 0 and 100)"
+        },
+        "daily_muscle_mass_nonneg": {
+          "name": "daily_muscle_mass_nonneg",
+          "value": "\"daily_entries\".\"muscle_mass_kg\" is null or \"daily_entries\".\"muscle_mass_kg\" >= 0"
+        },
+        "daily_bone_mass_nonneg": {
+          "name": "daily_bone_mass_nonneg",
+          "value": "\"daily_entries\".\"bone_mass_kg\" is null or \"daily_entries\".\"bone_mass_kg\" >= 0"
+        },
+        "daily_bp_systolic_range": {
+          "name": "daily_bp_systolic_range",
+          "value": "\"daily_entries\".\"bp_systolic_mmhg\" is null or (\"daily_entries\".\"bp_systolic_mmhg\" between 50 and 260)"
+        },
+        "daily_bp_diastolic_range": {
+          "name": "daily_bp_diastolic_range",
+          "value": "\"daily_entries\".\"bp_diastolic_mmhg\" is null or (\"daily_entries\".\"bp_diastolic_mmhg\" between 30 and 200)"
+        },
+        "daily_hydration_nonneg": {
+          "name": "daily_hydration_nonneg",
+          "value": "\"daily_entries\".\"hydration_ml\" is null or \"daily_entries\".\"hydration_ml\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.derived_daily": {
+      "name": "derived_daily",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "readiness_gate": {
+          "name": "readiness_gate",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gate_reason": {
+          "name": "gate_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "illness_composite": {
+          "name": "illness_composite",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "skin_temp_flag": {
+          "name": "skin_temp_flag",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "hrv_flag": {
+          "name": "hrv_flag",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rhr_flag": {
+          "name": "rhr_flag",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resp_flag": {
+          "name": "resp_flag",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "hrv_z": {
+          "name": "hrv_z",
+          "type": "numeric(4, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rhr_z": {
+          "name": "rhr_z",
+          "type": "numeric(4, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sleep_z": {
+          "name": "sleep_z",
+          "type": "numeric(4, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sleep_debt_7d_min": {
+          "name": "sleep_debt_7d_min",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sleep_need_min": {
+          "name": "sleep_need_min",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "acute_load_7d": {
+          "name": "acute_load_7d",
+          "type": "numeric(7, 1)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "chronic_load_28d": {
+          "name": "chronic_load_28d",
+          "type": "numeric(7, 1)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "days_to_race": {
+          "name": "days_to_race",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "computed_by": {
+          "name": "computed_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'agent'"
+        },
+        "computed_at": {
+          "name": "computed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "derived_daily_user_date_key": {
+          "name": "derived_daily_user_date_key",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "derived_daily_user_date_idx": {
+          "name": "derived_daily_user_date_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "derived_daily_user_id_users_id_fk": {
+          "name": "derived_daily_user_id_users_id_fk",
+          "tableFrom": "derived_daily",
+          "tableTo": "users",
+          "schemaTo": "auth",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "derived_daily_gate_check": {
+          "name": "derived_daily_gate_check",
+          "value": "\"derived_daily\".\"readiness_gate\" is null or \"derived_daily\".\"readiness_gate\" in ('green', 'amber', 'red')"
+        },
+        "derived_daily_composite_check": {
+          "name": "derived_daily_composite_check",
+          "value": "\"derived_daily\".\"illness_composite\" is null or \"derived_daily\".\"illness_composite\" in ('green', 'amber', 'red')"
+        },
+        "derived_daily_sleep_debt_range": {
+          "name": "derived_daily_sleep_debt_range",
+          "value": "\"derived_daily\".\"sleep_debt_7d_min\" is null or \"derived_daily\".\"sleep_debt_7d_min\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.documents": {
+      "name": "documents",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "path": {
+          "name": "path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "documents_user_path_key": {
+          "name": "documents_user_path_key",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "path",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "documents_search_idx": {
+          "name": "documents_search_idx",
+          "columns": [
+            {
+              "expression": "to_tsvector('english', \"content\")",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "documents_user_id_users_id_fk": {
+          "name": "documents_user_id_users_id_fk",
+          "tableFrom": "documents",
+          "tableTo": "users",
+          "schemaTo": "auth",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.health_event_updates": {
+      "name": "health_event_updates",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "severity_at_time": {
+          "name": "severity_at_time",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "health_event_updates_event_idx": {
+          "name": "health_event_updates_event_idx",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "health_event_updates_user_idx": {
+          "name": "health_event_updates_user_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "health_event_updates_user_id_users_id_fk": {
+          "name": "health_event_updates_user_id_users_id_fk",
+          "tableFrom": "health_event_updates",
+          "tableTo": "users",
+          "schemaTo": "auth",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "health_event_updates_event_id_health_events_id_fk": {
+          "name": "health_event_updates_event_id_health_events_id_fk",
+          "tableFrom": "health_event_updates",
+          "tableTo": "health_events",
+          "columnsFrom": [
+            "event_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "health_event_updates_severity_range": {
+          "name": "health_event_updates_severity_range",
+          "value": "\"health_event_updates\".\"severity_at_time\" is null or (\"health_event_updates\".\"severity_at_time\" between 1 and 5)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.health_events": {
+      "name": "health_events",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "body_part": {
+          "name": "body_part",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "severity": {
+          "name": "severity",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resolved_date": {
+          "name": "resolved_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "next_milestone_date": {
+          "name": "next_milestone_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "next_milestone": {
+          "name": "next_milestone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "health_events_user_date_idx": {
+          "name": "health_events_user_date_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "health_events_active_idx": {
+          "name": "health_events_active_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"health_events\".\"resolved_date\" is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "health_events_user_id_users_id_fk": {
+          "name": "health_events_user_id_users_id_fk",
+          "tableFrom": "health_events",
+          "tableTo": "users",
+          "schemaTo": "auth",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "health_events_kind_check": {
+          "name": "health_events_kind_check",
+          "value": "\"health_events\".\"kind\" in ('injury', 'illness', 'symptom')"
+        },
+        "health_events_severity_range": {
+          "name": "health_events_severity_range",
+          "value": "\"health_events\".\"severity\" is null or (\"health_events\".\"severity\" between 1 and 5)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.installed_recipes": {
+      "name": "installed_recipes",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "recipe_id": {
+          "name": "recipe_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "installed_at": {
+          "name": "installed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "last_run_at": {
+          "name": "last_run_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_run_status": {
+          "name": "last_run_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "run_count": {
+          "name": "run_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "last_error": {
+          "name": "last_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "installed_recipes_user_recipe_key": {
+          "name": "installed_recipes_user_recipe_key",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "recipe_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "installed_recipes_user_idx": {
+          "name": "installed_recipes_user_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "installed_recipes_user_id_users_id_fk": {
+          "name": "installed_recipes_user_id_users_id_fk",
+          "tableFrom": "installed_recipes",
+          "tableTo": "users",
+          "schemaTo": "auth",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.meals": {
+      "name": "meals",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "eaten_at": {
+          "name": "eaten_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "meal_type": {
+          "name": "meal_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "calories": {
+          "name": "calories",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "protein_g": {
+          "name": "protein_g",
+          "type": "numeric(6, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "carbs_g": {
+          "name": "carbs_g",
+          "type": "numeric(6, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fat_g": {
+          "name": "fat_g",
+          "type": "numeric(6, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fiber_g": {
+          "name": "fiber_g",
+          "type": "numeric(6, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'manual'"
+        },
+        "source_id": {
+          "name": "source_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "meals_user_eaten_idx": {
+          "name": "meals_user_eaten_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "eaten_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "meals_source_idem_idx": {
+          "name": "meals_source_idem_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "source",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "source_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"meals\".\"source_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "meals_user_id_users_id_fk": {
+          "name": "meals_user_id_users_id_fk",
+          "tableFrom": "meals",
+          "tableTo": "users",
+          "schemaTo": "auth",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.oauth_clients": {
+      "name": "oauth_clients",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "client_id": {
+          "name": "client_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "client_secret_hash": {
+          "name": "client_secret_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "redirect_uris": {
+          "name": "redirect_uris",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "oauth_clients_client_id_unique": {
+          "name": "oauth_clients_client_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "client_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.oauth_codes": {
+      "name": "oauth_codes",
+      "schema": "",
+      "columns": {
+        "code_hash": {
+          "name": "code_hash",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "client_id": {
+          "name": "client_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "redirect_uri": {
+          "name": "redirect_uri",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "code_challenge": {
+          "name": "code_challenge",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "code_challenge_method": {
+          "name": "code_challenge_method",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'S256'"
+        },
+        "scopes": {
+          "name": "scopes",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "consumed_at": {
+          "name": "consumed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "oauth_codes_expires_idx": {
+          "name": "oauth_codes_expires_idx",
+          "columns": [
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "oauth_codes_user_id_users_id_fk": {
+          "name": "oauth_codes_user_id_users_id_fk",
+          "tableFrom": "oauth_codes",
+          "tableTo": "users",
+          "schemaTo": "auth",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "oauth_codes_client_id_oauth_clients_client_id_fk": {
+          "name": "oauth_codes_client_id_oauth_clients_client_id_fk",
+          "tableFrom": "oauth_codes",
+          "tableTo": "oauth_clients",
+          "columnsFrom": [
+            "client_id"
+          ],
+          "columnsTo": [
+            "client_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.oauth_tokens": {
+      "name": "oauth_tokens",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "client_id": {
+          "name": "client_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "access_token_hash": {
+          "name": "access_token_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "refresh_token_hash": {
+          "name": "refresh_token_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "access_expires_at": {
+          "name": "access_expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "refresh_expires_at": {
+          "name": "refresh_expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "scopes": {
+          "name": "scopes",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_used_at": {
+          "name": "last_used_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "oauth_tokens_active_idx": {
+          "name": "oauth_tokens_active_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"oauth_tokens\".\"revoked_at\" is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "oauth_tokens_user_id_users_id_fk": {
+          "name": "oauth_tokens_user_id_users_id_fk",
+          "tableFrom": "oauth_tokens",
+          "tableTo": "users",
+          "schemaTo": "auth",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "oauth_tokens_client_id_oauth_clients_client_id_fk": {
+          "name": "oauth_tokens_client_id_oauth_clients_client_id_fk",
+          "tableFrom": "oauth_tokens",
+          "tableTo": "oauth_clients",
+          "columnsFrom": [
+            "client_id"
+          ],
+          "columnsTo": [
+            "client_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "oauth_tokens_access_token_hash_unique": {
+          "name": "oauth_tokens_access_token_hash_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "access_token_hash"
+          ]
+        },
+        "oauth_tokens_refresh_token_hash_unique": {
+          "name": "oauth_tokens_refresh_token_hash_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "refresh_token_hash"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.user_profiles": {
+      "name": "user_profiles",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "timezone": {
+          "name": "timezone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'UTC'"
+        },
+        "units_system": {
+          "name": "units_system",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'metric'"
+        },
+        "locale": {
+          "name": "locale",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'en'"
+        },
+        "preferences": {
+          "name": "preferences",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "user_profiles_user_id_key": {
+          "name": "user_profiles_user_id_key",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "user_profiles_user_id_users_id_fk": {
+          "name": "user_profiles_user_id_users_id_fk",
+          "tableFrom": "user_profiles",
+          "tableTo": "users",
+          "schemaTo": "auth",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "auth.users": {
+      "name": "users",
+      "schema": "auth",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.workout_metrics": {
+      "name": "workout_metrics",
+      "schema": "",
+      "columns": {
+        "workout_id": {
+          "name": "workout_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cadence_spm": {
+          "name": "cadence_spm",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gct_ms": {
+          "name": "gct_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gct_balance_pct_left": {
+          "name": "gct_balance_pct_left",
+          "type": "numeric(4, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "vertical_oscillation_mm": {
+          "name": "vertical_oscillation_mm",
+          "type": "numeric(5, 1)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "vertical_ratio_pct": {
+          "name": "vertical_ratio_pct",
+          "type": "numeric(4, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "stride_len_m": {
+          "name": "stride_len_m",
+          "type": "numeric(4, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "te_aerobic": {
+          "name": "te_aerobic",
+          "type": "numeric(2, 1)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "te_anaerobic": {
+          "name": "te_anaerobic",
+          "type": "numeric(2, 1)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "vendor_training_load": {
+          "name": "vendor_training_load",
+          "type": "numeric(6, 1)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "stamina_start_pct": {
+          "name": "stamina_start_pct",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "stamina_end_pct": {
+          "name": "stamina_end_pct",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "stamina_min_pct": {
+          "name": "stamina_min_pct",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "decoupling_pct": {
+          "name": "decoupling_pct",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "elevation_gain_m": {
+          "name": "elevation_gain_m",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "elevation_loss_m": {
+          "name": "elevation_loss_m",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "avg_speed_kmh": {
+          "name": "avg_speed_kmh",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_speed_kmh": {
+          "name": "max_speed_kmh",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "weather_temp_c": {
+          "name": "weather_temp_c",
+          "type": "numeric(4, 1)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "weather_humidity_pct": {
+          "name": "weather_humidity_pct",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "strength_volume_kg": {
+          "name": "strength_volume_kg",
+          "type": "numeric(8, 1)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "workout_metrics_user_date_idx": {
+          "name": "workout_metrics_user_date_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "workout_metrics_workout_id_workouts_id_fk": {
+          "name": "workout_metrics_workout_id_workouts_id_fk",
+          "tableFrom": "workout_metrics",
+          "tableTo": "workouts",
+          "columnsFrom": [
+            "workout_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "workout_metrics_user_id_users_id_fk": {
+          "name": "workout_metrics_user_id_users_id_fk",
+          "tableFrom": "workout_metrics",
+          "tableTo": "users",
+          "schemaTo": "auth",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "workout_metrics_humidity_range": {
+          "name": "workout_metrics_humidity_range",
+          "value": "\"workout_metrics\".\"weather_humidity_pct\" is null or (\"workout_metrics\".\"weather_humidity_pct\" between 0 and 100)"
+        },
+        "workout_metrics_strength_volume_nonneg": {
+          "name": "workout_metrics_strength_volume_nonneg",
+          "value": "\"workout_metrics\".\"strength_volume_kg\" is null or \"workout_metrics\".\"strength_volume_kg\" >= 0"
+        },
+        "workout_metrics_gct_balance_range": {
+          "name": "workout_metrics_gct_balance_range",
+          "value": "\"workout_metrics\".\"gct_balance_pct_left\" is null or (\"workout_metrics\".\"gct_balance_pct_left\" between 30 and 70)"
+        },
+        "workout_metrics_te_aerobic_range": {
+          "name": "workout_metrics_te_aerobic_range",
+          "value": "\"workout_metrics\".\"te_aerobic\" is null or (\"workout_metrics\".\"te_aerobic\" between 0 and 5)"
+        },
+        "workout_metrics_te_anaerobic_range": {
+          "name": "workout_metrics_te_anaerobic_range",
+          "value": "\"workout_metrics\".\"te_anaerobic\" is null or (\"workout_metrics\".\"te_anaerobic\" between 0 and 5)"
+        },
+        "workout_metrics_stamina_start_range": {
+          "name": "workout_metrics_stamina_start_range",
+          "value": "\"workout_metrics\".\"stamina_start_pct\" is null or (\"workout_metrics\".\"stamina_start_pct\" between 0 and 100)"
+        },
+        "workout_metrics_stamina_end_range": {
+          "name": "workout_metrics_stamina_end_range",
+          "value": "\"workout_metrics\".\"stamina_end_pct\" is null or (\"workout_metrics\".\"stamina_end_pct\" between 0 and 100)"
+        },
+        "workout_metrics_stamina_min_range": {
+          "name": "workout_metrics_stamina_min_range",
+          "value": "\"workout_metrics\".\"stamina_min_pct\" is null or (\"workout_metrics\".\"stamina_min_pct\" between 0 and 100)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.workout_zones": {
+      "name": "workout_zones",
+      "schema": "",
+      "columns": {
+        "workout_id": {
+          "name": "workout_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "hr_z1_s": {
+          "name": "hr_z1_s",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "hr_z2_s": {
+          "name": "hr_z2_s",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "hr_z3_s": {
+          "name": "hr_z3_s",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "hr_z4_s": {
+          "name": "hr_z4_s",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "hr_z5_s": {
+          "name": "hr_z5_s",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "power_z1_s": {
+          "name": "power_z1_s",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "power_z2_s": {
+          "name": "power_z2_s",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "power_z3_s": {
+          "name": "power_z3_s",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "power_z4_s": {
+          "name": "power_z4_s",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "power_z5_s": {
+          "name": "power_z5_s",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "power_z6_s": {
+          "name": "power_z6_s",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "power_z7_s": {
+          "name": "power_z7_s",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "workout_zones_user_date_idx": {
+          "name": "workout_zones_user_date_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "workout_zones_workout_id_workouts_id_fk": {
+          "name": "workout_zones_workout_id_workouts_id_fk",
+          "tableFrom": "workout_zones",
+          "tableTo": "workouts",
+          "columnsFrom": [
+            "workout_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "workout_zones_user_id_users_id_fk": {
+          "name": "workout_zones_user_id_users_id_fk",
+          "tableFrom": "workout_zones",
+          "tableTo": "users",
+          "schemaTo": "auth",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "workout_zones_hr_z1_nonneg": {
+          "name": "workout_zones_hr_z1_nonneg",
+          "value": "\"workout_zones\".\"hr_z1_s\" is null or \"workout_zones\".\"hr_z1_s\" >= 0"
+        },
+        "workout_zones_hr_z2_nonneg": {
+          "name": "workout_zones_hr_z2_nonneg",
+          "value": "\"workout_zones\".\"hr_z2_s\" is null or \"workout_zones\".\"hr_z2_s\" >= 0"
+        },
+        "workout_zones_hr_z3_nonneg": {
+          "name": "workout_zones_hr_z3_nonneg",
+          "value": "\"workout_zones\".\"hr_z3_s\" is null or \"workout_zones\".\"hr_z3_s\" >= 0"
+        },
+        "workout_zones_hr_z4_nonneg": {
+          "name": "workout_zones_hr_z4_nonneg",
+          "value": "\"workout_zones\".\"hr_z4_s\" is null or \"workout_zones\".\"hr_z4_s\" >= 0"
+        },
+        "workout_zones_hr_z5_nonneg": {
+          "name": "workout_zones_hr_z5_nonneg",
+          "value": "\"workout_zones\".\"hr_z5_s\" is null or \"workout_zones\".\"hr_z5_s\" >= 0"
+        },
+        "workout_zones_pw_z1_nonneg": {
+          "name": "workout_zones_pw_z1_nonneg",
+          "value": "\"workout_zones\".\"power_z1_s\" is null or \"workout_zones\".\"power_z1_s\" >= 0"
+        },
+        "workout_zones_pw_z2_nonneg": {
+          "name": "workout_zones_pw_z2_nonneg",
+          "value": "\"workout_zones\".\"power_z2_s\" is null or \"workout_zones\".\"power_z2_s\" >= 0"
+        },
+        "workout_zones_pw_z3_nonneg": {
+          "name": "workout_zones_pw_z3_nonneg",
+          "value": "\"workout_zones\".\"power_z3_s\" is null or \"workout_zones\".\"power_z3_s\" >= 0"
+        },
+        "workout_zones_pw_z4_nonneg": {
+          "name": "workout_zones_pw_z4_nonneg",
+          "value": "\"workout_zones\".\"power_z4_s\" is null or \"workout_zones\".\"power_z4_s\" >= 0"
+        },
+        "workout_zones_pw_z5_nonneg": {
+          "name": "workout_zones_pw_z5_nonneg",
+          "value": "\"workout_zones\".\"power_z5_s\" is null or \"workout_zones\".\"power_z5_s\" >= 0"
+        },
+        "workout_zones_pw_z6_nonneg": {
+          "name": "workout_zones_pw_z6_nonneg",
+          "value": "\"workout_zones\".\"power_z6_s\" is null or \"workout_zones\".\"power_z6_s\" >= 0"
+        },
+        "workout_zones_pw_z7_nonneg": {
+          "name": "workout_zones_pw_z7_nonneg",
+          "value": "\"workout_zones\".\"power_z7_s\" is null or \"workout_zones\".\"power_z7_s\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.workouts": {
+      "name": "workouts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "duration_min": {
+          "name": "duration_min",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "distance_km": {
+          "name": "distance_km",
+          "type": "numeric(6, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "avg_hr": {
+          "name": "avg_hr",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_hr": {
+          "name": "max_hr",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rpe": {
+          "name": "rpe",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "shoes": {
+          "name": "shoes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'manual'"
+        },
+        "source_id": {
+          "name": "source_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "workouts_user_date_idx": {
+          "name": "workouts_user_date_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "workouts_user_created_idx": {
+          "name": "workouts_user_created_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "workouts_source_idem_idx": {
+          "name": "workouts_source_idem_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "source",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "source_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"workouts\".\"source_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "workouts_user_id_users_id_fk": {
+          "name": "workouts_user_id_users_id_fk",
+          "tableFrom": "workouts",
+          "tableTo": "users",
+          "schemaTo": "auth",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "workouts_rpe_range": {
+          "name": "workouts_rpe_range",
+          "value": "\"workouts\".\"rpe\" is null or (\"workouts\".\"rpe\" between 1 and 10)"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

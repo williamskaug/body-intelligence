@@ -36,6 +36,13 @@
       "when": 1781275754132,
       "tag": "20260612144914_derived_layer",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1782814567016,
+      "tag": "20260630101607_capture_expansion",
+      "breakpoints": true
     }
   ]
 }

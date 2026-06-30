@@ -90,6 +90,14 @@ export const dailyEntries = pgTable(
     respirationAvgBrpm: numeric("respiration_avg_brpm", { precision: 4, scale: 1 }),
     weightKg: numeric("weight_kg", { precision: 5, scale: 2 }),
     bodyFatPct: numeric("body_fat_pct", { precision: 4, scale: 1 }),
+    // Smart-scale body composition — captured, vendor-measured scalars.
+    muscleMassKg: numeric("muscle_mass_kg", { precision: 5, scale: 2 }),
+    boneMassKg: numeric("bone_mass_kg", { precision: 4, scale: 2 }),
+    bodyWaterPct: numeric("body_water_pct", { precision: 4, scale: 1 }),
+    // Optional health vitals — only present when the user logs them.
+    bpSystolicMmhg: smallint("bp_systolic_mmhg"),
+    bpDiastolicMmhg: smallint("bp_diastolic_mmhg"),
+    hydrationMl: integer("hydration_ml"),
     // Cross-vendor sensor measurement (Garmin/Oura/Whoop/Apple all expose a
     // nightly skin/wrist temperature deviation). Vendor-branded composites
     // (Body Battery, Readiness) stay in daily/YYYY-MM-DD.md documents.
@@ -98,6 +106,21 @@ export const dailyEntries = pgTable(
     // though each vendor computes it differently. Factor breakdowns stay
     // in daily/YYYY-MM-DD.md.
     sleepScore: smallint("sleep_score"),
+    // Recovery / readiness vendor SCALARS — captured observations, never
+    // BI-authored verdicts. The Body Battery curve, the readiness factor
+    // breakdown, and the HRV-status label stay in daily/YYYY-MM-DD.md; only
+    // the trendable scalar lands in a column so the stats engine can chart it.
+    stressScore: smallint("stress_score"),
+    bodyBatteryMorning: smallint("body_battery_morning"),
+    bodyBatteryHigh: smallint("body_battery_high"),
+    bodyBatteryLow: smallint("body_battery_low"),
+    bodyBatteryCharged: smallint("body_battery_charged"),
+    bodyBatteryDrained: smallint("body_battery_drained"),
+    trainingReadinessScore: smallint("training_readiness_score"),
+    // Vendor training-status enum (productive|maintaining|recovery|unproductive|
+    // detraining|overreaching|peaking). NO check — the vendor vocabulary may
+    // grow; store lowercased, mirroring the workouts.type decision.
+    trainingStatus: text("training_status"),
     steps: integer(),
     activeCalories: integer("active_calories"),
     floorsClimbed: integer("floors_climbed"),
@@ -133,6 +156,58 @@ export const dailyEntries = pgTable(
     check(
       "daily_sleep_score_range",
       sql`${t.sleepScore} is null or (${t.sleepScore} between 0 and 100)`,
+    ),
+    check(
+      "daily_stress_score_range",
+      sql`${t.stressScore} is null or (${t.stressScore} between 0 and 100)`,
+    ),
+    check(
+      "daily_bb_morning_range",
+      sql`${t.bodyBatteryMorning} is null or (${t.bodyBatteryMorning} between 0 and 100)`,
+    ),
+    check(
+      "daily_bb_high_range",
+      sql`${t.bodyBatteryHigh} is null or (${t.bodyBatteryHigh} between 0 and 100)`,
+    ),
+    check(
+      "daily_bb_low_range",
+      sql`${t.bodyBatteryLow} is null or (${t.bodyBatteryLow} between 0 and 100)`,
+    ),
+    check(
+      "daily_bb_charged_range",
+      sql`${t.bodyBatteryCharged} is null or (${t.bodyBatteryCharged} between 0 and 100)`,
+    ),
+    check(
+      "daily_bb_drained_range",
+      sql`${t.bodyBatteryDrained} is null or (${t.bodyBatteryDrained} between 0 and 100)`,
+    ),
+    check(
+      "daily_training_readiness_range",
+      sql`${t.trainingReadinessScore} is null or (${t.trainingReadinessScore} between 0 and 100)`,
+    ),
+    check(
+      "daily_body_water_range",
+      sql`${t.bodyWaterPct} is null or (${t.bodyWaterPct} between 0 and 100)`,
+    ),
+    check(
+      "daily_muscle_mass_nonneg",
+      sql`${t.muscleMassKg} is null or ${t.muscleMassKg} >= 0`,
+    ),
+    check(
+      "daily_bone_mass_nonneg",
+      sql`${t.boneMassKg} is null or ${t.boneMassKg} >= 0`,
+    ),
+    check(
+      "daily_bp_systolic_range",
+      sql`${t.bpSystolicMmhg} is null or (${t.bpSystolicMmhg} between 50 and 260)`,
+    ),
+    check(
+      "daily_bp_diastolic_range",
+      sql`${t.bpDiastolicMmhg} is null or (${t.bpDiastolicMmhg} between 30 and 200)`,
+    ),
+    check(
+      "daily_hydration_nonneg",
+      sql`${t.hydrationMl} is null or ${t.hydrationMl} >= 0`,
     ),
   ],
 );
@@ -321,11 +396,26 @@ export const workoutMetrics = pgTable(
     elevationLossM: integer("elevation_loss_m"),
     avgSpeedKmh: numeric("avg_speed_kmh", { precision: 5, scale: 2 }),
     maxSpeedKmh: numeric("max_speed_kmh", { precision: 5, scale: 2 }),
+    // Environmental + strength context (one scalar per activity). Lets the
+    // stats engine correlate heat/humidity against decoupling/HR drift, and
+    // trend a strength session's total volume. Per-exercise set detail and
+    // weather narrative stay in daily/YYYY-MM-DD.md.
+    weatherTempC: numeric("weather_temp_c", { precision: 4, scale: 1 }),
+    weatherHumidityPct: smallint("weather_humidity_pct"),
+    strengthVolumeKg: numeric("strength_volume_kg", { precision: 8, scale: 1 }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("workout_metrics_user_date_idx").on(t.userId, t.date.desc()),
+    check(
+      "workout_metrics_humidity_range",
+      sql`${t.weatherHumidityPct} is null or (${t.weatherHumidityPct} between 0 and 100)`,
+    ),
+    check(
+      "workout_metrics_strength_volume_nonneg",
+      sql`${t.strengthVolumeKg} is null or ${t.strengthVolumeKg} >= 0`,
+    ),
     check(
       "workout_metrics_gct_balance_range",
       sql`${t.gctBalancePctLeft} is null or (${t.gctBalancePctLeft} between 30 and 70)`,
@@ -349,6 +439,133 @@ export const workoutMetrics = pgTable(
     check(
       "workout_metrics_stamina_min_range",
       sql`${t.staminaMinPct} is null or (${t.staminaMinPct} between 0 and 100)`,
+    ),
+  ],
+);
+
+// Per-activity time-in-zone (HR zones + cycling power zones), seconds per
+// zone. 1:1 side table keyed by workout_id so the mostly-null power columns
+// don't bloat workout_metrics. `date` denormalized for one-table range scans.
+// Written via the nested `zones` object on the workout write tools (full
+// replace per workout). Lets the stats engine trend intensity distribution.
+export const workoutZones = pgTable(
+  "workout_zones",
+  {
+    workoutId: uuid("workout_id")
+      .primaryKey()
+      .references(() => workouts.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => usersInAuth.id, { onDelete: "cascade" }),
+    date: date().notNull(),
+    hrZ1S: integer("hr_z1_s"),
+    hrZ2S: integer("hr_z2_s"),
+    hrZ3S: integer("hr_z3_s"),
+    hrZ4S: integer("hr_z4_s"),
+    hrZ5S: integer("hr_z5_s"),
+    powerZ1S: integer("power_z1_s"),
+    powerZ2S: integer("power_z2_s"),
+    powerZ3S: integer("power_z3_s"),
+    powerZ4S: integer("power_z4_s"),
+    powerZ5S: integer("power_z5_s"),
+    powerZ6S: integer("power_z6_s"),
+    powerZ7S: integer("power_z7_s"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("workout_zones_user_date_idx").on(t.userId, t.date.desc()),
+    check("workout_zones_hr_z1_nonneg", sql`${t.hrZ1S} is null or ${t.hrZ1S} >= 0`),
+    check("workout_zones_hr_z2_nonneg", sql`${t.hrZ2S} is null or ${t.hrZ2S} >= 0`),
+    check("workout_zones_hr_z3_nonneg", sql`${t.hrZ3S} is null or ${t.hrZ3S} >= 0`),
+    check("workout_zones_hr_z4_nonneg", sql`${t.hrZ4S} is null or ${t.hrZ4S} >= 0`),
+    check("workout_zones_hr_z5_nonneg", sql`${t.hrZ5S} is null or ${t.hrZ5S} >= 0`),
+    check("workout_zones_pw_z1_nonneg", sql`${t.powerZ1S} is null or ${t.powerZ1S} >= 0`),
+    check("workout_zones_pw_z2_nonneg", sql`${t.powerZ2S} is null or ${t.powerZ2S} >= 0`),
+    check("workout_zones_pw_z3_nonneg", sql`${t.powerZ3S} is null or ${t.powerZ3S} >= 0`),
+    check("workout_zones_pw_z4_nonneg", sql`${t.powerZ4S} is null or ${t.powerZ4S} >= 0`),
+    check("workout_zones_pw_z5_nonneg", sql`${t.powerZ5S} is null or ${t.powerZ5S} >= 0`),
+    check("workout_zones_pw_z6_nonneg", sql`${t.powerZ6S} is null or ${t.powerZ6S} >= 0`),
+    check("workout_zones_pw_z7_nonneg", sql`${t.powerZ7S} is null or ${t.powerZ7S} >= 0`),
+  ],
+);
+
+// Slow-moving fitness-capacity snapshots, written weekly by the capacity-sync
+// recipe (and never by BI itself). Wide one-row-per-(user,date) so each metric
+// is a column that slots into the resolveMetric → select(column) stats
+// machinery with zero changes to get_stats/get_baseline. Capacity here is a
+// captured vendor estimate, not a BI-authored judgment.
+export const capacityMetrics = pgTable(
+  "capacity_metrics",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => usersInAuth.id, { onDelete: "cascade" }),
+    date: date().notNull(),
+    vo2maxRunning: numeric("vo2max_running", { precision: 4, scale: 1 }),
+    vo2maxCycling: numeric("vo2max_cycling", { precision: 4, scale: 1 }),
+    lactateThresholdHrBpm: integer("lactate_threshold_hr_bpm"),
+    lactateThresholdPaceSPerKm: integer("lactate_threshold_pace_s_per_km"),
+    lactateThresholdPowerW: integer("lactate_threshold_power_w"),
+    cyclingFtpW: integer("cycling_ftp_w"),
+    enduranceScore: integer("endurance_score"),
+    hillScore: smallint("hill_score"),
+    fitnessAgeYears: numeric("fitness_age_years", { precision: 4, scale: 1 }),
+    runningToleranceKm: numeric("running_tolerance_km", { precision: 5, scale: 1 }),
+    racePred5kS: integer("race_pred_5k_s"),
+    racePred10kS: integer("race_pred_10k_s"),
+    racePredHalfS: integer("race_pred_half_s"),
+    racePredMarathonS: integer("race_pred_marathon_s"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("capacity_metrics_user_date_key").on(t.userId, t.date),
+    index("capacity_metrics_user_date_idx").on(t.userId, t.date.desc()),
+    check(
+      "capacity_vo2max_run_range",
+      sql`${t.vo2maxRunning} is null or (${t.vo2maxRunning} between 10 and 90)`,
+    ),
+    check(
+      "capacity_vo2max_cyc_range",
+      sql`${t.vo2maxCycling} is null or (${t.vo2maxCycling} between 10 and 90)`,
+    ),
+    check(
+      "capacity_lthr_range",
+      sql`${t.lactateThresholdHrBpm} is null or (${t.lactateThresholdHrBpm} between 60 and 220)`,
+    ),
+    check(
+      "capacity_hill_range",
+      sql`${t.hillScore} is null or (${t.hillScore} between 0 and 100)`,
+    ),
+    check(
+      "capacity_fitness_age_range",
+      sql`${t.fitnessAgeYears} is null or (${t.fitnessAgeYears} between 10 and 100)`,
+    ),
+    check("capacity_ftp_nonneg", sql`${t.cyclingFtpW} is null or ${t.cyclingFtpW} >= 0`),
+    check(
+      "capacity_lt_power_nonneg",
+      sql`${t.lactateThresholdPowerW} is null or ${t.lactateThresholdPowerW} >= 0`,
+    ),
+    check(
+      "capacity_endurance_nonneg",
+      sql`${t.enduranceScore} is null or ${t.enduranceScore} >= 0`,
+    ),
+    check(
+      "capacity_run_tolerance_nonneg",
+      sql`${t.runningToleranceKm} is null or ${t.runningToleranceKm} >= 0`,
+    ),
+    check(
+      "capacity_lt_pace_pos",
+      sql`${t.lactateThresholdPaceSPerKm} is null or ${t.lactateThresholdPaceSPerKm} > 0`,
+    ),
+    check("capacity_pred_5k_pos", sql`${t.racePred5kS} is null or ${t.racePred5kS} > 0`),
+    check("capacity_pred_10k_pos", sql`${t.racePred10kS} is null or ${t.racePred10kS} > 0`),
+    check("capacity_pred_half_pos", sql`${t.racePredHalfS} is null or ${t.racePredHalfS} > 0`),
+    check(
+      "capacity_pred_marathon_pos",
+      sql`${t.racePredMarathonS} is null or ${t.racePredMarathonS} > 0`,
     ),
   ],
 );
