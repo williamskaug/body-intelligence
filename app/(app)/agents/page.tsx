@@ -97,10 +97,20 @@ export default async function AgentsPage({
 }) {
   const { category: raw } = await searchParams;
   const filter = isCategory(raw) ? raw : null;
-  const [installState, userDocs] = await Promise.all([
+  const [installState, userDocs, captureGaps] = await Promise.all([
     loadInstallState(),
     loadUserRecipeDocs(),
+    loadCaptureGaps(),
   ]);
+
+  // Deterministic drift signal: the user is logging workouts but the structured
+  // side tables that the catalog agent writes (HR zones, capacity) are empty —
+  // meaning the running recipe is behind. Pure row counts, no reasoning.
+  const missing: string[] = [];
+  if (captureGaps && captureGaps.workouts > 0) {
+    if (captureGaps.zones === 0) missing.push("HR zones");
+    if (captureGaps.capacity === 0) missing.push("capacity (VO₂max / FTP / race predictions)");
+  }
 
   // "Your agents": user-authored recipe docs under recipes/, merged with
   // run state, plus any tracked non-catalog recipe ids without a doc.
@@ -152,6 +162,23 @@ export default async function AgentsPage({
           MCP tools you authorized.
         </p>
       </header>
+
+      {missing.length > 0 ? (
+        <div className="mt-6 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
+          <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+            Your agent is behind the catalog — data isn&apos;t being captured
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-amber-900/90 dark:text-amber-200/90">
+            You&apos;re logging workouts, but the last 30 days have no{" "}
+            {missing.join(" and no ")}. That leaves the Analyze Intensity and
+            Fitness &amp; capacity bands empty and forces training load onto the
+            crude RPE fallback. Update your dawn-agent recipe to capture HR zones
+            (<code className="font-mono">get_activity_hr_zones → zones&#123;&#125;</code>),
+            and install the <span className="font-medium">capacity-sync</span> +{" "}
+            <span className="font-medium">backfill</span> recipes below.
+          </p>
+        </div>
+      ) : null}
 
       {userAgents.length > 0 ? (
         <section className="mt-8">
@@ -218,6 +245,7 @@ function UserAgentCard({ agent }: { agent: UserAgent }) {
   const { doc, state } = agent;
   const title = doc?.title ?? agent.slug;
   const failed = state?.last_run_status === "failed";
+  const stale = !failed && isStale(state?.last_run_at);
   const scheduleLabel = doc?.schedule
     ? humanizeCron(doc.schedule) ?? doc.schedule
     : null;
@@ -232,6 +260,10 @@ function UserAgentCard({ agent }: { agent: UserAgent }) {
               {failed ? (
                 <span className="rounded-md border border-rose-500/40 bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-medium text-rose-700 dark:text-rose-300">
                   last run failed
+                </span>
+              ) : stale ? (
+                <span className="rounded-md border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
+                  stale
                 </span>
               ) : state ? (
                 <span className="rounded-md border border-emerald-500/40 bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
@@ -306,6 +338,31 @@ async function loadUserRecipeDocs(): Promise<UserRecipeDoc[]> {
     if (doc) out.push(doc);
   }
   return out;
+}
+
+// Row counts used to detect capture drift: workouts logged vs the structured
+// side tables (HR zones, capacity) that the catalog agent is supposed to fill.
+async function loadCaptureGaps(): Promise<{
+  workouts: number;
+  zones: number;
+  capacity: number;
+} | null> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const sb = adminClient();
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const since30 = iso(new Date(Date.now() - 30 * 86_400_000));
+  const since60 = iso(new Date(Date.now() - 60 * 86_400_000));
+  const head = { count: "exact" as const, head: true };
+  const [w, z, c] = await Promise.all([
+    sb.from("workouts").select("id", head).eq("user_id", user.id).gte("date", since30),
+    sb.from("workout_zones").select("workout_id", head).eq("user_id", user.id).gte("date", since30),
+    sb.from("capacity_metrics").select("id", head).eq("user_id", user.id).gte("date", since60),
+  ]);
+  return { workouts: w.count ?? 0, zones: z.count ?? 0, capacity: c.count ?? 0 };
 }
 
 async function loadInstallState(): Promise<Map<string, InstallState>> {
@@ -492,6 +549,13 @@ function InstallStatePill({
       installed
     </span>
   );
+}
+
+// Older than ~2 days → stale for a daily agent. Plain function (not inline in
+// render) so it isn't flagged as impure by react-hooks/purity.
+function isStale(iso: string | null | undefined): boolean {
+  if (!iso) return false;
+  return Date.now() - new Date(iso).getTime() > 2 * 86_400_000;
 }
 
 function timeAgo(iso: string): string {
