@@ -59,7 +59,12 @@ the fitness/fatigue/form chart) earns the interactivity on these two surfaces.
 | Relationships worth watching | `ScatterRegression` ×4 | `dailySeriesForMetric` + `lagScan` (best of lags 0–3) + `linregress`/`pearson` | per pair |
 
 **Load impulse precedence:** Edwards zone-weighted TRIMP (HR zones) → vendor
-training load → duration×(rpe??5); `load_sources` reports the per-source counts.
+training load → duration×(rpe??5)/2 (the fallback is halved to keep the three
+sources on a comparable TRIMP scale); `load_sources` reports the per-source
+counts. **Non-endurance types (golf/walk/mobility/yoga) are excluded** from the
+impulse so they don't inflate CTL/ATL/TSB (`workouts_excluded`). Recovery
+baselines use a fixed 60-day window with a leave-one-out z (independent of the
+display toggle), and relationship lag-scans anchor on lag 0 with a Fisher-z CI.
 
 **Heatmap metric set:** `hrv_ms`, `rhr_bpm`, `sleep_h`, `derived_sleep_debt_7d_min`,
 `derived_acute_load_7d`, `soreness`, `weight_kg`, `body_fat_pct`.

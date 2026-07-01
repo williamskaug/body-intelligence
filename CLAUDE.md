@@ -189,6 +189,7 @@ Catalog:
 - Weekly review (reads `derived` rows), Race countdown, Health-log audit
 - Garmin sync, Strava sync (sync-only; subsumed by the dawn agent)
 - **Capacity sync** (`connector`, weekly, requires Garmin) — pulls slow-moving capacity (VO2max/LT/FTP/endurance/race-predictions) into `capacity_metrics`; refreshes `THRESHOLDS.md` + `RECORDS.md`
+- **Backfill** (`connector`, one-shot, requires Garmin) — iterates the last 90 days of Garmin workouts and `update_workout`s the structured `metrics`/`zones` (HR zones, vendor load, decoupling, weather) + seeds capacity, so training load switches from the RPE fallback to zone-TRIMP and the empty Analyze bands light up retroactively
 - **Insights scan** (`review`, weekly) — reads the statistics engine (correlations, trends, CTL/ATL/TSB, distributions) and writes a plain-language interpretation to `insights/YYYY-Www.md`: the "what to optimize" reasoning the app deliberately never does itself
 
 Full prompts: `docs/recipes.md`.

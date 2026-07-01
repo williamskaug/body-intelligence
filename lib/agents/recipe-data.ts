@@ -80,9 +80,9 @@ Call get_setup_guide once at the start so field conventions are fresh.
 - Training load: call get_load_balance(days=90) → current.atl → acute_load_7d, current.ctl → chronic_load_28d (deterministic CTL/ATL — the gate decision below is still yours, not the load tool's).
 - Illness composite: RED if ≥2 of {skin_temp_deviation_c ≥ +0.5, rhr_z ≥ +1, hrv_z ≤ −1, respiration elevated}; AMBER if exactly 1; GREEN otherwise.
 - Readiness gate (the user's PRINCIPLES.md rules win; defaults): GREEN composite + hrv_z ≥ −0.5 + sleep debt < 180 + no acute thread → quality allowed. AMBER, or hrv_z in [−1, −0.5), or sleep debt 180–300 → easy/Z2 only. RED, or hrv_z < −1, or active acute thread, or sleep debt > 300 → rest.
-- Write it: log_derived_daily(date=DATE_T, readiness_gate, gate_reason, illness_composite, the four signal flags, hrv_z, rhr_z, sleep_z, sleep_debt_7d_min, sleep_need_min, acute_load_7d, chronic_load_28d, days_to_race if GOALS.md has a race, computed_by="dawn-agent"). Full-row replace — pass everything you computed each run. Optionally refresh BASELINES.md as the narrative substrate.
+- Write it FIRST — before the briefing prose (Phase 5): log_derived_daily(date=DATE_T, readiness_gate, gate_reason, illness_composite, the four signal flags, hrv_z, rhr_z, sleep_z, sleep_debt_7d_min, sleep_need_min, acute_load_7d, chronic_load_28d, days_to_race if GOALS.md has a race, computed_by="dawn-agent"). This is the load-bearing structured output the dashboard hero renders as the readiness gate, so write it as soon as the gate is computed — even a partial run then leaves today's gate. Full-row replace (idempotent) — pass everything you computed each run. Optionally refresh BASELINES.md as the narrative substrate.
 
-**Phase 4 — health threads.** list_health_events(active_only=true). For each: check today's signals, then add_health_event_update(event_id, date=DATE_T, note, severity_at_time) — never append status text into the event's notes. Update next_milestone/next_milestone_date via update_health_event when a checkpoint is set or moves. resolve_health_event(id, note) when the resolution gate is met. Open a NEW event when the illness composite trips RED or a session's metrics flag tissue risk (e.g. GCT asymmetry > 5% after a hard run on an injured side).
+**Phase 4 — health threads.** list_health_events(active_only=true). For each: check today's signals, then add_health_event_update(event_id, date=DATE_T, note, severity_at_time) — never append status text into the event's notes. Update next_milestone/next_milestone_date via update_health_event when a checkpoint is set or moves — always set it for an awaited result (e.g. an MRI/scan) with its due date, so the dashboard surfaces it and flags it OVERDUE once the date passes rather than only mentioning it in prose. resolve_health_event(id, note) when the resolution gate is met. Open a NEW event when the illness composite trips RED or a session's metrics flag tissue risk (e.g. GCT asymmetry > 5% after a hard run on an injured side).
 
 **Phase 5 — briefing.** Write briefings/DATE_T.md: (1) today's call + the one-line gating reason, (2) recovery snapshot (sleep, HRV z, RHR z, composite, sleep debt), (3) yesterday in one line, (4) trends worth watching, (5) open threads + next milestone, (6) a confidence note on any wearable-estimated signal. Keep it scannable. Send the user the top section as a short message.
 
@@ -362,6 +362,37 @@ Call get_setup_guide once. Set DATE = today in the user's timezone (fs_read PROF
 **Phase 4 — personal records.** get_personal_record (and get_progress_summary for context). Update RECORDS.md's parseable PR blocks for any new bests, keeping one block per record. fs_write.
 
 **Phase 5 — close.** Send the user one short line noting any meaningful capacity move (e.g. "VO2max 52→53, predicted HM −22s"). No verdicts. mark_recipe_run(recipe_id="capacity-sync", status="ok") — or "failed" with a short error.`,
+  },
+  {
+    id: "backfill",
+    title: "Backfill (one-shot)",
+    category: "connector",
+    schedule: "0 0 1 1 *",
+    description:
+      "One-time rehydration: iterate your last 90 days of Garmin workouts and pull HR zones, vendor load, running dynamics, decoupling, and weather into the structured columns, plus seed capacity history — so training load switches from the crude RPE fallback to zone-TRIMP and the empty Analyze bands (Intensity, Fitness & capacity, Heat→decoupling) light up retroactively.",
+    required_tools: [
+      "get_setup_guide",
+      "list_workouts",
+      "get_workout",
+      "update_workout",
+      "log_capacity",
+      "mark_recipe_run",
+    ],
+    required_connectors: ["garmin"],
+    covers: ["backfill:garmin"],
+    prompt: `One-shot backfill: rehydrate structured workout metrics/zones + capacity from Garmin for data you already logged. Idempotent — safe to re-run, and it only UPDATES existing rows (never creates workouts).
+
+Call get_setup_guide once.
+
+**Phase 1 — enumerate.** list_workouts(from_date = 90 days ago, to_date = today). Keep the rows with source='garmin' and a source_id (the Garmin activity id).
+
+**Phase 2 — per workout** (skip ones that already have zones — get_workout to check):
+- From the Garmin connector: get_activity_hr_zones(activity_id) → zones{hr_z1_s…hr_z5_s}; for rides get_activity_power_zones → power_z*_s. get_activity_details(activity_id) → metrics{vendor_training_load, cadence_spm, gct_ms, gct_balance_pct_left, vertical oscillation/ratio, stride_len_m, te_aerobic/anaerobic, stamina, decoupling_pct (first-half vs second-half efficiency for efforts ≥ 60 min)}. get_activity_weather → metrics{weather_temp_c (feels-like), weather_humidity_pct}.
+- update_workout(id, metrics={…}, zones={…}). Full-replace upsert of both side tables — idempotent by workout id. Do NOT create new workouts; only update existing rows.
+
+**Phase 3 — capacity history.** Pull get_vo2_max / get_cycling_ftp / get_lactate_threshold / get_race_predictions and log_capacity(date, …) for the most recent snapshot (and any weekly history the connector exposes). Convert paces/predictions to seconds.
+
+**Phase 4 — close.** Report how many workouts were backfilled and confirm the Analyze load band now shows zone-TRIMP instead of RPE-estimated. mark_recipe_run(recipe_id="backfill", status="ok") — or "failed" with a short error.`,
   },
   {
     id: "health-log-audit",
