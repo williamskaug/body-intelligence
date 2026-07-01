@@ -17,7 +17,14 @@ import {
   metricLabel,
 } from "@/lib/data-display/metric-registry";
 import { dailySeriesForMetric } from "@/lib/data-display/metric-series";
-import { alignByDate, computeBaseline, lagScan, linregress, pearson } from "@/lib/data-display/statistics";
+import {
+  alignByDate,
+  computeBaseline,
+  fisherCI,
+  lagScan,
+  linregress,
+  pearson,
+} from "@/lib/data-display/statistics";
 import type { MetricKey } from "@/lib/mcp/tools/metrics";
 import { getCorrelationMatrix } from "@/lib/mcp/tools/get-correlation-matrix";
 import { getDistribution } from "@/lib/mcp/tools/get-distribution";
@@ -99,18 +106,35 @@ function sumNonNull(arr: ReadonlyArray<number | null> | undefined): number {
   return s;
 }
 
+const MIN_PAIRS = 12;
+
 async function buildScatter(userId: string, a: MetricKey, b: MetricKey, from: string, to: string) {
   const [sa, sb] = await Promise.all([
     dailySeriesForMetric(userId, a, from, to),
     dailySeriesForMetric(userId, b, from, to),
   ]);
-  // Scan forward lags and plot the strongest — reveals the athlete's real
-  // response lag instead of assuming same-day.
-  const { profile, best } = lagScan(sa.map, sb.map, SCAN_LAGS, 8);
-  const lag = best?.lag ?? 0;
-  const { xs, ys, dates } = alignByDate(sa.map, sb.map, lag);
+  // Scan forward lags, but ANCHOR on lag 0 to avoid multiple-comparison
+  // inflation — only promote a nonzero lag when it clearly beats lag 0 AND its
+  // Fisher-z CI excludes 0. Otherwise the same-day relationship is shown.
+  const { profile } = lagScan(sa.map, sb.map, SCAN_LAGS, MIN_PAIRS);
+  const lag0 = profile.find((p) => p.lag === 0);
+  let bestNonZero: { lag: number; r: number | null; n: number } | null = null;
+  for (const p of profile) {
+    if (p.lag === 0 || p.r == null || p.n < MIN_PAIRS) continue;
+    if (bestNonZero == null || Math.abs(p.r) > Math.abs(bestNonZero.r!)) bestNonZero = p;
+  }
+  let chosenLag = 0;
+  const l0mag = lag0?.r != null ? Math.abs(lag0.r) : 0;
+  if (bestNonZero?.r != null) {
+    const bci = fisherCI(bestNonZero.r, bestNonZero.n);
+    const excludesZero = bci != null && (bci[0] > 0 || bci[1] < 0);
+    if (Math.abs(bestNonZero.r) > l0mag + 0.1 && excludesZero) chosenLag = bestNonZero.lag;
+  }
+
+  const { xs, ys, dates } = alignByDate(sa.map, sb.map, chosenLag);
   const reg = linregress(xs, ys);
   const r = pearson(xs, ys);
+  const ci = fisherCI(r, xs.length);
   const points = xs.map((x, i) => ({ x, y: ys[i]!, date: dates[i]! }));
   let line: { x1: number; y1: number; x2: number; y2: number } | null = null;
   if (reg && xs.length >= 2) {
@@ -130,7 +154,7 @@ async function buildScatter(userId: string, a: MetricKey, b: MetricKey, from: st
   return {
     points,
     line,
-    stats: { r, r2: reg?.r2 ?? null, slope: reg?.slope ?? null, n: xs.length, lagDays: lag },
+    stats: { r, r2: reg?.r2 ?? null, slope: reg?.slope ?? null, n: xs.length, lagDays: chosenLag, ci },
     lagProfile: profile.map((p) => ({ lag: p.lag, r: p.r })),
   };
 }
@@ -142,8 +166,18 @@ function buildBaselineBand(
   const series = ms?.series[key];
   if (!series || !ms) return null;
   const data = ms.dates.map((date, i) => ({ date, value: series[i] ?? null }));
-  const base = computeBaseline(series);
-  const latest = latestNonNull(series);
+  // Leave-one-out: baseline is the prior distribution (excluding today's value),
+  // so the z-score measures deviation from a set the point doesn't belong to.
+  let latestIdx = -1;
+  for (let i = series.length - 1; i >= 0; i--) {
+    if (series[i] != null) {
+      latestIdx = i;
+      break;
+    }
+  }
+  const latest = latestIdx >= 0 ? series[latestIdx]! : null;
+  const prior = series.filter((v, i) => v != null && i !== latestIdx);
+  const base = computeBaseline(prior);
   const z = base && base.sd > 0 && latest != null ? (latest - base.mean) / base.sd : null;
   return { data, mean: base?.mean ?? null, sd: base?.sd ?? null, z };
 }
@@ -166,7 +200,7 @@ export async function Analyze(props: AnalyzeProps) {
   const from = trends.startDate;
   const to = trends.endDate;
 
-  const [load, matrix, overlay, dists, scatters, capacity, zones, head, distLatest] =
+  const [load, matrix, overlay, dists, scatters, capacity, zones, head, distLatest, recoveryBase] =
     await Promise.all([
       safe(getLoadBalance(userId, { days: Math.max(days, 84) })),
       safe(getCorrelationMatrix(userId, { metrics: HEATMAP_METRICS, window_days: days })),
@@ -181,6 +215,9 @@ export async function Analyze(props: AnalyzeProps) {
       safe(getMetricSeries(userId, { metrics: ZONE_KEYS, window_days: days })),
       safe(getMetricSeries(userId, { metrics: ["hrv_ms", "derived_sleep_debt_7d_min"], window_days: days })),
       safe(getMetricSeries(userId, { metrics: DIST_METRICS, window_days: days })),
+      // Recovery baselines use a FIXED 60-day window regardless of the display
+      // range, so a day's z/normal-range doesn't shift with the 7d/30d/90d toggle.
+      safe(getMetricSeries(userId, { metrics: ["hrv_ms", "rhr_bpm", "sleep_h"], window_days: 60 })),
     ]);
 
   // ---- Headline strip inputs (all deterministic differences) ----
@@ -414,7 +451,7 @@ export async function Analyze(props: AnalyzeProps) {
 
       <Band
         title="Recovery baselines"
-        sub="Each signal against its own ±1 SD normal range, with today's z-score. Descriptive — never a readiness gate (that stays the agent's call)."
+        sub="Each signal against its own ±1 SD normal range over a fixed 60-day window, with today's leave-one-out z-score. Descriptive — never a readiness gate (that stays the agent's call)."
       >
         <div className="grid gap-4">
           {[
@@ -422,7 +459,7 @@ export async function Analyze(props: AnalyzeProps) {
             { key: "rhr_bpm", color: "var(--chart-rhr)", dec: 0, unit: "bpm" },
             { key: "sleep_h", color: "var(--chart-sleep)", dec: 1, unit: "h" },
           ].map((cfg) => {
-            const bb = buildBaselineBand(cfg.key, distLatest);
+            const bb = buildBaselineBand(cfg.key, recoveryBase);
             if (!bb) return null;
             return (
               <div key={cfg.key} className="rounded-xl border bg-card p-4 shadow-sm">

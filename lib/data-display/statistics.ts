@@ -294,6 +294,19 @@ export function edwardsTrimp(zoneSeconds: ReadonlyArray<number | null>): number 
   return trimp;
 }
 
+// 95% confidence interval for a Pearson r via the Fisher z-transform:
+// CI = tanh(atanh(r) ± 1.96/√(n−3)). Null when n < 4 or r is null. Lets a CI
+// spanning 0 read as "not distinguishable from zero".
+export function fisherCI(r: number | null, n: number): [number, number] | null {
+  if (r == null || n < 4 || !Number.isFinite(r)) return null;
+  const rc = Math.max(-0.999999, Math.min(0.999999, r));
+  const z = Math.atanh(rc);
+  const se = 1 / Math.sqrt(n - 3);
+  const lo = Math.tanh(z - 1.96 * se);
+  const hi = Math.tanh(z + 1.96 * se);
+  return [Math.max(-1, lo), Math.min(1, hi)];
+}
+
 export type LagPoint = { lag: number; r: number | null; n: number };
 
 // Pearson r of (a vs b) at each lag (b shifted +lag days). Returns the full

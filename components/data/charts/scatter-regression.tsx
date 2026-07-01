@@ -25,6 +25,7 @@ export type ScatterRegressionProps = {
     slope: number | null;
     n: number;
     lagDays?: number;
+    ci?: [number, number] | null;
   };
   // Optional r-by-lag profile (the chosen lag is stats.lagDays).
   lagProfile?: ReadonlyArray<{ lag: number; r: number | null }>;
@@ -128,10 +129,16 @@ export function ScatterRegression({
       <p className="mt-1 text-[11px] text-muted-foreground">
         <span className={`font-mono ${rTone}`}>
           r {stats.r == null ? "—" : fmtSigned(stats.r)}
-        </span>{" "}
-        · R² {stats.r2 == null ? "—" : stats.r2.toFixed(2)} · slope{" "}
-        {stats.slope == null ? "—" : fmtSigned(stats.slope, 3)} · n {stats.n}
-        {stats.lagDays ? ` · best lag ${stats.lagDays}d` : " · lag 0d"}
+        </span>
+        {stats.ci ? (
+          <span className="font-mono">
+            {" "}
+            [{fmtSigned(stats.ci[0], 2)}, {fmtSigned(stats.ci[1], 2)}]
+          </span>
+        ) : null}{" "}
+        · R² {stats.r2 == null ? "—" : stats.r2.toFixed(2)} · n {stats.n}
+        {stats.lagDays ? ` · lag ${stats.lagDays}d (strongest of 0–3, CI-checked)` : " · same-day"}
+        {stats.ci && stats.ci[0] < 0 && stats.ci[1] > 0 ? " · CI spans 0 (not clear)" : ""}
       </p>
       {lagProfile && lagProfile.length > 1 ? (
         <div className="mt-1.5 flex items-end gap-1" aria-label="correlation strength by lag">

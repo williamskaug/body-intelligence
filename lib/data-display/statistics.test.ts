@@ -3,6 +3,7 @@ import {
   alignByDate,
   edwardsTrimp,
   ewma,
+  fisherCI,
   histogram,
   lagScan,
   linregress,
@@ -86,6 +87,20 @@ describe("histogram", () => {
   });
   it("returns null on empty input", () => {
     expect(histogram([], 10)).toBeNull();
+  });
+});
+
+describe("fisherCI", () => {
+  it("computes a Fisher-z 95% CI that brackets r", () => {
+    const ci = fisherCI(0.5, 30)!;
+    expect(ci[0]).toBeCloseTo(0.170, 2);
+    expect(ci[1]).toBeCloseTo(0.729, 2);
+    expect(ci[0]).toBeLessThan(0.5);
+    expect(ci[1]).toBeGreaterThan(0.5);
+  });
+  it("returns null for n<4 or null r", () => {
+    expect(fisherCI(0.5, 3)).toBeNull();
+    expect(fisherCI(null, 30)).toBeNull();
   });
 });
 
