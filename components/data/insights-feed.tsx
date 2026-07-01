@@ -10,6 +10,18 @@ export type InsightDoc = {
 
 const MAX_OLDER = 8;
 
+// A short plain-text lead from the insight markdown so the essay collapses to a
+// scannable summary above the fold (full text is one click away).
+function insightLead(content: string): string {
+  const stripped = content
+    // drop a leading H1 title line
+    .replace(/^\s*#\s+.*(?:\n|$)/, "")
+    .replace(/[#*_>`]/g, "")
+    .replace(/\s*\n\s*/g, " ")
+    .trim();
+  return stripped.length > 420 ? `${stripped.slice(0, 417).trimEnd()}…` : stripped;
+}
+
 // Surfaces Claude-authored interpretation docs (insights/YYYY-Www.md). The app
 // renders the prose; it never authors its own reading. Placed above the
 // deterministic stat bands so the separation is explicit.
@@ -43,7 +55,19 @@ export function InsightsFeed({ insights }: { insights: InsightDoc[] }) {
             </Link>
           </header>
           {latest.content ? (
-            <Markdown>{latest.content}</Markdown>
+            <>
+              <p className="text-sm leading-relaxed text-foreground/90">
+                {insightLead(latest.content)}
+              </p>
+              <details className="group mt-2">
+                <summary className="cursor-pointer list-none text-xs font-medium text-muted-foreground underline-offset-2 hover:underline">
+                  Show full insight
+                </summary>
+                <div className="mt-3 border-t pt-3">
+                  <Markdown>{latest.content}</Markdown>
+                </div>
+              </details>
+            </>
           ) : (
             <p className="text-sm text-muted-foreground">(empty insight)</p>
           )}
