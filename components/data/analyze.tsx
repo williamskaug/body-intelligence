@@ -412,7 +412,7 @@ export async function Analyze(props: AnalyzeProps) {
             </div>
           </div>
         ) : (
-          <ChartEmpty label="No capacity snapshots yet — install the capacity-sync recipe to pull VO₂max / FTP / predictions." />
+          <ChartEmpty label="No capacity snapshots yet — your dawn agent isn't capturing capacity. Install the capacity-sync recipe (or run the backfill) to pull VO₂max / FTP / race predictions." />
         )}
       </Band>
 
@@ -435,7 +435,7 @@ export async function Analyze(props: AnalyzeProps) {
             </div>
           </div>
         ) : (
-          <ChartEmpty label="No HR-zone data yet — the dawn agent captures it per activity from Garmin." />
+          <ChartEmpty label="No HR-zone data yet — your dawn agent isn't capturing per-activity HR zones. Update its recipe (or run the backfill) to light this up." />
         )}
       </Band>
 
