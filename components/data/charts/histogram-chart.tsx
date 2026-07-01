@@ -42,7 +42,12 @@ export function HistogramChart({
 
   return (
     <div>
-      <ChartContainer config={config} className="aspect-[4/3] w-full" aria-label={`${label} distribution`}>
+      <ChartContainer
+        config={config}
+        className="aspect-[4/3] w-full"
+        aria-label={`${label} distribution`}
+        initialDimension={{ width: 480, height: 360 }}
+      >
         <BarChart accessibilityLayer data={data} margin={{ top: 8, right: 8, bottom: 4, left: 4 }}>
           <CartesianGrid vertical={false} strokeDasharray="3 3" />
           <XAxis dataKey="label" tickLine={false} axisLine={false} interval="preserveStartEnd" />

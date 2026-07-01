@@ -38,7 +38,11 @@ export function MultiSeriesLine({ data, series, minN = 5 }: MultiSeriesLineProps
   const hasRight = series.some((s) => s.axis === "right");
 
   return (
-    <ChartContainer config={config} className="aspect-[16/7] w-full">
+    <ChartContainer
+      config={config}
+      className="aspect-[16/7] w-full"
+      initialDimension={{ width: 640, height: 280 }}
+    >
       <ComposedChart
         accessibilityLayer
         data={data as Array<Record<string, number | string | null>>}

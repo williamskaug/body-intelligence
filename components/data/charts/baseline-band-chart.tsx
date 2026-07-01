@@ -61,7 +61,12 @@ export function BaselineBandChart({
           </span>
         ) : null}
       </div>
-      <ChartContainer config={config} className="aspect-[16/6] w-full" aria-label={`${label} vs baseline`}>
+      <ChartContainer
+        config={config}
+        className="aspect-[16/6] w-full"
+        aria-label={`${label} vs baseline`}
+        initialDimension={{ width: 640, height: 240 }}
+      >
         <ComposedChart
           accessibilityLayer
           data={data as Array<{ date: string; value: number | null }>}

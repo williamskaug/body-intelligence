@@ -82,7 +82,11 @@ export function ScatterRegression({
 
   return (
     <div>
-      <ChartContainer config={config} className="aspect-[4/3] w-full">
+      <ChartContainer
+        config={config}
+        className="aspect-[4/3] w-full"
+        initialDimension={{ width: 480, height: 360 }}
+      >
         <ScatterChart accessibilityLayer margin={{ top: 8, right: 12, bottom: 8, left: 4 }}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis
