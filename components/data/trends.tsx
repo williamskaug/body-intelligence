@@ -128,7 +128,17 @@ export function Trends({
     const rem = row?.sleep_rem_min ?? null;
     const awake = row?.sleep_awake_min ?? null;
     const has = deep != null || light != null || rem != null || awake != null;
-    return { x: d, deep: deep ?? 0, light: light ?? 0, rem: rem ?? 0, awake: awake ?? 0, has };
+    // Track awake presence separately — coalescing null→0 would fabricate a
+    // 100% sleep efficiency on nights where awake time simply wasn't captured.
+    return {
+      x: d,
+      deep: deep ?? 0,
+      light: light ?? 0,
+      rem: rem ?? 0,
+      awake: awake ?? 0,
+      hasAwake: awake != null,
+      has,
+    };
   });
   const sleepArchDays = sleepArch.filter((s) => s.has);
 
@@ -404,13 +414,24 @@ function weeklyLoadBuckets(
 function SleepArchitectureCard({
   days,
 }: {
-  days: ReadonlyArray<{ x: string; deep: number; light: number; rem: number; awake: number }>;
+  days: ReadonlyArray<{
+    x: string;
+    deep: number;
+    light: number;
+    rem: number;
+    awake: number;
+    hasAwake: boolean;
+  }>;
 }) {
   const last = days[days.length - 1];
   const restorative = last ? last.deep + last.rem : null;
   const asleep = last ? last.deep + last.light + last.rem : 0;
+  // Only report efficiency when awake time was actually captured — otherwise
+  // asleep/(asleep+0) fabricates a constant 100%.
   const efficiency =
-    last && asleep + last.awake > 0 ? (asleep / (asleep + last.awake)) * 100 : null;
+    last && last.hasAwake && asleep + last.awake > 0
+      ? (asleep / (asleep + last.awake)) * 100
+      : null;
   const data = days.map((s) => ({
     x: s.x,
     segments: [
