@@ -358,6 +358,21 @@ function VitalsChips({
   );
   if (rhr) chips.push(rhr);
 
+  // Sleep debt is the signal most likely to drive a RED gate, yet it was buried
+  // in the "Why" fold. Surface it as a glanceable chip so a red verdict is
+  // legible at a glance. Thresholds are display bands, not a verdict — the gate
+  // itself is the agent's authored call.
+  if (derived?.sleep_debt_7d_min != null) {
+    const debt = Math.round(derived.sleep_debt_7d_min);
+    const tone =
+      debt >= 300
+        ? "border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-400"
+        : debt >= 180
+          ? bandClass("warn")
+          : bandClass("neutral");
+    chips.push({ label: "Sleep debt", value: `${debt} min`, z: null, tone });
+  }
+
   if (chips.length === 0) return null;
 
   return (
