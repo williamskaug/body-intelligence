@@ -9,6 +9,7 @@ import { TodayHero } from "@/components/data/today-hero";
 import { Analyze } from "@/components/data/analyze";
 import { hoursByType } from "@/lib/data-display/aggregate";
 import { computeBaseline } from "@/lib/data-display/baseline";
+import { NON_ENDURANCE_LOAD_TYPES } from "@/lib/data-display/metric-series";
 import type { DerivedDailyRow, Gate } from "@/lib/data-display/derived";
 import type {
   HealthEventUpdate,
@@ -252,7 +253,10 @@ export default async function DataPage({
       )
     : allWorkouts;
 
-  const workoutMix = hoursByType(filteredWorkouts, 3);
+  // Split non-endurance types (golf/walk/…) out of the training-hours headline
+  // so it reflects the same set that feeds training load — golf counting as
+  // "training hours" but not load was inconsistent framing.
+  const workoutMix = hoursByType(filteredWorkouts, 3, NON_ENDURANCE_LOAD_TYPES);
 
   const counts = {
     workouts: filteredWorkouts.length,
@@ -645,19 +649,34 @@ function SummaryStrip({
 }: {
   counts: { workouts: number; daily: number; events: number };
   days: number;
-  workoutMix: { entries: Array<{ type: string; hours: number }>; totalHours: number };
+  workoutMix: {
+    entries: Array<{ type: string; hours: number }>;
+    totalHours: number;
+    excludedEntries: Array<{ type: string; hours: number }>;
+    excludedHours: number;
+  };
   trainingOnly: boolean;
   view: ViewKey;
   dailyStreak: number;
 }) {
+  // The excluded (non-endurance) hours are shown as a separate suffix so golf
+  // is visible without inflating the training-hours count.
+  const excludedSuffix =
+    workoutMix.excludedHours > 0
+      ? ` · +${workoutMix.excludedEntries
+          .map((e) => `${capitalize(e.type)} ${formatHours(e.hours)}h`)
+          .join(" ")} (excl.)`
+      : "";
   const workoutSub =
     workoutMix.totalHours > 0
-      ? workoutMix.entries
+      ? `${workoutMix.entries
           .map((e) => `${capitalize(e.type)} ${formatHours(e.hours)}h`)
-          .join(" · ")
-      : counts.workouts === 0
-        ? "none in view"
-        : `${counts.workouts} session${counts.workouts === 1 ? "" : "s"}`;
+          .join(" · ")}${excludedSuffix}`
+      : workoutMix.excludedHours > 0
+        ? `${formatHours(workoutMix.excludedHours)}h non-endurance only`
+        : counts.workouts === 0
+          ? "none in view"
+          : `${counts.workouts} session${counts.workouts === 1 ? "" : "s"}`;
   const items: Array<{
     label: string;
     n: string | number;
@@ -666,7 +685,12 @@ function SummaryStrip({
   }> = [
     {
       label: "Training hours",
-      n: workoutMix.totalHours > 0 ? formatHours(workoutMix.totalHours) : counts.workouts,
+      n:
+        workoutMix.totalHours > 0
+          ? formatHours(workoutMix.totalHours)
+          : workoutMix.excludedHours > 0
+            ? 0
+            : counts.workouts,
       sub: workoutSub,
       accent: "bg-sky-500/70",
     },

@@ -102,13 +102,29 @@ export function macroTotals(
 export function hoursByType(
   workouts: ReadonlyArray<{ type: string; duration_min: number | null }>,
   topN = 3,
-): { entries: Array<{ type: string; hours: number }>; totalHours: number } {
+  // Types to bucket separately (e.g. golf/walk) so "training hours" reflects the
+  // same set that counts toward training load. Passing this keeps the headline
+  // number consistent with the load model instead of double-counting golf.
+  excludeTypes?: ReadonlySet<string>,
+): {
+  entries: Array<{ type: string; hours: number }>;
+  totalHours: number;
+  excludedEntries: Array<{ type: string; hours: number }>;
+  excludedHours: number;
+} {
   const map = new Map<string, number>();
+  const excludedMap = new Map<string, number>();
   let total = 0;
+  let excludedTotal = 0;
   for (const w of workouts) {
     const min = w.duration_min ?? 0;
     if (min <= 0) continue;
     const key = w.type.trim().toLowerCase() || "other";
+    if (excludeTypes?.has(key)) {
+      excludedMap.set(key, (excludedMap.get(key) ?? 0) + min);
+      excludedTotal += min;
+      continue;
+    }
     map.set(key, (map.get(key) ?? 0) + min);
     total += min;
   }
@@ -116,7 +132,15 @@ export function hoursByType(
     .map(([type, min]) => ({ type, hours: min / 60 }))
     .sort((a, b) => b.hours - a.hours)
     .slice(0, topN);
-  return { entries, totalHours: total / 60 };
+  const excludedEntries = Array.from(excludedMap.entries())
+    .map(([type, min]) => ({ type, hours: min / 60 }))
+    .sort((a, b) => b.hours - a.hours);
+  return {
+    entries,
+    totalHours: total / 60,
+    excludedEntries,
+    excludedHours: excludedTotal / 60,
+  };
 }
 
 // Build a contiguous date array (ascending) for the window. Used to render
