@@ -37,6 +37,13 @@ export type AnalyzeProps = TrendsProps & {
   userId: string;
   days: number;
   insights: InsightDoc[];
+  // Parsed A-race goal joined to its capacity prediction (null if unparseable).
+  raceReadiness: {
+    predKey: string;
+    goalSeconds: number;
+    daysOut: number;
+    label: string;
+  } | null;
 };
 
 const HEATMAP_METRICS: MetricKey[] = [
@@ -196,7 +203,7 @@ function toHistBins(hist: { edges: number[]; counts: number[] } | null) {
 }
 
 export async function Analyze(props: AnalyzeProps) {
-  const { userId, days, insights, ...trends } = props;
+  const { userId, days, insights, raceReadiness, ...trends } = props;
   const from = trends.startDate;
   const to = trends.endDate;
 
@@ -369,6 +376,41 @@ export async function Analyze(props: AnalyzeProps) {
         title="Fitness & capacity"
         sub="VO₂max, FTP, and race-time predictions over the window — the clearest proof training is working."
       >
+        {raceReadiness
+          ? (() => {
+              const latest = latestNonNull(capacity?.series[raceReadiness.predKey]);
+              const goal = raceReadiness.goalSeconds;
+              const ahead = latest != null && latest <= goal;
+              return (
+                <div className="mb-4 rounded-xl border bg-card p-4 shadow-sm">
+                  <div className="text-sm font-medium">
+                    Race readiness · {raceReadiness.label}
+                  </div>
+                  {latest != null ? (
+                    <div className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm">
+                      <span className="font-mono text-lg tabular-nums">{formatSeconds(latest)}</span>
+                      <span className="text-muted-foreground">predicted</span>
+                      <span className="text-muted-foreground">
+                        vs goal {formatSeconds(goal)}
+                      </span>
+                      <span className={ahead ? "text-emerald-500" : "text-rose-500"}>
+                        {ahead ? "ahead of" : "behind"} goal by {formatSeconds(Math.abs(latest - goal))}
+                      </span>
+                      {raceReadiness.daysOut >= 0 ? (
+                        <span className="text-muted-foreground">· {raceReadiness.daysOut}d to race</span>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      No race prediction captured yet — capacity-sync will fill this (goal{" "}
+                      {formatSeconds(goal)}
+                      {raceReadiness.daysOut >= 0 ? `, ${raceReadiness.daysOut}d out` : ""}).
+                    </p>
+                  )}
+                </div>
+              );
+            })()
+          : null}
         {capacity && CAPACITY_KEYS.some((k) => firstNonNull(capacity.series[k]) != null) ? (
           <div className="flex flex-col gap-4">
             <MultiSeriesLine

@@ -21,6 +21,7 @@ export type TodayHeroProps = {
   todayDate: string;
   derived: DerivedDailyRow | null; // latest derived row, any date
   briefingPath: string | null; // "briefings/2026-06-12.md" when today's/latest briefing exists
+  briefingContent: string | null; // latest briefing markdown, for the lead when the gate is dark
   vitals: {
     sleepH: number | null;
     hrvMs: number | null;
@@ -39,6 +40,7 @@ export function TodayHero({
   todayDate,
   derived,
   briefingPath,
+  briefingContent,
   vitals,
   race,
   milestone,
@@ -65,6 +67,7 @@ export function TodayHero({
     return (
       <BriefingOnlyHero
         briefingPath={briefingPath}
+        briefingContent={briefingContent}
         vitals={vitals}
         race={race}
         milestone={milestone}
@@ -209,17 +212,20 @@ function VerdictHero({
 
 function BriefingOnlyHero({
   briefingPath,
+  briefingContent,
   vitals,
   race,
   milestone,
   gateHistory,
 }: {
   briefingPath: string;
+  briefingContent: string | null;
   vitals: TodayHeroProps["vitals"];
   race: TodayHeroProps["race"];
   milestone: TodayHeroProps["milestone"];
   gateHistory: TodayHeroProps["gateHistory"];
 }) {
+  const lead = briefingLead(briefingContent);
   return (
     <section className="rounded-2xl border border-border bg-card px-5 py-4 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -228,8 +234,7 @@ function BriefingOnlyHero({
             Today&apos;s briefing is ready
           </h2>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Readiness is computed by your dawn-agent — structured gate not
-            written yet.
+            Your dawn-agent wrote a briefing but no structured gate yet.
           </p>
         </div>
         <Link
@@ -239,10 +244,30 @@ function BriefingOnlyHero({
           Open today&apos;s briefing →
         </Link>
       </div>
+      {lead ? (
+        <p className="mt-2 border-l-2 border-foreground/20 pl-3 text-sm text-foreground/90">
+          {lead}
+        </p>
+      ) : null}
       <VitalsChips derived={null} vitals={vitals} />
       <ContextChips race={race} milestone={milestone} gateHistory={gateHistory} />
     </section>
   );
+}
+
+// Pull a short plain-text lead from the briefing markdown (preferring the
+// "Today's Call" section). Displaying Claude's authored text — the app does not
+// author or parse a gate/verdict here.
+function briefingLead(content: string | null): string | null {
+  if (!content) return null;
+  const call = /##\s*Today'?s Call\s*\n+([\s\S]*?)(?:\n#{1,2}\s|$)/i.exec(content);
+  let text = call ? call[1]! : content;
+  text = text
+    .replace(/[#*_>`]/g, "")
+    .replace(/\s*\n\s*/g, " ")
+    .trim();
+  if (!text) return null;
+  return text.length > 320 ? `${text.slice(0, 317).trimEnd()}…` : text;
 }
 
 function OnboardingHero({

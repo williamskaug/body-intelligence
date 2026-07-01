@@ -74,6 +74,35 @@ export function nextRace(
   return future[0]!;
 }
 
+// Parse a goal time string into seconds. Handles "sub-3", "sub-3:00",
+// "2:59:00", "sub-1:30", "1:29" (H:MM for race goals). Null when unparseable.
+export function parseGoalSeconds(goal: string | null | undefined): number | null {
+  if (!goal) return null;
+  const g = goal.toLowerCase().replace(/sub[-\s]*/g, "").trim();
+  const hms = /(\d{1,2}):(\d{2})(?::(\d{2}))?/.exec(g);
+  if (hms) {
+    const a = Number(hms[1]);
+    const b = Number(hms[2]);
+    const c = hms[3] != null ? Number(hms[3]) : null;
+    // Three parts → H:MM:SS; two parts → H:MM (race goals are given in hours).
+    return c != null ? a * 3600 + b * 60 + c : a * 3600 + b * 60;
+  }
+  const hoursOnly = /^(\d{1,2})\s*h?$/.exec(g);
+  if (hoursOnly) return Number(hoursOnly[1]) * 3600;
+  return null;
+}
+
+// Map a race distance string to the matching capacity race-prediction metric.
+export function racePredictionKey(distance: string | null | undefined): string | null {
+  if (!distance) return null;
+  const d = distance.toLowerCase();
+  if (/marathon|42/.test(d) && !/half|21/.test(d)) return "capacity_race_pred_marathon_s";
+  if (/half|21/.test(d)) return "capacity_race_pred_half_s";
+  if (/10\s?k|10000|\b10\b/.test(d)) return "capacity_race_pred_10k_s";
+  if (/\b5\s?k\b|5000|\b5\b/.test(d)) return "capacity_race_pred_5k_s";
+  return null;
+}
+
 export function daysUntil(dateISO: string, today: string): number {
   const a = new Date(`${today}T00:00:00Z`);
   const b = new Date(`${dateISO}T00:00:00Z`);

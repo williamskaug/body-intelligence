@@ -14,7 +14,13 @@ import type {
   HealthEventUpdate,
   ThreadedHealthEvent,
 } from "@/lib/data-display/health-events";
-import { daysUntil, nextRace, parseGoalsMarkdown } from "@/lib/memory/parse-goals";
+import {
+  daysUntil,
+  nextRace,
+  parseGoalSeconds,
+  parseGoalsMarkdown,
+  racePredictionKey,
+} from "@/lib/memory/parse-goals";
 import { adminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -341,6 +347,20 @@ export default async function DataPage({
         daysOut: daysUntil(targetRace.date, todayDate),
       }
     : null;
+  // Join the A-race goal to its capacity prediction for the Analyze race-
+  // readiness panel (null when the goal/distance can't be parsed).
+  const raceReadiness = (() => {
+    if (!targetRace) return null;
+    const predKey = racePredictionKey(targetRace.distance);
+    const goalSeconds = parseGoalSeconds(targetRace.goal);
+    if (!predKey || goalSeconds == null) return null;
+    return {
+      predKey,
+      goalSeconds,
+      daysOut: daysUntil(targetRace.date, todayDate),
+      label: targetRace.name,
+    };
+  })();
 
   // Briefings feed: latest with content, the rest as metadata rows.
   const briefings = briefingMeta.map((d) => ({
@@ -417,6 +437,9 @@ export default async function DataPage({
           briefingMeta.find((b) => b.path === `briefings/${todayDate}.md`)?.path ??
           latestBriefingPath
         }
+        briefingContent={
+          latestBriefingPath ? (contentByPath.get(latestBriefingPath) ?? null) : null
+        }
         vitals={latestVitals}
         race={raceInfo}
         milestone={milestone}
@@ -480,6 +503,7 @@ export default async function DataPage({
             userId={user.id}
             days={days}
             insights={insights}
+            raceReadiness={raceReadiness}
             daily={(daily.data ?? []) as Parameters<typeof Analyze>[0]["daily"]}
             workouts={filteredWorkouts as Parameters<typeof Analyze>[0]["workouts"]}
             derived={derived}
