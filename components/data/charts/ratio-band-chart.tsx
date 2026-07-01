@@ -44,7 +44,7 @@ export function RatioBandChart({
     <ChartContainer
       config={config}
       className="aspect-[16/6] w-full"
-      initialDimension={{ width: 640, height: 240 }}
+      initialDimension={{ width: 440, height: 165 }}
     >
       <ComposedChart
         accessibilityLayer

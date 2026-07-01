@@ -288,12 +288,18 @@ export async function Analyze(props: AnalyzeProps) {
   const zoneTotal = z1 + z2 + z3 + z4 + z5;
 
   return (
-    <div className="flex flex-col gap-10">
-      {insights.length > 0 ? <InsightsFeed insights={insights} /> : null}
+    // Bento grid: two columns on desktop, big charts span full width, medium
+    // bands pair 2-up. Halves the scroll vs the old single column.
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      {insights.length > 0 ? (
+        <div className="lg:col-span-2">
+          <InsightsFeed insights={insights} />
+        </div>
+      ) : null}
 
       {/* Headline strip — state + trajectory in the first 3 seconds. Each chip is
           the sign of a single deterministic delta; never a fused readiness verdict. */}
-      <section>
+      <section className="lg:col-span-2">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           <HeadStat
             label="Fitness (CTL)"
@@ -325,7 +331,36 @@ export async function Analyze(props: AnalyzeProps) {
         </div>
       </section>
 
-      {/* Notable days — promoted near the top; the most engaging glance. */}
+      {/* Training load balance — the marquee chart, full width up top. */}
+      <Band
+        title="Training load balance"
+        sub="CTL (fitness) / ATL (fatigue) / TSB (form) — EWMA τ=42d/7d. Load statistics, not a verdict."
+        span={2}
+      >
+        <PerformanceManagementChart data={pmcData} ramp={load?.current.ctl_ramp_7d ?? null} />
+        {load ? (
+          <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2">
+            <span className="text-xs text-muted-foreground">
+              Monotony{" "}
+              <span className="font-mono text-foreground">
+                {load.current.monotony != null ? load.current.monotony.toFixed(2) : "—"}
+              </span>{" "}
+              · Strain{" "}
+              <span className="font-mono text-foreground">{fmt0(load.current.strain)}</span>{" "}
+              (Foster — 7-day mean/SD of load × weekly load)
+            </span>
+            <span className="text-[11px] text-muted-foreground">
+              Load source: {load.load_sources.zones} zone-TRIMP · {load.load_sources.vendor}{" "}
+              vendor · {load.load_sources.rpe} RPE-estimated
+              {load.workouts_excluded > 0
+                ? ` · ${load.workouts_excluded} non-endurance excluded (golf/walk/…)`
+                : ""}
+            </span>
+          </div>
+        ) : null}
+      </Band>
+
+      {/* Notable days — compact half-width glance. */}
       <Band title="Notable days" sub="Largest deviations from your baseline in the window.">
         {anomalies.length > 0 ? (
           <ul className="flex flex-col divide-y rounded-xl border bg-card shadow-sm">
@@ -352,36 +387,6 @@ export async function Analyze(props: AnalyzeProps) {
             Nothing unusual in this window — every vital sat near its baseline.
           </p>
         )}
-      </Band>
-
-      {/* Overview — the folded Trends band (each metric links to its drilldown). */}
-      <Trends {...trends} />
-
-      <Band
-        title="Training load balance"
-        sub="CTL (fitness) / ATL (fatigue) / TSB (form) — EWMA τ=42d/7d. Load statistics, not a verdict."
-      >
-        <PerformanceManagementChart data={pmcData} ramp={load?.current.ctl_ramp_7d ?? null} />
-        {load ? (
-          <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2">
-            <span className="text-xs text-muted-foreground">
-              Monotony{" "}
-              <span className="font-mono text-foreground">
-                {load.current.monotony != null ? load.current.monotony.toFixed(2) : "—"}
-              </span>{" "}
-              · Strain{" "}
-              <span className="font-mono text-foreground">{fmt0(load.current.strain)}</span>{" "}
-              (Foster — 7-day mean/SD of load × weekly load)
-            </span>
-            <span className="text-[11px] text-muted-foreground">
-              Load source: {load.load_sources.zones} zone-TRIMP · {load.load_sources.vendor}{" "}
-              vendor · {load.load_sources.rpe} RPE-estimated
-              {load.workouts_excluded > 0
-                ? ` · ${load.workouts_excluded} non-endurance excluded (golf/walk/…)`
-                : ""}
-            </span>
-          </div>
-        ) : null}
       </Band>
 
       <Band
@@ -445,7 +450,7 @@ export async function Analyze(props: AnalyzeProps) {
               ]}
               minN={2}
             />
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {CAPACITY_KEYS.map((k) => {
                 const series = capacity.series[k];
                 const latest = latestNonNull(series);
@@ -541,9 +546,16 @@ export async function Analyze(props: AnalyzeProps) {
         </div>
       </Band>
 
+      {/* Overview — the folded Trends band (each metric links to its drilldown).
+          Full width; the deepest single band, so it sits below the glanceable row. */}
+      <div className="lg:col-span-2">
+        <Trends {...trends} />
+      </div>
+
       <Band
         title="Correlation matrix"
         sub="Pairwise Pearson r across recovery, load, and body signals — saturation ∝ |r|, low-n cells faded."
+        span={2}
       >
         {(() => {
           const pruned = matrix
@@ -575,7 +587,11 @@ export async function Analyze(props: AnalyzeProps) {
         })()}
       </Band>
 
-      <Band title="Distributions" sub="Histogram + median + your latest value over the window.">
+      <Band
+        title="Distributions"
+        sub="Histogram + median + your latest value over the window."
+        span={2}
+      >
         <div className="grid gap-4 sm:grid-cols-2">
           {DIST_METRICS.map((m, i) => {
             const d = dists[i];
@@ -609,6 +625,7 @@ export async function Analyze(props: AnalyzeProps) {
       <Band
         title="Relationships worth watching"
         sub="Scatter + OLS fit. r is a coefficient with its n, never causation or advice."
+        span={2}
       >
         <div className="grid gap-4 sm:grid-cols-2">
           {PAIRS.map((p, i) => {
@@ -635,7 +652,7 @@ export async function Analyze(props: AnalyzeProps) {
       </Band>
 
       {days < 90 ? (
-        <p className="text-center text-[11px] text-muted-foreground">
+        <p className="text-center text-[11px] text-muted-foreground lg:col-span-2">
           Correlation and distribution cards strengthen with a wider window — try 90d or 1y.
         </p>
       ) : null}
@@ -648,14 +665,16 @@ export async function Analyze(props: AnalyzeProps) {
 function Band({
   title,
   sub,
+  span = 1,
   children,
 }: {
   title: string;
   sub: string;
+  span?: 1 | 2; // 2 → full width in the bento grid
   children: React.ReactNode;
 }) {
   return (
-    <section className="flex flex-col gap-3">
+    <section className={`flex flex-col gap-3${span === 2 ? " lg:col-span-2" : ""}`}>
       <div>
         <h2 className="text-base font-semibold tracking-tight">{title}</h2>
         <p className="text-xs text-muted-foreground">{sub}</p>

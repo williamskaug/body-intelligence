@@ -64,8 +64,9 @@ export function BaselineBandChart({
       <ChartContainer
         config={config}
         className="aspect-[16/6] w-full"
+        // half-width in the bento grid; keep the SSR frame from overflowing
         aria-label={`${label} vs baseline`}
-        initialDimension={{ width: 640, height: 240 }}
+        initialDimension={{ width: 440, height: 165 }}
       >
         <ComposedChart
           accessibilityLayer

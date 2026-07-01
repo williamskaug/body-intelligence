@@ -41,7 +41,7 @@ export function MultiSeriesLine({ data, series, minN = 5 }: MultiSeriesLineProps
     <ChartContainer
       config={config}
       className="aspect-[16/7] w-full"
-      initialDimension={{ width: 640, height: 280 }}
+      initialDimension={{ width: 440, height: 193 }}
     >
       <ComposedChart
         accessibilityLayer
