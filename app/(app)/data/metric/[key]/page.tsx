@@ -75,12 +75,26 @@ export default async function MetricPage({
       : Promise.resolve(null),
   ]);
 
-  const seriesData = series
-    ? series.dates.map((date, i) => ({
-        date,
-        [metric]: series.series[metric]?.[i] ?? null,
-      }))
-    : [];
+  // Trim leading/trailing all-null dates so a sparse history (e.g. ~2 months of
+  // data on a 365-day query) fills the plot instead of cramming into the right
+  // edge. Summary stats stay over the full window.
+  const rawSeries = series?.series[metric] ?? [];
+  let firstIdx = 0;
+  let lastIdx = rawSeries.length - 1;
+  while (firstIdx <= lastIdx && rawSeries[firstIdx] == null) firstIdx += 1;
+  while (lastIdx >= firstIdx && rawSeries[lastIdx] == null) lastIdx -= 1;
+  const seriesData =
+    series && lastIdx >= firstIdx
+      ? series.dates.slice(firstIdx, lastIdx + 1).map((date, i) => ({
+          date,
+          [metric]: rawSeries[firstIdx + i] ?? null,
+        }))
+      : [];
+  const spanLabel =
+    seriesData.length > 0
+      ? `${seriesData[0]!.date} → ${seriesData[seriesData.length - 1]!.date}`
+      : "no data yet";
+  const latest = lastIdx >= firstIdx ? (rawSeries[lastIdx] ?? null) : null;
 
   // Top correlates: this metric's row in the matrix, ranked by |r|.
   const correlates: Array<{ key: string; r: number; n: number }> = [];
@@ -107,7 +121,7 @@ export default async function MetricPage({
       <header className="mt-3 mb-6">
         <h1 className="text-3xl font-semibold tracking-tight">{def.label}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Last 365 days · {dist?.n ?? 0} observations
+          {spanLabel} · {dist?.n ?? 0} observations
           {def.unit ? ` · ${def.unit}` : ""}
         </p>
       </header>
@@ -155,6 +169,7 @@ export default async function MetricPage({
             }}
             label={def.label}
             decimals={def.decimals}
+            latest={latest}
           />
         </div>
       </section>
