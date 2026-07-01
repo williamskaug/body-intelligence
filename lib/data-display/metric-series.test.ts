@@ -57,9 +57,9 @@ describe("workoutLoad precedence", () => {
   it("falls back to vendor load when no zones", () => {
     expect(workoutLoad(w, null)).toEqual({ load: 180, source: "vendor" });
   });
-  it("falls back to duration×rpe when neither", () => {
+  it("falls back to duration×(rpe/2) when neither (normalized toward TRIMP scale)", () => {
     expect(
       workoutLoad({ duration_min: 60, rpe: 6, vendor_training_load: null }, null),
-    ).toEqual({ load: 360, source: "rpe" });
+    ).toEqual({ load: 180, source: "rpe" });
   });
 });

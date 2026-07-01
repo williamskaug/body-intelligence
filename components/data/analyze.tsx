@@ -312,6 +312,9 @@ export async function Analyze(props: AnalyzeProps) {
             <span className="text-[11px] text-muted-foreground">
               Load source: {load.load_sources.zones} zone-TRIMP · {load.load_sources.vendor}{" "}
               vendor · {load.load_sources.rpe} RPE-estimated
+              {load.workouts_excluded > 0
+                ? ` · ${load.workouts_excluded} non-endurance excluded (golf/walk/…)`
+                : ""}
             </span>
           </div>
         ) : null}

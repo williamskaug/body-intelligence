@@ -48,7 +48,11 @@ export async function getLoadBalance(userId: string, input: GetLoadBalanceInput)
   const fromDisplay = addDaysISO(toDate, -(days - 1));
   const fromWarm = addDaysISO(fromDisplay, -WARMUP_DAYS);
 
-  const { map: impulseMap, sources } = await dailyImpulseSeries(userId, fromWarm, toDate);
+  const { map: impulseMap, sources, excluded } = await dailyImpulseSeries(
+    userId,
+    fromWarm,
+    toDate,
+  );
   const allDates = datesInRange(fromWarm, toDate);
   const ti = allDates.map((d) => impulseMap.get(d) ?? 0); // 0-fill rest days
   // Seed both EWMAs with the mean daily impulse over the warm-up window rather
@@ -112,10 +116,12 @@ export async function getLoadBalance(userId: string, input: GetLoadBalanceInput)
       atl_alpha: round(ATL_ALPHA, 5),
       ctl_alpha: round(CTL_ALPHA, 5),
       ewma_seed: round(warmMean, 1),
-      load_formula: "edwards_trimp (HR zones) ?? vendor_training_load ?? duration_min*(rpe??5)",
+      load_formula: "edwards_trimp (HR zones) ?? vendor_training_load ?? duration_min*(rpe??5)/2",
+      excluded_types: ["golf", "walk", "mobility", "yoga"],
       acwr_reference_band: [0.8, 1.3],
     },
     load_sources: sources,
+    workouts_excluded: excluded,
     series,
     current: {
       date: toDate,
@@ -128,6 +134,6 @@ export async function getLoadBalance(userId: string, input: GetLoadBalanceInput)
       strain: round(currentMs.strain, 0),
     },
     days_with_load: daysWithLoad,
-    note: "Daily training impulse uses Edwards' zone-weighted TRIMP when HR-zone time exists, else vendor training load, else duration×(rpe??5) — see load_sources for how many workouts used each. ATL/CTL are EWMAs (τ=7d, τ=42d) of that impulse; TSB = yesterday's CTL − ATL; acwr = ATL/CTL; ctl_ramp_7d = CTL[today] − CTL[today−7]; monotony = mean/SD of the trailing-7-day impulse (Foster), strain = 7-day load × monotony. All deterministic load statistics (the same family as z-score and stdev) — NOT a verdict that you are fresh/fatigued/overtrained and NOT advice to train or rest.",
+    note: "Daily training impulse uses Edwards' zone-weighted TRIMP when HR-zone time exists, else vendor training load, else duration×(rpe??5)/2 (the fallback is halved to keep the three sources on a comparable TRIMP scale) — see load_sources. Non-endurance workouts (golf/walk/mobility/yoga) are EXCLUDED so they don't inflate load (workouts_excluded). ATL/CTL are EWMAs (τ=7d, τ=42d) of that impulse; TSB = yesterday's CTL − ATL; acwr = ATL/CTL; ctl_ramp_7d = CTL[today] − CTL[today−7]; monotony = mean/SD of the trailing-7-day impulse (Foster), strain = 7-day load × monotony. All deterministic load statistics (the same family as z-score and stdev) — NOT a verdict that you are fresh/fatigued/overtrained and NOT advice to train or rest.",
   };
 }

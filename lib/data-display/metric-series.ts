@@ -5,6 +5,7 @@
 
 import { adminClient } from "@/lib/supabase/admin";
 import { type MetricKey, resolveMetric } from "@/lib/mcp/tools/metrics";
+import { normalizeWorkoutType } from "@/lib/mcp/tools/shared";
 import { datesInRange } from "./aggregate";
 import { denseSeries, edwardsTrimp, toFinite } from "./statistics";
 
@@ -114,9 +115,11 @@ export type LoadSource = "zones" | "vendor" | "rpe";
 
 // Per-workout load with precedence: Edwards zone-weighted TRIMP when HR-zone
 // time exists (the most physiological, used for most Garmin runs) → vendor
-// training load → duration×(rpe??5). Returns the source so the load tool can
-// report provenance (the three are similar in scale, but the rpe fallback runs
-// higher, so callers surface how many days used which).
+// training load → duration×(rpe??5)/2. Returns the source so the load tool can
+// report provenance. The three branches are normalized to a comparable
+// TRIMP-equivalent scale: raw duration×rpe overshoots Edwards TRIMP (an hour of
+// Z2 ≈ 120, but 60min×rpe6 = 360), so the fallback is halved to keep the EWMA
+// commensurable when a window mixes sources.
 export function workoutLoad(
   w: { duration_min: number | null; rpe: number | null; vendor_training_load: number | string | null },
   zoneSeconds: ReadonlyArray<number | null> | null | undefined,
@@ -128,8 +131,19 @@ export function workoutLoad(
   if (vendor != null && vendor > 0) return { load: vendor, source: "vendor" };
   const dur = toFinite(w.duration_min) ?? 0;
   const rpe = toFinite(w.rpe) ?? 5;
-  return { load: dur * rpe, source: "rpe" };
+  return { load: dur * (rpe / 2), source: "rpe" };
 }
+
+// Types that carry logged duration but are not endurance training stimulus, so
+// they must not inflate CTL/ATL/TSB. A deterministic taxonomy decision (like
+// normalizeWorkoutType), not a verdict. Golf is the big offender (a 4h round
+// otherwise dwarfs a real run).
+export const NON_ENDURANCE_LOAD_TYPES: ReadonlySet<string> = new Set([
+  "golf",
+  "walk",
+  "mobility",
+  "yoga",
+]);
 
 type ZoneEmbed = {
   hr_z1_s: number | null;
@@ -140,6 +154,7 @@ type ZoneEmbed = {
 };
 type ImpulseRow = {
   date: string;
+  type: string;
   duration_min: number | null;
   rpe: number | null;
   // PostgREST embeds a one-to-one relation as an object or a single-element
@@ -154,11 +169,14 @@ type ImpulseRow = {
 export type ImpulseResult = {
   map: Map<string, number>;
   sources: Record<LoadSource, number>;
+  excluded: number; // count of non-endurance workouts left out of load
 };
 
 // Sparse date→summed-impulse map over [from, to] plus a per-source workout count
-// (provenance). Days with no workout are absent (the load tool 0-fills onto a
-// dense axis before the EWMA).
+// (provenance) and a count of non-endurance workouts excluded. Days with no
+// counted workout are absent (the load tool 0-fills onto a dense axis before the
+// EWMA). Non-endurance types (golf/walk/etc.) are excluded so they don't inflate
+// fitness/fatigue/form.
 export async function dailyImpulseSeries(
   userId: string,
   from: string,
@@ -168,7 +186,7 @@ export async function dailyImpulseSeries(
   const { data, error } = await sb
     .from("workouts")
     .select(
-      "date, duration_min, rpe, workout_metrics(vendor_training_load), workout_zones(hr_z1_s,hr_z2_s,hr_z3_s,hr_z4_s,hr_z5_s)",
+      "date, type, duration_min, rpe, workout_metrics(vendor_training_load), workout_zones(hr_z1_s,hr_z2_s,hr_z3_s,hr_z4_s,hr_z5_s)",
     )
     .eq("user_id", userId)
     .gte("date", from)
@@ -177,7 +195,12 @@ export async function dailyImpulseSeries(
 
   const map = new Map<string, number>();
   const sources: Record<LoadSource, number> = { zones: 0, vendor: 0, rpe: 0 };
+  let excluded = 0;
   for (const row of (data ?? []) as unknown as ImpulseRow[]) {
+    if (NON_ENDURANCE_LOAD_TYPES.has(normalizeWorkoutType(row.type ?? ""))) {
+      excluded += 1;
+      continue;
+    }
     const wm = Array.isArray(row.workout_metrics)
       ? (row.workout_metrics[0] ?? null)
       : row.workout_metrics;
@@ -198,7 +221,7 @@ export async function dailyImpulseSeries(
     sources[source] += 1;
     map.set(row.date, (map.get(row.date) ?? 0) + load);
   }
-  return { map, sources };
+  return { map, sources, excluded };
 }
 
 export type MultiSeriesResult = {
