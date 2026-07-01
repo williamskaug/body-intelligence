@@ -390,7 +390,8 @@ export default async function DataPage({
         date: e.next_milestone_date!,
         daysOut: daysUntil(e.next_milestone_date!, todayDate),
       }))
-      .filter((m) => m.daysOut >= 0)
+      // Keep overdue checkpoints (negative daysOut) and surface them first — an
+      // overdue MRI is the most important thing to flag, not something to hide.
       .sort((a, b) => a.daysOut - b.daysOut);
     return candidates[0] ?? null;
   })();

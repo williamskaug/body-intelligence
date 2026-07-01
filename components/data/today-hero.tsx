@@ -403,9 +403,13 @@ function ContextChips({
       {milestone ? (
         <span className="inline-flex items-center gap-1.5 text-xs">
           <span className="text-muted-foreground">{milestone.label}</span>
-          <span className="font-mono tabular-nums">
-            {Math.max(0, milestone.daysOut)}d
-          </span>
+          {milestone.daysOut < 0 ? (
+            <span className="font-mono tabular-nums text-rose-500">
+              overdue {Math.abs(milestone.daysOut)}d
+            </span>
+          ) : (
+            <span className="font-mono tabular-nums">{milestone.daysOut}d</span>
+          )}
         </span>
       ) : null}
       {hasStrip ? (
