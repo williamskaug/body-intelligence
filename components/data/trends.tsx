@@ -728,15 +728,31 @@ function SleepDebtCard({
         <span className="text-xs text-muted-foreground">min</span>
       </div>
       <div className="mt-3 text-foreground/80">
-        <Sparkline
-          values={values}
-          width={260}
-          height={56}
-          fillArea
-          refLines={[{ y: 180, label: "180m", tone: "warn" }]}
-          ariaLabel="7-day rolling sleep debt"
-        />
+        {values.filter((v) => v != null).length >= MIN_TREND ? (
+          <Sparkline
+            values={values}
+            width={260}
+            height={56}
+            fillArea
+            refLines={[{ y: 180, label: "180m", tone: "warn" }]}
+            ariaLabel="7-day rolling sleep debt"
+          />
+        ) : (
+          <InsufficientTrend n={values.filter((v) => v != null).length} />
+        )}
       </div>
+    </div>
+  );
+}
+
+// Sparklines below this many points read as a flat line rather than a trend, so
+// we show an honest "needs more days" state instead of drawing a fake line.
+const MIN_TREND = 5;
+
+function InsufficientTrend({ n }: { n: number }) {
+  return (
+    <div className="flex h-14 items-center justify-center rounded-md border border-dashed text-[10px] uppercase tracking-wide text-muted-foreground/70">
+      {n} day{n === 1 ? "" : "s"} logged · need ≥{MIN_TREND} for a trend
     </div>
   );
 }
@@ -766,14 +782,22 @@ function ReadinessFactorsCard({
               </span>
             </div>
             <div className="text-foreground/80">
-              <Sparkline
-                values={r.values}
-                width={260}
-                height={28}
-                yDomain={[-3, 3]}
-                refLines={[{ y: 0 }]}
-                ariaLabel={`${r.label} trend`}
-              />
+              {r.values.filter((v) => v != null).length >= MIN_TREND ? (
+                <Sparkline
+                  values={r.values}
+                  width={260}
+                  height={28}
+                  yDomain={[-3, 3]}
+                  refLines={[{ y: 0 }]}
+                  ariaLabel={`${r.label} trend`}
+                />
+              ) : (
+                <div className="flex h-7 items-center text-[10px] uppercase tracking-wide text-muted-foreground/70">
+                  {r.values.filter((v) => v != null).length} day
+                  {r.values.filter((v) => v != null).length === 1 ? "" : "s"} · need ≥
+                  {MIN_TREND}
+                </div>
+              )}
             </div>
           </div>
         ))}
