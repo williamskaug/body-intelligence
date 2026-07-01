@@ -189,7 +189,7 @@ export default async function MetricPage({
                   <span className="flex items-center gap-3">
                     <span
                       className={`font-mono tabular-nums ${
-                        c.r >= 0 ? "text-emerald-500" : "text-rose-500"
+                        c.r >= 0 ? "text-emerald-600" : "text-rose-600"
                       }`}
                     >
                       r {c.r >= 0 ? "+" : "−"}

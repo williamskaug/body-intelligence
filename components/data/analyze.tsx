@@ -336,9 +336,9 @@ export async function Analyze(props: AnalyzeProps) {
                 <span
                   className={`text-[10px] font-medium uppercase ${
                     a.severity === "high"
-                      ? "text-rose-500"
+                      ? "text-rose-600"
                       : a.severity === "medium"
-                        ? "text-amber-500"
+                        ? "text-amber-600"
                         : "text-muted-foreground"
                   }`}
                 >
@@ -413,7 +413,7 @@ export async function Analyze(props: AnalyzeProps) {
                       <span className="text-muted-foreground">
                         vs goal {formatSeconds(goal)}
                       </span>
-                      <span className={ahead ? "text-emerald-500" : "text-rose-500"}>
+                      <span className={ahead ? "text-emerald-600" : "text-rose-600"}>
                         {ahead ? "ahead of" : "behind"} goal by {formatSeconds(Math.abs(latest - goal))}
                       </span>
                       {raceReadiness.daysOut >= 0 ? (
@@ -685,7 +685,7 @@ function HeadStat({
       </div>
       <div className="mt-1 flex items-baseline gap-1.5">
         <span
-          className={`font-mono text-lg tabular-nums ${tone === "warn" ? "text-amber-500" : ""}`}
+          className={`font-mono text-lg tabular-nums ${tone === "warn" ? "text-amber-600" : ""}`}
         >
           {value}
         </span>
@@ -707,7 +707,7 @@ function deltaChip(
   const d = curr - ref;
   if (Math.abs(d) < Math.pow(10, -decimals - 1)) return null;
   const tone =
-    higherIsBetter == null ? "text-muted-foreground" : (d > 0) === higherIsBetter ? "text-emerald-500" : "text-rose-500";
+    higherIsBetter == null ? "text-muted-foreground" : (d > 0) === higherIsBetter ? "text-emerald-600" : "text-rose-600";
   const arrow = d > 0 ? "↑" : "↓";
   return (
     <span className={`text-[11px] font-medium ${tone}`}>
@@ -728,7 +728,7 @@ function capacityDelta(
   const d = latest - first;
   if (d === 0) return null;
   const improving = lowerIsBetter ? d < 0 : d > 0;
-  const tone = improving ? "text-emerald-500" : "text-rose-500";
+  const tone = improving ? "text-emerald-600" : "text-rose-600";
   const arrow = d > 0 ? "↑" : "↓";
   const def = metricDef(key);
   const mag =

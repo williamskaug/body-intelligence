@@ -318,9 +318,9 @@ function MetricCard({
   const delta = latest != null && baseline ? latest - baseline.mean : null;
   const deltaTone =
     cls.direction === "good"
-      ? "text-emerald-500"
+      ? "text-emerald-600"
       : cls.direction === "warn"
-        ? "text-rose-500"
+        ? "text-rose-600"
         : "text-muted-foreground";
   return (
     <div className="rounded-xl border bg-card p-4 shadow-sm">
@@ -595,7 +595,7 @@ function TypeDistributionCard({
       </div>
       <div className="mt-3 flex items-center gap-4">
         <svg viewBox="0 0 80 80" width={80} height={80} role="img" aria-label="Workout hours by type">
-          <circle cx={40} cy={40} r={r} fill="none" stroke="currentColor" strokeOpacity={0.08} strokeWidth={14} />
+          <circle cx={40} cy={40} r={r} fill="none" stroke="currentColor" strokeOpacity={0.14} strokeWidth={14} />
           {segments.map((s) => (
             <circle
               key={s.key}

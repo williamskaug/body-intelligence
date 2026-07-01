@@ -68,11 +68,14 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  /* Neutral chart ramp, darkened for the light canvas: chart-1 was oklch(0.87)
+     (near-white) which vanished on white for histogram bars + the drilldown
+     history line. Now a legible mid-gray primary with a coherent ramp. */
+  --chart-1: oklch(0.55 0 0);
+  --chart-2: oklch(0.44 0 0);
+  --chart-3: oklch(0.66 0 0);
+  --chart-4: oklch(0.35 0 0);
+  --chart-5: oklch(0.72 0 0);
   /* Semantic chart colors for the stats-engine views (Analyze + drilldown).
      Defined once here; they cascade into .dark since .dark doesn't override
      them. Lightness/chroma chosen to read on both light and dark cards. */

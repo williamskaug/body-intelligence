@@ -91,8 +91,8 @@ export function CorrelationHeatmap({ metrics, matrix, n }: CorrelationHeatmapPro
       </table>
       <p className="mt-2 text-[11px] text-muted-foreground">
         Pearson r over the window across {(metrics.length * (metrics.length - 1)) / 2} pairs.{" "}
-        <span className="text-emerald-500">green = positive</span>,{" "}
-        <span className="text-rose-500">red = negative</span>; saturation ∝ |r| ×
+        <span className="text-emerald-600">green = positive</span>,{" "}
+        <span className="text-rose-600">red = negative</span>; saturation ∝ |r| ×
         confidence (cells under ~12 paired days are faded). A coefficient, not
         causation — with this many pairs, expect some to look strong by chance.
       </p>

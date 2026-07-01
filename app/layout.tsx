@@ -31,10 +31,10 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
-  ],
+  // App is pinned to the light palette (see the `light` class on <html>), so the
+  // browser chrome color is white regardless of the OS setting.
+  themeColor: "#ffffff",
+  colorScheme: "light",
   width: "device-width",
   initialScale: 1,
 };
@@ -47,7 +47,11 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      // `light` pins the app to the :root light palette. The dark palette only
+      // applies via `@media (prefers-color-scheme: dark) { :root:not(.light) }`
+      // and there is no `.dark` class anywhere, so this forces white everywhere.
+      className={`${geistSans.variable} ${geistMono.variable} light h-full antialiased`}
+      style={{ colorScheme: "light" }}
       suppressHydrationWarning
     >
       <body className="flex min-h-full flex-col bg-background font-sans text-foreground">

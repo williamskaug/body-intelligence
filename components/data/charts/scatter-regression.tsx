@@ -78,7 +78,7 @@ export function ScatterRegression({
 
   const config = { y: { label: yLabel, color: "var(--chart-point)" } } satisfies ChartConfig;
   const rTone =
-    stats.r == null ? "text-muted-foreground" : stats.r >= 0 ? "text-emerald-500" : "text-rose-500";
+    stats.r == null ? "text-muted-foreground" : stats.r >= 0 ? "text-emerald-600" : "text-rose-600";
 
   return (
     <div>

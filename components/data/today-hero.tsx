@@ -444,7 +444,7 @@ function ContextChips({
         <span className="inline-flex items-center gap-1.5 text-xs">
           <span className="text-muted-foreground">{milestone.label}</span>
           {milestone.daysOut < 0 ? (
-            <span className="font-mono tabular-nums text-rose-500">
+            <span className="font-mono tabular-nums text-rose-600">
               overdue {Math.abs(milestone.daysOut)}d
             </span>
           ) : (
