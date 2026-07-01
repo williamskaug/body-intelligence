@@ -34,6 +34,9 @@ export type TodayHeroProps = {
   milestone: { label: string; date: string; daysOut: number } | null;
   gateHistory: Array<{ date: string; gate: Gate | null }>; // last 14 days
   hasDawnAgent: boolean;
+  // "compact" renders a slim one-line gate bar — used on the Analyze view so the
+  // charts sit near the top instead of below the full hero card.
+  variant?: "full" | "compact";
 };
 
 export function TodayHero({
@@ -46,8 +49,20 @@ export function TodayHero({
   milestone,
   gateHistory,
   hasDawnAgent,
+  variant = "full",
 }: TodayHeroProps) {
   const freshness = classifyDerivedFreshness(derived, todayDate);
+
+  if (variant === "compact") {
+    return (
+      <CompactHero
+        derived={derived}
+        freshness={freshness}
+        briefingPath={briefingPath}
+        gateHistory={gateHistory}
+      />
+    );
+  }
 
   if (derived && freshness !== "absent") {
     return (
@@ -83,6 +98,74 @@ export function TodayHero({
       race={race}
       milestone={milestone}
     />
+  );
+}
+
+// Slim one-line gate bar for the Analyze view. Renders the agent's authored
+// gate verbatim (pill + call + reason) — no new judgment; just a compact frame
+// so the analytics start near the top of the page.
+function CompactHero({
+  derived,
+  freshness,
+  briefingPath,
+  gateHistory,
+}: {
+  derived: DerivedDailyRow | null;
+  freshness: ReturnType<typeof classifyDerivedFreshness>;
+  briefingPath: string | null;
+  gateHistory: TodayHeroProps["gateHistory"];
+}) {
+  const gate = derived && freshness !== "absent" ? derived.readiness_gate : null;
+  const stale = freshness === "stale";
+  const cardClass = gate && !stale ? GATE_CARD_CLASS[gate] : "border-border bg-card";
+  return (
+    <section
+      className={`flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border px-4 py-2.5 shadow-sm ${cardClass}`}
+    >
+      {gate ? (
+        <>
+          <span
+            className={`rounded-md border px-2 py-0.5 text-xs font-semibold tracking-wide ${GATE_PILL_CLASS[gate]}`}
+          >
+            {GATE_LABEL[gate]}
+          </span>
+          <span className="text-sm font-medium">
+            Today&apos;s call: {GATE_CALL[gate]}
+          </span>
+          {derived?.gate_reason ? (
+            <span className="hidden max-w-md truncate text-xs text-muted-foreground md:inline">
+              {derived.gate_reason}
+            </span>
+          ) : null}
+          {stale ? (
+            <span className="text-[10px] font-medium text-amber-700 dark:text-amber-400">
+              from {derived?.date}
+            </span>
+          ) : null}
+        </>
+      ) : briefingPath ? (
+        <span className="text-sm text-muted-foreground">
+          Today&apos;s briefing is ready — no structured gate yet.
+        </span>
+      ) : (
+        <span className="text-sm text-muted-foreground">
+          No readiness gate yet — your dawn agent writes one each morning.
+        </span>
+      )}
+      <div className="ml-auto flex items-center gap-3">
+        {gateHistory.some((d) => d.gate != null) ? (
+          <GateStrip days={gateHistory} size="sm" />
+        ) : null}
+        {briefingPath ? (
+          <Link
+            href={`/data/docs/${briefingPath}`}
+            className="shrink-0 text-xs font-medium underline-offset-2 hover:underline"
+          >
+            briefing →
+          </Link>
+        ) : null}
+      </div>
+    </section>
   );
 }
 

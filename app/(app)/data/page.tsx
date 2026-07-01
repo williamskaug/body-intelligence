@@ -449,9 +449,12 @@ export default async function DataPage({
         milestone={milestone}
         gateHistory={gateHistory}
         hasDawnAgent={installedIds.has("dawn-agent")}
+        variant={view === "analyze" ? "compact" : "full"}
       />
 
-      {events.some((e) => !e.resolved_date) ? (
+      {/* Health threads sit above the fold in Timeline/Calendar, but in Analyze
+          they move below the charts so the analytics start near the top. */}
+      {view !== "analyze" && events.some((e) => !e.resolved_date) ? (
         <section className="mt-6">
           <HealthThreads events={events} todayDate={todayDate} />
         </section>
@@ -519,6 +522,12 @@ export default async function DataPage({
           />
         )}
       </div>
+
+      {view === "analyze" && events.some((e) => !e.resolved_date) ? (
+        <section className="mt-10">
+          <HealthThreads events={events} todayDate={todayDate} />
+        </section>
+      ) : null}
 
       <section className="mt-10">
         <BriefingsFeed briefings={briefings} />
