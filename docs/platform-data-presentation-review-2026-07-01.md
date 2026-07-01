@@ -107,24 +107,31 @@ non-positive-duration skip, and the no-exclusion-set default.
 
 ---
 
-## Live verification
+## Live verification (Chrome MCP on `bi.vardenlab.com/data?view=analyze&days=90`)
 
-Verification on `bi.vardenlab.com` (auth only works on the custom domain) was
-**pending at the time of writing** — the Chrome extension was unresponsive (a
-permission prompt appeared to be pending in its side panel). The five fixes are
-deployed (`platform-improvements → main`, Vercel auto-deploy) and pass the full local
-gate suite. Live browser evidence will be appended here once the extension is
-available; each fix's on-screen expectation:
+All five verified in the browser on the production domain (auth only works there).
 
-- **P1** — `/data?view=analyze`: the correlation heatmap shows only well-covered
-  metrics (HRV / RHR / sleep / derived load), with a "N metrics hidden" note.
-- **P2** — the sleep-debt and readiness-factor cards show "N days · need ≥5" where a
-  flat 2-point line used to be.
-- **P3** — the Insights card shows a short lead with a "Show full insight" toggle;
-  the PMC chart sits just below it.
-- **P4** — the hero shows a "Sleep debt … min" chip (rose today, given the RED gate).
-- **P5** — the "Training hours" tile reads the endurance-only total with a
-  "+Golf …h (excl.)" suffix.
+- **P4 ✅** — the RED hero renders a rose **`SLEEP DEBT 712 min`** chip inline with
+  `SLEEP 7.2 h z+0.1` · `HRV 38 ms z+0.3` · `RHR 59 bpm z−0.1`. The red day now
+  carries its driving number at a glance instead of behind the "Why" fold.
+- **P5 ✅** — the **Training hours** tile reads **`58`** with the sub
+  `Ride 31h · Run 18h · Strength 5.7h · +Golf 69h Walk 2.2… ` — golf/walk are a
+  `+…(excl.)` suffix, no longer summed into the headline (which would have read
+  ~127h). The Workout-types donut still shows golf's 68.9h, so the raw hours aren't
+  lost — they're just not counted as *training* load.
+- **P3 ✅** — the **Insights** card shows a ~420-char lead
+  ("Window: 90 days … 1. Biggest signal: an aggressive fitness ramp …") with a
+  **Show full insight** disclosure; the FITNESS/FORM/ACWR/HRV/SLEEP-DEBT/VO2MAX chip
+  strip sits directly beneath it, no longer pushed down by the full essay.
+- **P2 ✅** — under Readiness & Recovery, the **Sleep debt** card shows
+  **`2 DAYS LOGGED · NEED ≥5 FOR A TREND`** and every **Readiness factors** row
+  (HRV z / RHR z / Sleep z) shows **`2 DAYS · NEED ≥5`** instead of a flat 2-point
+  line. (The daily-metric **Weight** card independently shows `NEED ≥3 DAYS FOR
+  TREND` at n=1 — the pre-existing card-level guard, consistent with the same idea.)
+- **P1 ✅** — the **Correlation matrix** renders a compact 3×3 lower triangle of only
+  the covered signals (**HRV / Resting HR / Sleep**, n55–56) with the note
+  **"5 metrics hidden for insufficient data (e.g. soreness, weight, sleep debt)."**
+  instead of an 8×8 grid of mostly-empty cells.
 
 ## What this review does *not* fix (data gaps, upstream in the agent)
 
