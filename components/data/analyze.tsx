@@ -189,6 +189,26 @@ function buildBaselineBand(
   return { data, mean: base?.mean ?? null, sd: base?.sd ?? null, z };
 }
 
+// Drop matrix rows/cols whose metric has fewer than minCoverage self-samples
+// (the lag-0 diagonal count), so the heatmap isn't a mostly-empty grid of "·".
+function pruneMatrix(
+  metrics: ReadonlyArray<string>,
+  mat: ReadonlyArray<ReadonlyArray<number | null>>,
+  n: ReadonlyArray<ReadonlyArray<number>>,
+  minCoverage: number,
+) {
+  const keep: number[] = [];
+  for (let i = 0; i < metrics.length; i++) {
+    if ((n[i]?.[i] ?? 0) >= minCoverage) keep.push(i);
+  }
+  return {
+    metrics: keep.map((i) => metrics[i]!),
+    matrix: keep.map((i) => keep.map((j) => mat[i]![j] ?? null)),
+    n: keep.map((i) => keep.map((j) => n[i]![j] ?? 0)),
+    dropped: metrics.length - keep.length,
+  };
+}
+
 function toHistBins(hist: { edges: number[]; counts: number[] } | null) {
   if (!hist) return [];
   const out: Array<{ binStart: number; binEnd: number; count: number }> = [];
@@ -525,15 +545,34 @@ export async function Analyze(props: AnalyzeProps) {
         title="Correlation matrix"
         sub="Pairwise Pearson r across recovery, load, and body signals — saturation ∝ |r|, low-n cells faded."
       >
-        {matrix ? (
-          <CorrelationHeatmap
-            metrics={matrix.metrics}
-            matrix={matrix.matrix}
-            n={matrix.n_matrix}
-          />
-        ) : (
-          <p className="text-xs text-muted-foreground">Not enough data yet.</p>
-        )}
+        {(() => {
+          const pruned = matrix
+            ? pruneMatrix(matrix.metrics, matrix.matrix, matrix.n_matrix, 12)
+            : null;
+          if (!pruned || pruned.metrics.length < 3) {
+            return (
+              <p className="text-xs text-muted-foreground">
+                Not enough overlapping history yet — the matrix needs ≥3 metrics with ~12+
+                logged days each. Right now only HRV / RHR / sleep have that.
+              </p>
+            );
+          }
+          return (
+            <>
+              <CorrelationHeatmap
+                metrics={pruned.metrics}
+                matrix={pruned.matrix}
+                n={pruned.n}
+              />
+              {pruned.dropped > 0 ? (
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {pruned.dropped} metric{pruned.dropped === 1 ? "" : "s"} hidden for
+                  insufficient data (e.g. soreness, weight, sleep debt).
+                </p>
+              ) : null}
+            </>
+          );
+        })()}
       </Band>
 
       <Band title="Distributions" sub="Histogram + median + your latest value over the window.">
