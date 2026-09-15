@@ -12,27 +12,23 @@ export default async function TodayPage({ searchParams }: { searchParams: Search
   const user = await requireUser();
   if (!user) return null;
   const window = parseWindow(await searchParams);
-  const snapshot = await loadAppSnapshot(user.id, user.email, window);
+  const [snapshot, load] = await Promise.all([
+    loadAppSnapshot(user.id, user.email, window),
+    cachedLoadBalance(user.id, Math.max(window.days, 84)).catch(() => null),
+  ]);
 
   const hasData =
     snapshot.allWorkouts.length > 0 || snapshot.daily.length > 0 || snapshot.events.length > 0;
 
-  let ctl: number | null = null;
-  let tsb: number | null = null;
-  let ctlRamp: number | null = null;
-  try {
-    const load = await cachedLoadBalance(user.id, Math.max(window.days, 84));
-    ctl = load.current.ctl;
-    tsb = load.current.tsb;
-    ctlRamp = load.current.ctl_ramp_7d;
-  } catch {
-    // Load engine may fail if history is thin.
-  }
-
   return (
     <div className="h-full min-h-0 overflow-auto">
       {hasData ? (
-        <TodayView snapshot={snapshot} ctl={ctl} tsb={tsb} ctlRamp={ctlRamp} />
+        <TodayView
+          snapshot={snapshot}
+          ctl={load?.current.ctl ?? null}
+          tsb={load?.current.tsb ?? null}
+          ctlRamp={load?.current.ctl_ramp_7d ?? null}
+        />
       ) : (
         <div className="p-8">
           <EmptyDataState email={user.email} />

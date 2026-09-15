@@ -1,15 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { HistogramChart } from "@/components/data/charts/histogram-chart";
-import { MultiSeriesLine } from "@/components/data/charts/multi-series-line";
+import { HistogramChart, MultiSeriesLine } from "@/components/analyze/lazy-charts";
 import { formatMetricValue, metricDef, metricLabel } from "@/lib/data-display/metric-registry";
 import { METRIC_KEYS, type MetricKey } from "@/lib/mcp/tools/metrics";
 import { getCorrelationMatrix } from "@/lib/mcp/tools/get-correlation-matrix";
 import { getDistribution } from "@/lib/mcp/tools/get-distribution";
 import { getMetricSeries } from "@/lib/mcp/tools/get-metric-series";
 import { getTrend } from "@/lib/mcp/tools/get-trend";
-import { loadAppSnapshot, requireUser } from "@/lib/app/snapshot";
-import { parseWindow } from "@/lib/app/window";
+import { requireUser } from "@/lib/app/snapshot";
 
 export const dynamic = "force-dynamic";
 
@@ -59,7 +57,6 @@ export default async function MetricPage({
 
   const user = await requireUser();
   if (!user) return null;
-  const snapshot = await loadAppSnapshot(user.id, user.email, parseWindow({ days: "365" }));
 
   const candidateSet = [metric, ...CANDIDATES.filter((c) => c !== metric)].slice(0, 8);
 

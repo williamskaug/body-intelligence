@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { AnalyzeView, ANALYZE_TABS, parseAnalyzeTab } from "@/components/analyze/analyze-view";
-import { loadAnalyzeExtras } from "@/lib/app/analyze-extras";
+import { beginAnalyzeExtras, loadAnalyzeExtras } from "@/lib/app/analyze-extras";
 import { isoWeek } from "@/lib/app/dates";
 import { loadAppSnapshot, requireUser } from "@/lib/app/snapshot";
 import { parseWindow, windowQuery } from "@/lib/app/window";
@@ -20,9 +20,13 @@ export default async function AnalyzePage({ searchParams }: { searchParams: Sear
   if (!user) return null;
   const params = await searchParams;
   const window = parseWindow(params);
-  const snapshot = await loadAppSnapshot(user.id, user.email, window);
   const tab = parseAnalyzeTab(params.tab);
-  const extras = await loadAnalyzeExtras(user.id, snapshot);
+  const extrasDays = Math.min(365, Math.max(window.days, 90));
+  const [snapshot, heavy] = await Promise.all([
+    loadAppSnapshot(user.id, user.email, window),
+    beginAnalyzeExtras(user.id, extrasDays, window.focusRun),
+  ]);
+  const extras = await loadAnalyzeExtras(user.id, snapshot, heavy);
   const week = isoWeek(snapshot.todayDate);
 
   return (

@@ -516,6 +516,24 @@ export async function loadDocument(
   return (data as { path: string; content: string; updated_at: string } | null) ?? null;
 }
 
+/** Paths only — Memory does not need the 120-day workout snapshot. */
+export const loadDocumentIndex = cache(async (userId: string) => {
+  return unstable_cache(
+    async (): Promise<Array<{ path: string; updated_at: string }>> => {
+      const sb = adminClient();
+      const { data, error } = await sb
+        .from("documents")
+        .select("path, updated_at")
+        .eq("user_id", userId)
+        .order("path", { ascending: true });
+      if (error) throw new Error(error.message);
+      return (data ?? []) as Array<{ path: string; updated_at: string }>;
+    },
+    ["doc-index", userId],
+    { tags: [userDataTag(userId)], revalidate: 45 },
+  )();
+});
+
 export const requireUser = cache(async (): Promise<{ id: string; email: string } | null> => {
   const { createClient } = await import("@/lib/supabase/server");
   const supabase = await createClient();

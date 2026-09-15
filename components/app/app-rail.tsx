@@ -32,6 +32,7 @@ export function AppRail({ dawn }: { dawn: DawnFooter }) {
             <Link
               key={item.href}
               href={item.href}
+              prefetch
               aria-current={active ? "page" : undefined}
               className={cn(
                 "flex min-w-0 items-center justify-between gap-2 border-l-2 px-3 py-2 text-[11px] font-medium uppercase tracking-[0.12em]",

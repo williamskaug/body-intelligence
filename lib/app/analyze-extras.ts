@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import type { AnalyzeExtras } from "@/components/analyze/analyze-view";
+import { clipAtWord } from "@/lib/app/parse-week";
 import { num } from "@/lib/app/format";
 import type { AppSnapshot } from "@/lib/app/snapshot";
 import { analyzeExtrasCacheKey, userDataTag } from "@/lib/app/snapshot-cache";
@@ -97,22 +98,26 @@ const loadHeavyExtras = cache((userId: string, days: number, focusRun: boolean) 
   )(),
 );
 
+/** Kick the stats-engine extras without waiting on the 120-day snapshot. */
+export const beginAnalyzeExtras = loadHeavyExtras;
+
 export async function loadAnalyzeExtras(
   userId: string,
   snapshot: AppSnapshot,
+  heavy?: Awaited<ReturnType<typeof loadHeavyExtras>>,
 ): Promise<AnalyzeExtras> {
   const days = Math.min(365, Math.max(snapshot.days, 90));
-  const heavy = await loadHeavyExtras(userId, days, snapshot.focusRun);
+  const resolved = heavy ?? (await loadHeavyExtras(userId, days, snapshot.focusRun));
   const insight = snapshot.latestInsightPath
     ? (snapshot.contentByPath.get(snapshot.latestInsightPath) ?? null)
     : null;
 
   return {
-    load: heavy.load,
-    matrix: heavy.matrix,
-    capacitySeries: heavy.capacitySeries,
-    recoveryBase: heavy.recoveryBase,
-    dists: heavy.distPayload.map((d) =>
+    load: resolved.load,
+    matrix: resolved.matrix,
+    capacitySeries: resolved.capacitySeries,
+    recoveryBase: resolved.recoveryBase,
+    dists: resolved.distPayload.map((d) =>
       d ? { ...d, latest: latestDaily(snapshot, d.metric) } : null,
     ),
     sleepHrv: sleepHrvScatter(snapshot),
@@ -179,5 +184,6 @@ function insightLead(md: string | null): string | null {
     .split("\n")
     .map((l) => l.replace(/^#+\s*/, "").replace(/^\*\*?/, "").trim())
     .find((l) => l.length > 24 && !l.startsWith("<!--"));
-  return line ?? null;
+  if (!line) return null;
+  return clipAtWord(line.replace(/\s+/g, " "), 180);
 }
