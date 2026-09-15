@@ -98,7 +98,7 @@ export function BodyView({ snapshot }: { snapshot: AppSnapshot }) {
   const active = tiles.find((t) => t.id === selected) ?? tiles[0]!;
 
   return (
-    <div className="grid gap-px bg-neutral-200 lg:grid-cols-[1.4fr_0.7fr]">
+    <div className="grid min-w-0 gap-px bg-neutral-200 @5xl:grid-cols-[minmax(0,1.4fr)_minmax(0,0.7fr)]">
       <div>
         <div className="grid grid-cols-3 gap-px bg-neutral-200">
           {tiles.map((t) => (
@@ -124,7 +124,7 @@ export function BodyView({ snapshot }: { snapshot: AppSnapshot }) {
                     <span className="ml-1 text-[11px] text-neutral-500">{t.unit}</span>
                   ) : null}
                 </div>
-                <Sparkline values={t.series.slice(-60)} width={88} height={28} baseline={t.baseline} />
+                <Sparkline values={t.series.slice(-60)} width={88} height={28} baseline={t.baseline} className="w-[5.5rem] shrink-0" />
               </div>
               {t.baseline ? (
                 <div className="mt-1 font-mono text-[10px] text-neutral-400">
@@ -140,13 +140,14 @@ export function BodyView({ snapshot }: { snapshot: AppSnapshot }) {
             title={active.label}
             extra={`${active.series.filter((v) => v != null).length} d`}
           />
-          <div className="px-3 py-3">
+          <div className="min-w-0 px-3 py-3">
             <Sparkline
               values={active.series}
               width={640}
               height={180}
               baseline={active.baseline}
               stroke="#171717"
+              className="w-full"
             />
           </div>
         </Panel>

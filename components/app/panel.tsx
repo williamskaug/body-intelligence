@@ -10,7 +10,7 @@ export function Panel({
   id?: string;
 }) {
   return (
-    <section id={id} className={cn("bi-panel bg-white", className)}>
+    <section id={id} className={cn("bi-panel min-w-0 bg-white", className)}>
       {children}
     </section>
   );
@@ -81,17 +81,17 @@ export function Kpi({
 }) {
   const inner = (
     <>
-      <div className="bi-label">{label}</div>
-      <div className="mt-1 font-mono text-xl tabular-nums leading-none tracking-tight">{value}</div>
-      {sub ? <div className="mt-1 text-[10px] text-neutral-500">{sub}</div> : null}
+      <div className="bi-label break-words leading-tight">{label}</div>
+      <div className="mt-1 font-mono text-lg tabular-nums leading-none tracking-tight @5xl:text-xl">{value}</div>
+      {sub ? <div className="mt-1 min-w-0 break-words text-[10px] leading-snug text-neutral-500">{sub}</div> : null}
     </>
   );
   if (href) {
     return (
-      <a href={href} className="bi-panel block px-3 py-2.5 hover:bg-neutral-50">
+      <a href={href} className="bi-panel block min-w-0 px-2.5 py-2 hover:bg-neutral-50 @5xl:px-3 @5xl:py-2.5">
         {inner}
       </a>
     );
   }
-  return <div className="bi-panel px-3 py-2.5">{inner}</div>;
+  return <div className="bi-panel min-w-0 px-2.5 py-2 @5xl:px-3 @5xl:py-2.5">{inner}</div>;
 }

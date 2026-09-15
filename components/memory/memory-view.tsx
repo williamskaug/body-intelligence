@@ -52,7 +52,7 @@ export function MemoryView({
   const folders = groupFiles(visible);
 
   return (
-    <div className="grid min-h-full lg:grid-cols-[16rem_1fr]">
+    <div className="grid min-h-full min-w-0 @5xl:grid-cols-[minmax(0,16rem)_minmax(0,1fr)]">
       <aside className="border-r border-neutral-200 bg-white">
         <div className="border-b border-neutral-200 p-2">
           <input
@@ -79,12 +79,12 @@ export function MemoryView({
                     key={f.path}
                     type="button"
                     className={cn(
-                      "flex w-full px-3 py-1 text-left font-mono text-[11px]",
+                      "flex w-full min-w-0 px-3 py-1 text-left font-mono text-[11px]",
                       active ? "bg-foreground text-background" : "hover:bg-neutral-50",
                     )}
                     onClick={() => router.push(`/memory?path=${encodeURIComponent(f.path)}`)}
                   >
-                    {name}
+                    <span className="min-w-0 truncate">{name}</span>
                   </button>
                 );
               })}
@@ -95,7 +95,7 @@ export function MemoryView({
       <section className="flex min-h-0 flex-col bg-white">
         <header className="flex items-center justify-between gap-3 border-b border-neutral-200 px-4 py-2">
           <div>
-            <h2 className="font-mono text-[13px] font-semibold">{selectedPath}</h2>
+            <h2 className="min-w-0 break-all font-mono text-[13px] font-semibold">{selectedPath}</h2>
             <p className="font-mono text-[10px] text-neutral-500">
               {updatedAt ? `updated ${updatedAt.slice(0, 10)}` : "new"}
               {draft ? ` · ${formatBytes(new Blob([draft]).size)}` : ""}

@@ -1,7 +1,7 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { revalidateApp } from "@/lib/app/revalidate";
 import { adminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -38,7 +38,7 @@ export async function markRecipeInstalled(recipeId: string) {
     updated_at: nowIso,
   });
   if (error) throw new Error(error.message);
-  revalidatePath("/agents");
+  revalidateApp(userId);
   return { ok: true as const };
 }
 
@@ -52,6 +52,6 @@ export async function markRecipeUninstalled(recipeId: string) {
     .eq("user_id", userId)
     .eq("recipe_id", id);
   if (error) throw new Error(error.message);
-  revalidatePath("/agents");
+  revalidateApp(userId);
   return { ok: true as const };
 }

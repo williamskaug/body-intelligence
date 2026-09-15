@@ -29,7 +29,7 @@ export function TrainList({
 
   return (
     <div className="flex min-h-full flex-col">
-      <div className="grid gap-px bg-neutral-200 lg:grid-cols-[1.4fr_0.8fr]">
+      <div className="grid min-w-0 gap-px bg-neutral-200 @5xl:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)]">
         <Panel>
           <PanelHeader
             title="Weekly load"
@@ -57,10 +57,10 @@ export function TrainList({
         </Panel>
       </div>
 
-      <div className="grid min-h-0 flex-1 gap-px bg-neutral-200 lg:grid-cols-[1.4fr_0.8fr]">
+      <div className="grid min-h-0 min-w-0 flex-1 gap-px bg-neutral-200 @5xl:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)]">
         <Panel className="flex min-h-0 flex-col">
-          <div className="overflow-auto">
-            <table className="w-full text-left text-[12px]">
+        <div className="min-w-0 overflow-x-auto">
+            <table className="w-full min-w-[48rem] text-left text-[12px]">
               <thead className="sticky top-0 bg-white text-[10px] uppercase tracking-wide text-neutral-400">
                 <tr className="border-b border-neutral-200">
                   {["Date", "Type", "Title", "Dur", "Km", "Avg HR", "Load", "Src"].map((h) => (
@@ -89,7 +89,7 @@ export function TrainList({
                       <td className="px-2 py-1">
                         <TypeChip>{shortLabelForType(w.type)}</TypeChip>
                       </td>
-                      <td className="max-w-[14rem] truncate px-2 py-1">{workoutTitle(w)}</td>
+                      <td className="min-w-0 max-w-[16rem] px-2 py-1">{workoutTitle(w)}</td>
                       <td className="px-2 py-1 font-mono">{formatDurationMin(w.duration_min)}</td>
                       <td className="px-2 py-1 font-mono">{formatKm(num(w.distance_km))}</td>
                       <td className="px-2 py-1 font-mono">{w.avg_hr ?? "—"}</td>
@@ -250,7 +250,7 @@ export function TrainCalendar({ snapshot }: { snapshot: AppSnapshot }) {
 
   return (
     <div className="flex flex-col">
-      <div className="grid gap-px bg-neutral-200 lg:grid-cols-[1.4fr_0.8fr]">
+      <div className="grid min-w-0 gap-px bg-neutral-200 @5xl:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)]">
         <Panel>
           <PanelHeader title="Weekly load" />
           <div className="px-2 pt-2">
@@ -310,7 +310,7 @@ export function TrainCalendar({ snapshot }: { snapshot: AppSnapshot }) {
                       {ws.map((w) => (
                         <li key={w.id} className="flex items-center gap-1 text-[10px]">
                           <span className="size-1.5 bg-neutral-900" />
-                          <span className="truncate">
+                          <span className="min-w-0 break-words">
                             {shortLabelForType(w.type).toLowerCase()} {formatDurationMin(w.duration_min)}
                           </span>
                         </li>

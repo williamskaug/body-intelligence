@@ -33,7 +33,7 @@ export function HealthView({
     null;
 
   return (
-    <div className="grid min-h-full gap-px bg-neutral-200 lg:grid-cols-[16rem_1fr_20rem]">
+    <div className="grid min-h-full min-w-0 gap-px bg-neutral-200 @5xl:grid-cols-[minmax(0,16rem)_minmax(0,1fr)_minmax(0,20rem)]">
       <aside className="bg-white">
         <div className="flex items-center justify-between border-b border-neutral-200 px-3 py-2">
           <h2 className="text-[13px] font-semibold">Events</h2>
@@ -169,7 +169,7 @@ function EventDetail({ event, todayDate }: { event: ThreadedHealthEvent; todayDa
 
       {editingMilestone && open ? (
         <form
-          className="grid grid-cols-[1fr_8rem_auto] gap-2 border-b border-neutral-100 px-4 py-2 text-[12px]"
+          className="grid min-w-0 grid-cols-1 gap-2 border-b border-neutral-100 px-4 py-2 text-[12px] @3xl:grid-cols-[minmax(0,1fr)_8rem_auto]"
           onSubmit={(e) => {
             e.preventDefault();
             const fd = new FormData(e.currentTarget);

@@ -3,7 +3,7 @@ import { TodayView } from "@/components/today/today-view";
 import { EmptyDataState } from "@/components/data/empty-state";
 import { loadAppSnapshot, requireUser } from "@/lib/app/snapshot";
 import { parseWindow } from "@/lib/app/window";
-import { getLoadBalance } from "@/lib/mcp/tools/get-load-balance";
+import { cachedLoadBalance } from "@/lib/app/analyze-extras";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +22,7 @@ export default async function TodayPage({ searchParams }: { searchParams: Search
   let tsb: number | null = null;
   let ctlRamp: number | null = null;
   try {
-    const load = await getLoadBalance(user.id, { days: Math.max(window.days, 84) });
+    const load = await cachedLoadBalance(user.id, Math.max(window.days, 84));
     ctl = load.current.ctl;
     tsb = load.current.tsb;
     ctlRamp = load.current.ctl_ramp_7d;

@@ -29,7 +29,7 @@ export async function saveMemoryDoc(input: { path: string; content: string }) {
   const parsed = saveMemoryDocSchema.parse(input);
   const userId = await authedUserId();
   await fsWrite(userId, parsed);
-  revalidateApp();
+  revalidateApp(userId);
   return { ok: true as const };
 }
 
@@ -47,7 +47,7 @@ export async function saveWellnessEntry(input: LogDailyInput) {
   const parsed = wellnessFormSchema.parse(input);
   const userId = await authedUserId();
   await logDaily(userId, parsed);
-  revalidateApp();
+  revalidateApp(userId);
   return { ok: true as const };
 }
 
@@ -65,7 +65,7 @@ export async function saveWorkout(input: z.infer<typeof workoutSchema>) {
   const parsed = workoutSchema.parse(input);
   const userId = await authedUserId();
   await logWorkout(userId, { ...parsed, source: "manual" });
-  revalidateApp();
+  revalidateApp(userId);
   return { ok: true as const };
 }
 
@@ -81,7 +81,7 @@ export async function saveHealthEvent(input: z.infer<typeof healthEventSchema>) 
   const parsed = healthEventSchema.parse(input);
   const userId = await authedUserId();
   await logHealthEvent(userId, parsed);
-  revalidateApp();
+  revalidateApp(userId);
   return { ok: true as const };
 }
 
@@ -96,7 +96,7 @@ export async function saveHealthEventUpdate(input: z.infer<typeof updateSchema>)
   const parsed = updateSchema.parse(input);
   const userId = await authedUserId();
   await addHealthEventUpdate(userId, parsed);
-  revalidateApp();
+  revalidateApp(userId);
   return { ok: true as const };
 }
 
@@ -110,7 +110,7 @@ export async function closeHealthEvent(input: { id: string; note?: string; resol
     .parse(input);
   const userId = await authedUserId();
   await resolveHealthEvent(userId, parsed);
-  revalidateApp();
+  revalidateApp(userId);
   return { ok: true as const };
 }
 
@@ -128,7 +128,7 @@ export async function saveHealthEventMilestone(input: {
     .parse(input);
   const userId = await authedUserId();
   await updateHealthEvent(userId, parsed);
-  revalidateApp();
+  revalidateApp(userId);
   return { ok: true as const };
 }
 

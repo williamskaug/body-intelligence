@@ -1,4 +1,5 @@
-import { revalidatePath } from "next/cache";
+import { refresh, revalidatePath, revalidateTag } from "next/cache";
+import { userDataTag } from "./snapshot-cache";
 
 const PATHS = [
   "/today",
@@ -12,6 +13,8 @@ const PATHS = [
   "/data",
 ] as const;
 
-export function revalidateApp() {
+export function revalidateApp(userId?: string) {
   for (const p of PATHS) revalidatePath(p);
+  if (userId) revalidateTag(userDataTag(userId), "max");
+  refresh();
 }

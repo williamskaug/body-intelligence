@@ -186,7 +186,7 @@
     @apply border border-neutral-200 bg-white;
   }
   .bi-label {
-    @apply text-[10px] font-medium uppercase tracking-[0.12em] text-neutral-500;
+    @apply break-words text-[10px] font-medium uppercase leading-tight tracking-[0.08em] text-neutral-500;
   }
   .bi-num {
     @apply font-mono tabular-nums;

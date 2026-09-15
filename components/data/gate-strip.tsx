@@ -10,13 +10,19 @@ export type GateStripDay = {
 export function GateStrip({
   days,
   size = "sm",
+  nowrap = false,
 }: {
   days: ReadonlyArray<GateStripDay>;
   size?: "sm" | "md";
+  nowrap?: boolean;
 }) {
   const box = size === "sm" ? "h-2.5 w-2.5" : "h-4 w-4";
   return (
-    <div className="flex flex-wrap items-center gap-[3px]" role="img" aria-label="Readiness gate history">
+    <div
+      className={nowrap ? "flex shrink-0 items-center gap-[3px]" : "flex flex-wrap items-center gap-[3px]"}
+      role="img"
+      aria-label="Readiness gate history"
+    >
       {days.map((d) => (
         <span
           key={d.date}

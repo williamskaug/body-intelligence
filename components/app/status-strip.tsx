@@ -31,7 +31,7 @@ export function StatusStrip({
   const stale = derived != null && derived.date !== todayDate;
 
   return (
-    <div className="flex h-9 shrink-0 items-center gap-3 overflow-x-auto border-b border-neutral-200 bg-white px-3 text-[11px]">
+    <div className="flex min-h-9 min-w-0 shrink-0 items-center gap-3 overflow-x-auto border-b border-neutral-200 bg-white px-3 py-1 text-[11px]">
       {gate ? (
         <span className="flex items-baseline gap-2">
           <span
@@ -83,24 +83,24 @@ export function StatusStrip({
         ) : null}
       </span>
 
-      <span className="ml-auto flex items-center gap-3">
+      <span className="ml-auto flex min-w-0 items-center gap-3">
         {todayWorkout ? (
-          <span className="hidden items-center gap-1.5 lg:flex">
-            <span className="text-[10px] uppercase tracking-wide text-neutral-400">Today</span>
-            <span className="border border-neutral-300 px-1 font-mono text-[10px] uppercase">
+          <span className="hidden min-w-0 max-w-[18rem] items-center gap-1.5 @5xl:flex">
+            <span className="shrink-0 text-[10px] uppercase tracking-wide text-neutral-400">Today</span>
+            <span className="shrink-0 border border-neutral-300 px-1 font-mono text-[10px] uppercase">
               {todayWorkout.type}
             </span>
-            <span className="truncate font-medium">{todayWorkout.title}</span>
+            <span className="min-w-0 truncate font-medium">{todayWorkout.title}</span>
           </span>
         ) : null}
-        <Link href={detailsHref} className="text-[10px] uppercase tracking-wide text-neutral-500 hover:text-foreground">
+        <Link href={detailsHref} className="shrink-0 text-[10px] uppercase tracking-wide text-neutral-500 hover:text-foreground">
           Details
         </Link>
-        <GateStrip days={gateHistory} size="sm" />
+        <GateStrip days={gateHistory} size="sm" nowrap />
         {briefingPath ? (
           <Link
             href={`/memory?path=${encodeURIComponent(briefingPath)}`}
-            className="text-[10px] uppercase tracking-wide text-neutral-500 hover:text-foreground"
+            className="shrink-0 text-[10px] uppercase tracking-wide text-neutral-500 hover:text-foreground"
           >
             Briefing
           </Link>

@@ -1,6 +1,9 @@
+import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import type { AnalyzeExtras } from "@/components/analyze/analyze-view";
 import { num } from "@/lib/app/format";
 import type { AppSnapshot } from "@/lib/app/snapshot";
+import { analyzeExtrasCacheKey, userDataTag } from "@/lib/app/snapshot-cache";
 import { correlationReport, linregress } from "@/lib/data-display/statistics";
 import { getCorrelationMatrix } from "@/lib/mcp/tools/get-correlation-matrix";
 import { getDistribution } from "@/lib/mcp/tools/get-distribution";
@@ -37,49 +40,80 @@ async function safe<T>(p: Promise<T>): Promise<T | null> {
   }
 }
 
+export const cachedLoadBalance = cache((userId: string, days: number) =>
+  unstable_cache(
+    () => getLoadBalance(userId, { days }),
+    ["load-balance", userId, String(days)],
+    { tags: [userDataTag(userId)], revalidate: 45 },
+  )(),
+);
+
+type HeavyExtras = Pick<
+  AnalyzeExtras,
+  "load" | "matrix" | "capacitySeries" | "recoveryBase" | "dists"
+>;
+
+const loadHeavyExtras = cache((userId: string, days: number, focusRun: boolean) =>
+  unstable_cache(
+    async (): Promise<Omit<HeavyExtras, "dists"> & { distPayload: HeavyExtras["dists"] }> => {
+      const [load, matrix, capacitySeries, recoveryBase, ...dists] = await Promise.all([
+        safe(cachedLoadBalance(userId, days)),
+        safe(getCorrelationMatrix(userId, { metrics: MATRIX_METRICS, window_days: days })),
+        safe(getMetricSeries(userId, { metrics: CAPACITY_KEYS, window_days: 365 })),
+        safe(getMetricSeries(userId, { metrics: ["hrv_ms", "rhr_bpm"], window_days: days })),
+        ...DIST_METRICS.map((metric) =>
+          safe(getDistribution(userId, { metric, window_days: days, bins: 14 })),
+        ),
+      ]);
+      return {
+        load,
+        matrix: matrix
+          ? { metrics: matrix.metrics, matrix: matrix.matrix, n: matrix.n_matrix }
+          : null,
+        capacitySeries: capacitySeries
+          ? { dates: capacitySeries.dates, series: capacitySeries.series }
+          : null,
+        recoveryBase: recoveryBase
+          ? { dates: recoveryBase.dates, series: recoveryBase.series }
+          : null,
+        distPayload: dists.map((d, i) =>
+          d
+            ? {
+                metric: DIST_METRICS[i]!,
+                histogram: d.histogram,
+                percentiles: {
+                  p5: d.percentiles.p5,
+                  p50: d.percentiles.p50,
+                  p95: d.percentiles.p95,
+                },
+                latest: null,
+              }
+            : null,
+        ),
+      };
+    },
+    analyzeExtrasCacheKey(userId, days, focusRun),
+    { tags: [userDataTag(userId)], revalidate: 45 },
+  )(),
+);
+
 export async function loadAnalyzeExtras(
   userId: string,
   snapshot: AppSnapshot,
 ): Promise<AnalyzeExtras> {
   const days = Math.min(365, Math.max(snapshot.days, 90));
-  const [load, matrix, capacitySeries, recoveryBase, ...dists] = await Promise.all([
-    safe(getLoadBalance(userId, { days })),
-    safe(getCorrelationMatrix(userId, { metrics: MATRIX_METRICS, window_days: days })),
-    safe(getMetricSeries(userId, { metrics: CAPACITY_KEYS, window_days: 365 })),
-    safe(getMetricSeries(userId, { metrics: ["hrv_ms", "rhr_bpm"], window_days: days })),
-    ...DIST_METRICS.map((metric) =>
-      safe(getDistribution(userId, { metric, window_days: days, bins: 14 })),
-    ),
-  ]);
-
+  const heavy = await loadHeavyExtras(userId, days, snapshot.focusRun);
   const insight = snapshot.latestInsightPath
-    ? snapshot.contentByPath.get(snapshot.latestInsightPath) ?? null
+    ? (snapshot.contentByPath.get(snapshot.latestInsightPath) ?? null)
     : null;
 
   return {
-    load,
-    matrix: matrix
-      ? { metrics: matrix.metrics, matrix: matrix.matrix, n: matrix.n_matrix }
-      : null,
-    capacitySeries: capacitySeries
-      ? { dates: capacitySeries.dates, series: capacitySeries.series }
-      : null,
-    recoveryBase: recoveryBase
-      ? { dates: recoveryBase.dates, series: recoveryBase.series }
-      : null,
-    dists: dists.map((d, i) =>
-      d
-        ? {
-            metric: DIST_METRICS[i]!,
-            histogram: d.histogram,
-            percentiles: {
-              p5: d.percentiles.p5,
-              p50: d.percentiles.p50,
-              p95: d.percentiles.p95,
-            },
-            latest: latestDaily(snapshot, DIST_METRICS[i]!),
-          }
-        : null,
+    load: heavy.load,
+    matrix: heavy.matrix,
+    capacitySeries: heavy.capacitySeries,
+    recoveryBase: heavy.recoveryBase,
+    dists: heavy.distPayload.map((d) =>
+      d ? { ...d, latest: latestDaily(snapshot, d.metric) } : null,
     ),
     sleepHrv: sleepHrvScatter(snapshot),
     insightLead: insightLead(insight),

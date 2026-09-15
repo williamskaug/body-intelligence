@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import { movingAverage } from "@/lib/data-display/aggregate";
 import type { Baseline } from "@/lib/data-display/baseline";
 
@@ -21,6 +22,7 @@ export type SparklineProps = {
   yDomain?: readonly [number, number];
   /** Fill the area between the MA line and the bottom (sleep-debt style). */
   fillArea?: boolean;
+  className?: string;
 };
 
 // Pure server-rendered SVG sparkline:
@@ -37,6 +39,7 @@ export function Sparkline({
   refLines,
   yDomain,
   fillArea = false,
+  className,
 }: SparklineProps) {
   const pad = 4;
   const innerW = width - pad * 2;
@@ -52,11 +55,12 @@ export function Sparkline({
     return (
       <svg
         viewBox={`0 0 ${width} ${height}`}
-        width={width}
+        width="100%"
         height={height}
         aria-label={ariaLabel ?? "No data"}
         role="img"
-        className="text-muted-foreground/40"
+        preserveAspectRatio="none"
+        className={cn("block max-w-full", className)}
       >
         <line
           x1={pad}
@@ -107,11 +111,12 @@ export function Sparkline({
   return (
     <svg
       viewBox={`0 0 ${width} ${height}`}
-      width={width}
+      width="100%"
       height={height}
       aria-label={ariaLabel}
       role="img"
-      className="overflow-visible"
+      preserveAspectRatio="none"
+      className={cn("block max-w-full overflow-visible", className)}
     >
       {bandTop != null && bandBottom != null ? (
         <rect

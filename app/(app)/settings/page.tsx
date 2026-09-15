@@ -1,8 +1,8 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { PageChrome } from "@/components/app/page-chrome";
-import { loadAppSnapshot, requireUser } from "@/lib/app/snapshot";
-import { parseWindow } from "@/lib/app/window";
+import { loadTimezone, requireUser } from "@/lib/app/snapshot";
+import { localDateInTz } from "@/lib/app/dates";
 import { createClient } from "@/lib/supabase/server";
 import { adminClient } from "@/lib/supabase/admin";
 import { recipes } from "@/lib/agents/recipe-data";
@@ -32,7 +32,8 @@ export default async function SettingsPage() {
   const user = await requireUser();
   if (!user) redirect("/login");
 
-  const snapshot = await loadAppSnapshot(user.id, user.email, parseWindow({}));
+  const timezone = await loadTimezone(user.id);
+  const todayDate = localDateInTz(new Date(), timezone);
   const supabase = await createClient();
   const profileRes = await supabase
     .from("user_profiles")
@@ -48,10 +49,10 @@ export default async function SettingsPage() {
 
   return (
     <PageChrome
-      snapshot={snapshot}
+      todayDate={todayDate}
       action={{ label: "Save profile", form: "profile-form", type: "submit" }}
     >
-      <div className="grid gap-px bg-neutral-200 lg:grid-cols-2">
+      <div className="grid min-w-0 gap-px bg-neutral-200 @5xl:grid-cols-2">
         <section className="bg-white p-4">
           <h2 className="text-[13px] font-semibold">MCP endpoint</h2>
           <p className="mt-1 text-[12px] text-neutral-500">
@@ -132,7 +133,7 @@ export default async function SettingsPage() {
           )}
         </section>
 
-        <section className="bg-white p-4 lg:col-span-2">
+        <section className="bg-white p-4 @5xl:col-span-2">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="text-[13px] font-semibold">Browser session</h2>

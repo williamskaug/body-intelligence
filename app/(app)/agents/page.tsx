@@ -6,7 +6,6 @@ import { num } from "@/lib/app/format";
 import { loadAppSnapshot, requireUser, type AppSnapshot } from "@/lib/app/snapshot";
 import { parseWindow } from "@/lib/app/window";
 import { adminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -15,8 +14,8 @@ export default async function AgentsPage() {
   if (!user) return null;
   const snapshot = await loadAppSnapshot(user.id, user.email, parseWindow({}));
   const [installState, userDocs, capture] = await Promise.all([
-    loadInstallState(),
-    loadUserRecipeDocs(),
+    loadInstallState(user.id),
+    loadUserRecipeDocs(user.id),
     loadCaptureGaps(snapshot, user.id),
   ]);
 
@@ -30,17 +29,12 @@ export default async function AgentsPage() {
   );
 }
 
-async function loadUserRecipeDocs(): Promise<UserRecipeDoc[]> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return [];
+async function loadUserRecipeDocs(userId: string): Promise<UserRecipeDoc[]> {
   const sb = adminClient();
   const { data, error } = await sb
     .from("documents")
     .select("path, content")
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .like("path", "recipes/%")
     .order("path");
   if (error) return [];
@@ -86,17 +80,12 @@ async function loadCaptureGaps(snapshot: AppSnapshot, userId: string): Promise<C
   };
 }
 
-async function loadInstallState(): Promise<Map<string, InstallState>> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return new Map();
+async function loadInstallState(userId: string): Promise<Map<string, InstallState>> {
   const sb = adminClient();
   const { data, error } = await sb
     .from("installed_recipes")
     .select("recipe_id, installed_at, last_run_at, last_run_status, run_count, last_error")
-    .eq("user_id", user.id);
+    .eq("user_id", userId);
   if (error) return new Map();
   const out = new Map<string, InstallState>();
   for (const row of (data ?? []) as Array<{ recipe_id: string } & InstallState>) {

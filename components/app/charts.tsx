@@ -62,8 +62,8 @@ export function SvgHBars({
   return (
     <div className="flex flex-col gap-1.5 px-3 py-2">
       {rows.map((r) => (
-        <div key={r.label} className="grid grid-cols-[4.5rem_1fr_2.5rem] items-center gap-2 text-[11px]">
-          <span className="truncate uppercase tracking-wide text-neutral-500">{r.label}</span>
+        <div key={r.label} className="grid min-w-0 grid-cols-[minmax(0,5.5rem)_1fr_2.5rem] items-center gap-2 text-[11px]">
+          <span className="min-w-0 truncate uppercase tracking-wide text-neutral-500">{r.label}</span>
           <div className="h-2 bg-neutral-100">
             <div className="h-2 bg-neutral-900" style={{ width: `${Math.min(100, (r.value / max) * 100)}%` }} />
           </div>

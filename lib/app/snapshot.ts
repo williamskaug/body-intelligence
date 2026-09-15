@@ -1,3 +1,5 @@
+import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { computeBaseline, type Baseline } from "@/lib/data-display/baseline";
 import type { DerivedDailyRow, Gate } from "@/lib/data-display/derived";
 import type {
@@ -15,8 +17,20 @@ import {
 import { parseThresholds, type ParsedThresholds } from "@/lib/memory/parse-thresholds";
 import { adminClient } from "@/lib/supabase/admin";
 import { addDays, isMissingRelation, localDateInTz } from "./dates";
+import { timeAgo } from "./format";
+import {
+  dehydrateContentMap,
+  hydrateContentMap,
+  snapshotCacheKey,
+  userDataTag,
+} from "./snapshot-cache";
 import { applyFocus } from "./training";
-import type { AppWindow } from "./window";
+import type { AppWindow, WindowDays } from "./window";
+
+export type DawnFooter = {
+  status: "ok" | "failed" | "stale" | "none";
+  lastRunLabel: string | null;
+};
 
 export type WorkoutRow = {
   id: string;
@@ -200,7 +214,7 @@ const ZONES_SELECT =
 const CAPACITY_SELECT =
   "date, vo2max_running, vo2max_cycling, lactate_threshold_hr_bpm, lactate_threshold_pace_s_per_km, lactate_threshold_power_w, cycling_ftp_w, endurance_score, race_pred_5k_s, race_pred_10k_s, race_pred_half_s, race_pred_marathon_s";
 
-export async function loadAppSnapshot(
+async function loadAppSnapshotUncached(
   userId: string,
   email: string,
   window: AppWindow,
@@ -448,7 +462,34 @@ export async function loadAppSnapshot(
   };
 }
 
-export async function loadTimezone(userId: string): Promise<string> {
+type SnapshotDTO = Omit<AppSnapshot, "contentByPath"> & {
+  contentByPath: Record<string, string>;
+};
+
+/** Per-request + 45s tagged cache. Section switches reuse this instead of 12 DB round-trips. */
+export async function loadAppSnapshot(
+  userId: string,
+  email: string,
+  window: AppWindow,
+): Promise<AppSnapshot> {
+  return cachedSnapshot(userId, email, window.days, window.focusRun);
+}
+
+const cachedSnapshot = cache(
+  async (userId: string, email: string, days: WindowDays, focusRun: boolean): Promise<AppSnapshot> => {
+    const dto = await unstable_cache(
+      async (): Promise<SnapshotDTO> => {
+        const snap = await loadAppSnapshotUncached(userId, email, { days, focusRun });
+        return { ...snap, contentByPath: dehydrateContentMap(snap.contentByPath) };
+      },
+      snapshotCacheKey(userId, email, days, focusRun),
+      { tags: [userDataTag(userId)], revalidate: 45 },
+    )();
+    return { ...dto, contentByPath: hydrateContentMap(dto.contentByPath) };
+  },
+);
+
+export const loadTimezone = cache(async (userId: string): Promise<string> => {
   const sb = adminClient();
   const { data } = await sb
     .from("user_profiles")
@@ -457,7 +498,7 @@ export async function loadTimezone(userId: string): Promise<string> {
     .maybeSingle();
   const tz = (data as { timezone?: string } | null)?.timezone;
   return tz && tz !== "UTC" ? tz : "Europe/Oslo";
-}
+});
 
 export async function loadDocument(
   userId: string,
@@ -474,7 +515,7 @@ export async function loadDocument(
   return (data as { path: string; content: string; updated_at: string } | null) ?? null;
 }
 
-export async function requireUser(): Promise<{ id: string; email: string } | null> {
+export const requireUser = cache(async (): Promise<{ id: string; email: string } | null> => {
   const { createClient } = await import("@/lib/supabase/server");
   const supabase = await createClient();
   const {
@@ -482,4 +523,34 @@ export async function requireUser(): Promise<{ id: string; email: string } | nul
   } = await supabase.auth.getUser();
   if (!user) return null;
   return { id: user.id, email: user.email ?? "" };
-}
+});
+
+export const loadDawnFooter = cache(async (userId: string): Promise<DawnFooter> => {
+  return unstable_cache(
+    async (): Promise<DawnFooter> => {
+      const sb = adminClient();
+      const { data } = await sb
+        .from("installed_recipes")
+        .select("last_run_at, last_run_status")
+        .eq("user_id", userId)
+        .eq("recipe_id", "dawn-agent")
+        .maybeSingle();
+      const row = data as { last_run_at: string | null; last_run_status: string | null } | null;
+      if (!row?.last_run_at) return { status: "none", lastRunLabel: null };
+      const ageH = (Date.now() - new Date(row.last_run_at).getTime()) / 3_600_000;
+      const status: DawnFooter["status"] =
+        row.last_run_status === "failed" ? "failed" : ageH > 36 ? "stale" : "ok";
+      const label = new Date(row.last_run_at).toLocaleTimeString("en-GB", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      });
+      return {
+        status,
+        lastRunLabel: ageH < 24 ? `ran ${label}` : `ran ${timeAgo(row.last_run_at)}`,
+      };
+    },
+    ["dawn-footer", userId],
+    { tags: [userDataTag(userId)], revalidate: 45 },
+  )();
+});

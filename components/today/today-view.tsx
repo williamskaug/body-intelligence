@@ -85,7 +85,7 @@ export function TodayView({
 
   return (
     <div className="flex flex-col gap-px p-px">
-      <div className="grid grid-cols-2 gap-px bg-neutral-200 lg:grid-cols-8">
+      <div className="grid grid-cols-2 gap-px bg-neutral-200 @5xl:grid-cols-8">
         <Kpi
           label="Pred. marathon"
           value={formatClock(predSec)}
@@ -154,7 +154,7 @@ export function TodayView({
         />
       </div>
 
-      <div className="grid gap-px bg-neutral-200 lg:grid-cols-[1.15fr_1fr_0.9fr]">
+      <div className="grid min-w-0 gap-px bg-neutral-200 @5xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,0.9fr)]">
         <Panel>
           <PanelHeader
             title="Race trajectory"
@@ -209,9 +209,9 @@ export function TodayView({
           <div className="px-3 py-2">
             {todayWorkout ? (
               <div>
-                <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <TypeChip>{shortLabelForType(todayWorkout.type)}</TypeChip>
-                  <span className="text-sm font-semibold">{workoutTitle(todayWorkout)}</span>
+                  <span className="min-w-0 text-sm font-semibold">{workoutTitle(todayWorkout)}</span>
                 </div>
                 <div className="mt-1 font-mono text-[11px] text-neutral-500">
                   HR {todayWorkout.avg_hr ?? "—"}
@@ -269,7 +269,7 @@ export function TodayView({
               series={capacity.map((c) => (c.vo2max_running != null ? Number(c.vo2max_running) : null))}
               sub={vo2Delta != null ? `${vo2Delta >= 0 ? "+" : ""}${vo2Delta.toFixed(1)} · 90 d` : undefined}
             />
-            <div className="flex items-center justify-between px-3 py-2 text-[11px]">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-[11px]">
               <span className="uppercase tracking-wide text-neutral-400">CTL</span>
               <span className="font-mono">
                 {ctl != null ? Math.round(ctl) : "—"}
@@ -282,7 +282,7 @@ export function TodayView({
         </Panel>
       </div>
 
-      <div className="grid gap-px bg-neutral-200 lg:grid-cols-3">
+      <div className="grid min-w-0 gap-px bg-neutral-200 @5xl:grid-cols-3">
         <Panel>
           <PanelHeader title="Last night" />
           {lastNight ? (
@@ -346,7 +346,7 @@ export function TodayView({
             }
             hrefLabel="dawn-agent"
           />
-          <div className="max-h-40 overflow-hidden px-3 py-2 text-[12px] leading-relaxed text-neutral-700">
+          <div className="max-h-40 overflow-y-auto px-3 py-2 text-[12px] leading-relaxed text-neutral-700">
             {briefing ? (
               <Markdown>{briefing}</Markdown>
             ) : insight ? (
@@ -380,7 +380,14 @@ function FitRow({
         <div className="font-mono text-sm tabular-nums">{value}</div>
         {sub ? <div className="text-[10px] text-neutral-400">{sub}</div> : null}
       </div>
-      <Sparkline values={series} baseline={base} width={120} height={36} stroke="#171717" />
+      <Sparkline
+        values={series}
+        baseline={base}
+        width={120}
+        height={36}
+        stroke="#171717"
+        className="w-[7.5rem] shrink-0"
+      />
     </div>
   );
 }
@@ -428,7 +435,7 @@ function WeekPlan({
           >
             <span className="w-8 text-neutral-400">{item.dow}</span>
             {item.type ? <TypeChip>{item.type}</TypeChip> : null}
-            <span className="min-w-0 flex-1 truncate">{item.title}</span>
+            <span className="min-w-0 flex-1">{item.title}</span>
             {logged || item.done ? (
               <span className="text-[10px] uppercase text-emerald-700">{isToday ? "today" : "done"}</span>
             ) : null}
