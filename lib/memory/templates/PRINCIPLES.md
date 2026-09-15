@@ -16,7 +16,7 @@ Add principles as you discover them. Be specific — *"if HRV is 15% below my 30
 
 <!-- Replace examples:
 - HRV trend matters more than absolute value
-- If sleep_quality ≤ 3 two nights in a row, drop intensity by one zone
+- If last-night sleep is well below your usual two nights in a row, drop intensity by one zone
 - One full rest day per week, no exceptions in build phases
 -->
 
@@ -31,7 +31,7 @@ Add principles as you discover them. Be specific — *"if HRV is 15% below my 30
 ## Red flags
 
 <!-- Replace examples:
-- Two consecutive nights of <6h sleep AND fatigue ≤ 2 → full rest day
+- Two consecutive nights of <6h sleep AND elevated RHR → full rest day
 - Same body part flagged in wellness notes three days running → log to health_events
 - HRV below baseline AND morning RHR above baseline → recovery day, no negotiation
 -->

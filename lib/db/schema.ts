@@ -89,15 +89,6 @@ export const dailyEntries = pgTable(
     spo2AvgPct: numeric("spo2_avg_pct", { precision: 4, scale: 1 }),
     respirationAvgBrpm: numeric("respiration_avg_brpm", { precision: 4, scale: 1 }),
     weightKg: numeric("weight_kg", { precision: 5, scale: 2 }),
-    bodyFatPct: numeric("body_fat_pct", { precision: 4, scale: 1 }),
-    // Smart-scale body composition — captured, vendor-measured scalars.
-    muscleMassKg: numeric("muscle_mass_kg", { precision: 5, scale: 2 }),
-    boneMassKg: numeric("bone_mass_kg", { precision: 4, scale: 2 }),
-    bodyWaterPct: numeric("body_water_pct", { precision: 4, scale: 1 }),
-    // Optional health vitals — only present when the user logs them.
-    bpSystolicMmhg: smallint("bp_systolic_mmhg"),
-    bpDiastolicMmhg: smallint("bp_diastolic_mmhg"),
-    hydrationMl: integer("hydration_ml"),
     // Cross-vendor sensor measurement (Garmin/Oura/Whoop/Apple all expose a
     // nightly skin/wrist temperature deviation). Vendor-branded composites
     // (Body Battery, Readiness) stay in daily/YYYY-MM-DD.md documents.
@@ -126,33 +117,14 @@ export const dailyEntries = pgTable(
     floorsClimbed: integer("floors_climbed"),
     intensityMinModerate: integer("intensity_min_moderate"),
     intensityMinVigorous: integer("intensity_min_vigorous"),
-    fatigue: smallint(),
-    soreness: smallint(),
-    mood: smallint(),
-    stress: smallint(),
-    motivation: smallint(),
-    sleepQuality: smallint("sleep_quality"),
     sleepNotes: text("sleep_notes"),
     wellnessNotes: text("wellness_notes"),
-    mealNotes: text("meal_notes"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex("daily_entries_user_date_key").on(t.userId, t.date),
     index("daily_entries_user_date_idx").on(t.userId, t.date.desc()),
-    check("daily_fatigue_range", sql`${t.fatigue} is null or (${t.fatigue} between 1 and 5)`),
-    check("daily_soreness_range", sql`${t.soreness} is null or (${t.soreness} between 1 and 5)`),
-    check("daily_mood_range", sql`${t.mood} is null or (${t.mood} between 1 and 5)`),
-    check("daily_stress_range", sql`${t.stress} is null or (${t.stress} between 1 and 5)`),
-    check(
-      "daily_motivation_range",
-      sql`${t.motivation} is null or (${t.motivation} between 1 and 5)`,
-    ),
-    check(
-      "daily_sleep_quality_range",
-      sql`${t.sleepQuality} is null or (${t.sleepQuality} between 1 and 5)`,
-    ),
     check(
       "daily_sleep_score_range",
       sql`${t.sleepScore} is null or (${t.sleepScore} between 0 and 100)`,
@@ -185,64 +157,6 @@ export const dailyEntries = pgTable(
       "daily_training_readiness_range",
       sql`${t.trainingReadinessScore} is null or (${t.trainingReadinessScore} between 0 and 100)`,
     ),
-    check(
-      "daily_body_water_range",
-      sql`${t.bodyWaterPct} is null or (${t.bodyWaterPct} between 0 and 100)`,
-    ),
-    check(
-      "daily_muscle_mass_nonneg",
-      sql`${t.muscleMassKg} is null or ${t.muscleMassKg} >= 0`,
-    ),
-    check(
-      "daily_bone_mass_nonneg",
-      sql`${t.boneMassKg} is null or ${t.boneMassKg} >= 0`,
-    ),
-    check(
-      "daily_bp_systolic_range",
-      sql`${t.bpSystolicMmhg} is null or (${t.bpSystolicMmhg} between 50 and 260)`,
-    ),
-    check(
-      "daily_bp_diastolic_range",
-      sql`${t.bpDiastolicMmhg} is null or (${t.bpDiastolicMmhg} between 30 and 200)`,
-    ),
-    check(
-      "daily_hydration_nonneg",
-      sql`${t.hydrationMl} is null or ${t.hydrationMl} >= 0`,
-    ),
-  ],
-);
-
-export const meals = pgTable(
-  "meals",
-  {
-    id: uuid().primaryKey().defaultRandom(),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => usersInAuth.id, { onDelete: "cascade" }),
-    eatenAt: timestamp("eaten_at", { withTimezone: true }).notNull(),
-    mealType: text("meal_type"),
-    description: text().notNull(),
-    // Calories + macros are REQUIRED at the MCP boundary via Zod (see
-    // lib/mcp/tools/log-meal.ts). The DB column itself stays nullable until
-    // the backfill script has populated existing rows; the NOT NULL flip
-    // lands in a separate migration / PR after that. See
-    // scripts/backfill-meal-macros.ts and docs/schema.md.
-    calories: integer(),
-    proteinG: numeric("protein_g", { precision: 6, scale: 2 }),
-    carbsG: numeric("carbs_g", { precision: 6, scale: 2 }),
-    fatG: numeric("fat_g", { precision: 6, scale: 2 }),
-    fiberG: numeric("fiber_g", { precision: 6, scale: 2 }),
-    notes: text(),
-    source: text().notNull().default("manual"),
-    sourceId: text("source_id"),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [
-    index("meals_user_eaten_idx").on(t.userId, t.eatenAt.desc()),
-    uniqueIndex("meals_source_idem_idx")
-      .on(t.userId, t.source, t.sourceId)
-      .where(sql`${t.sourceId} is not null`),
   ],
 );
 

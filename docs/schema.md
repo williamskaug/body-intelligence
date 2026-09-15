@@ -2,10 +2,9 @@
 
 Postgres schema for Body Intelligence. Drizzle is the source of truth — this document mirrors what `lib/db/schema.ts` will declare. RLS policies live alongside the tables in Drizzle migrations.
 
-> **Iteration 2 changes:**
-> - `meals.calories`, `protein_g`, `carbs_g`, `fat_g` are now **NOT NULL** (run `scripts/backfill-meal-macros.ts` before applying the migration on existing data). _Superseded by iteration 3 — nutrition is de-scoped; the NOT-NULL follow-up was abandoned and the columns stay nullable._
-> - New `installed_recipes` table mirrors Cowork-side recipe install + run state (see "Tables" below).
-> - `daily_entries` already carried the four `sleep_*_min` columns; iteration 2 added a setup-guide rule + `scripts/backfill-sleep-stages.ts` to ensure those columns are actually populated rather than dumped into `sleep_notes` prose.
+> **Solo-user trim (migration `20260915154628_drop_meals_and_unused_daily_columns`):**
+> - Dropped table `meals` (and its RLS policy). Per-meal capture is out of scope; dietary philosophy stays in `NUTRITION.md`.
+> - Dropped unused `daily_entries` columns: subjective 1–5 scales (`fatigue`, `soreness`, `mood`, `stress`, `motivation`, `sleep_quality`), empty body-comp / vitals (`body_fat_pct`, `muscle_mass_kg`, `bone_mass_kg`, `body_water_pct`, `bp_systolic_mmhg`, `bp_diastolic_mmhg`, `hydration_ml`), and `meal_notes`. `stress_score` (vendor scalar) is kept.
 
 > **Iteration 3 — derived layer + threads (migrations `20260612144914_derived_layer` + `..._workout_type_backfill`):**
 > - **`derived_daily`** — agent-computed readiness gate, illness composite + per-signal flags, `hrv_z`/`rhr_z`/`sleep_z`, `sleep_debt_7d_min`, `sleep_need_min`, `acute_load_7d`, `chronic_load_28d`, `days_to_race`, provenance. One row per (user, date), unique. **Full-row replace** on write — BI never computes it; the user's scheduled agent does, via `log_derived_daily`.
@@ -88,59 +87,29 @@ One row per (user, date).
 | `spo2_avg_pct` | `numeric(4,1)` | overnight blood-oxygen average |
 | `respiration_avg_brpm` | `numeric(4,1)` | overnight respiration (breaths/min) |
 | `weight_kg` | `numeric(5,2)` | |
-| `body_fat_pct` | `numeric(4,1)` | smart-scale body fat % |
+| `skin_temp_deviation_c` | `numeric(4,2)` | overnight skin/wrist temperature Δ from personal baseline, °C |
+| `sleep_score` | `smallint` | vendor 0–100 last-night sleep score; factor breakdown stays in `daily/*.md` |
+| `stress_score` | `smallint` | vendor 0–100 daily average stress (kept; the 1–5 `stress` scale was dropped) |
+| `body_battery_morning` | `smallint` | 0–100 on waking |
+| `body_battery_high` | `smallint` | |
+| `body_battery_low` | `smallint` | |
+| `body_battery_charged` | `smallint` | |
+| `body_battery_drained` | `smallint` | |
+| `training_readiness_score` | `smallint` | vendor morning readiness 0–100 — a captured observation, **not** BI's gate |
+| `training_status` | `text` | free lowercased vendor status (no CHECK) |
 | `steps` | `integer` | daily total |
 | `active_calories` | `integer` | kcal above BMR |
 | `floors_climbed` | `integer` | |
 | `intensity_min_moderate` | `integer` | WHO-standard moderate minutes |
 | `intensity_min_vigorous` | `integer` | WHO-standard vigorous minutes |
-| `fatigue` | `smallint` | 1–5, **5 = freshest** |
-| `soreness` | `smallint` | 1–5, **5 = least sore** |
-| `mood` | `smallint` | 1–5, **5 = best** |
-| `stress` | `smallint` | 1–5, **5 = least stressed** |
-| `motivation` | `smallint` | 1–5, **5 = highest** |
-| `sleep_quality` | `smallint` | 1–5, **5 = best** |
 | `sleep_notes` | `text` | |
 | `wellness_notes` | `text` | |
-| `meal_notes` | `text` | free-form list of meals; macros/calories optional in prose |
 | `created_at` | `timestamptz default now()` | |
 | `updated_at` | `timestamptz default now()` | |
 
-Constraints: `unique (user_id, date)`. Check constraints on the 1–5 scales: `between 1 and 5`.
+Constraints: `unique (user_id, date)`. Check constraints on vendor 0–100 scores (`sleep_score`, `stress_score`, Body Battery scalars, `training_readiness_score`).
 
 Indexes: `(user_id, date desc)`.
-
-### `meals`
-
-One row per meal. Per-meal capture so recipes can aggregate calories/macros over time and correlate intake with workouts and wellness scales.
-
-| Column | Type | Notes |
-|---|---|---|
-| `id` | `uuid pk` | |
-| `user_id` | `uuid not null` | FK `auth.users(id)` |
-| `eaten_at` | `timestamptz not null` | meal timing matters for fasting windows, pre/post-workout fueling |
-| `meal_type` | `text` | free-form: `"breakfast"`, `"lunch"`, `"snack"`, `"pre-run"`, `"post-workout"` |
-| `description` | `text not null` | what was eaten, in prose: `"oatmeal, banana, almond butter"` |
-| `calories` | `integer` | nullable |
-| `protein_g` | `numeric(6,2)` | nullable |
-| `carbs_g` | `numeric(6,2)` | nullable |
-| `fat_g` | `numeric(6,2)` | nullable |
-| `fiber_g` | `numeric(6,2)` | nullable |
-| `notes` | `text` | how it felt, "skipped a gel", etc. |
-| `source` | `text not null default 'manual'` | free-form: `manual`, `mfp`, `cronometer`, `apple_health`, etc. |
-| `source_id` | `text` | nullable — idempotency key from the source. Required for connector writes; null for manual writes. |
-| `created_at` | `timestamptz default now()` | |
-| `updated_at` | `timestamptz default now()` | |
-
-Indexes: `(user_id, eaten_at desc)`.
-
-Constraints: `unique (user_id, source, source_id) where source_id is not null` — same idempotency pattern as `workouts`. Manual entries (no `source_id`) always insert, so two manual snacks with identical fields are allowed.
-
-**Coexistence with other surfaces:**
-- `daily_entries.meal_notes` stays — it's the day's free-text reflection ("felt heavy after lunch"), different grain.
-- `NUTRITION.md` stays — it's the dietary philosophy ("oatmeal pre-long-run works, gels above 80 min don't"). Same relationship `HEALTH_LOG.md` has to `health_events` and `PRINCIPLES.md` has to `workouts`.
-
-Macro fields are nullable on purpose: manual per-meal logging is usually description-only. Macros fill in via Phase 2 connector recipes (MyFitnessPal, Cronometer, Apple Health) where the source already has them.
 
 ### `health_events`
 
@@ -153,7 +122,7 @@ Append-only log. Active issues = `resolved_date is null`.
 | `date` | `date not null` | when the event was logged or began |
 | `kind` | `text not null` | `injury` \| `illness` \| `symptom` |
 | `body_part` | `text` | `"L knee"`, `"lower back"` — free-form |
-| `severity` | `smallint` | 1–5, **5 = most severe** (note: opposite direction from wellness scales — events are bad) |
+| `severity` | `smallint` | 1–5, **5 = most severe** |
 | `notes` | `text` | mechanism, sensations, what made it better/worse |
 | `resolved_date` | `date` | nullable |
 | `created_at` | `timestamptz default now()` | |
@@ -222,7 +191,6 @@ Enable RLS on every user-scoped table:
 ```sql
 alter table workouts enable row level security;
 alter table daily_entries enable row level security;
-alter table meals enable row level security;
 alter table health_events enable row level security;
 alter table documents enable row level security;
 alter table oauth_tokens enable row level security;
@@ -264,8 +232,8 @@ the migrate↔deploy race.
 
 - `daily_entries` new columns: `stress_score`, `body_battery_morning/high/low/charged/drained`,
   `training_readiness_score` (all smallint 0–100), `training_status` (text, **no
-  CHECK**), `muscle_mass_kg`, `bone_mass_kg`, `body_water_pct`, `bp_systolic_mmhg`,
-  `bp_diastolic_mmhg`, `hydration_ml`. Range CHECKs in the `daily_*_range` style.
+  CHECK**). (Body-comp / BP / hydration columns from this iteration were later
+  dropped in the solo-user trim.)
 - `workout_metrics` new columns: `weather_temp_c`, `weather_humidity_pct`,
   `strength_volume_kg`.
 - New table `workout_zones` (1:1 by `workout_id`, denormalized `date`):

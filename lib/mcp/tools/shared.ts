@@ -5,13 +5,6 @@ export const dateString = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD");
 
-export const isoTimestamp = z
-  .string()
-  .min(10)
-  .describe("ISO 8601 timestamp; offset preferred (e.g. 2026-05-08T08:30:00+02:00)");
-
-export const wellnessScale = z.number().int().min(1).max(5);
-
 // Path validation for the virtual filesystem. Paths are slash-separated
 // segments ending in .md. Folders are implicit — writing to "notes/x.md"
 // creates the file directly, no folder record needed.

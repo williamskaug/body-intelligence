@@ -112,7 +112,7 @@ export default async function DataPage({
     sb
       .from("daily_entries")
       .select(
-        "id, date, sleep_h, sleep_deep_min, sleep_light_min, sleep_rem_min, sleep_awake_min, hrv_ms, rhr_bpm, spo2_avg_pct, respiration_avg_brpm, weight_kg, body_fat_pct, steps, active_calories, floors_climbed, intensity_min_moderate, intensity_min_vigorous, fatigue, soreness, mood, stress, motivation, sleep_quality, sleep_notes, wellness_notes, meal_notes",
+        "id, date, sleep_h, sleep_deep_min, sleep_light_min, sleep_rem_min, sleep_awake_min, hrv_ms, rhr_bpm, spo2_avg_pct, respiration_avg_brpm, weight_kg, steps, active_calories, floors_climbed, intensity_min_moderate, intensity_min_vigorous, sleep_score, stress_score, sleep_notes, wellness_notes",
       )
       .eq("user_id", user.id)
       .gte("date", sinceDate)

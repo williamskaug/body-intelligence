@@ -1,6 +1,6 @@
 # Nutrition
 
-What you've learned about how food affects your training and recovery. This is for Claude — patterns and preferences, not a meal log. Daily meal capture lives in `daily_entries.meal_notes`.
+What you've learned about how food affects your training and recovery. This is for Claude — patterns and preferences, not a meal log.
 
 ## What works for me
 

@@ -1,10 +1,10 @@
 # Body Intelligence (BI)
 
-Personal health intelligence — the same shape as Project Intelligence, but for the athlete-self instead of the work-self. Tracks workouts, sleep, meals, wellness check-ins, and health events. Stores everything as structured rows plus a markdown-style memory layer. **The app has no internal AI** — Claude does all reasoning over the data via the MCP surface this app exposes.
+Personal health intelligence — the same shape as Project Intelligence, but for the athlete-self instead of the work-self. Tracks workouts, sleep, wellness check-ins, and health events. Stores everything as structured rows plus a markdown-style memory layer. **The app has no internal AI** — Claude does all reasoning over the data via the MCP surface this app exposes.
 
 ## Status
 
-Built and deployed (hosted at `bi.vardenlab.com`). Phase 1 (manual capture) and most of Phase 2/3 are live: the eight tables plus `installed_recipes`, `derived_daily`, `workout_metrics`, `health_event_updates`, `workout_zones`, and `capacity_metrics`; ~60 MCP tools (CRUD + a deterministic statistics engine); OAuth AS + Supabase Auth; public signup; the marketing/login/`/data`/`/agents`/`/settings`/`/legal` surfaces; the recipe catalog; and a per-user agent layer (the user's own dawn-agent runs daily and reports via `mark_recipe_run`). Migrations auto-apply to production via `.github/workflows/migrate.yml` on push to `main`.
+Built and deployed (hosted at `bi.vardenlab.com`). Phase 1 (manual capture) and most of Phase 2/3 are live: core entity tables plus `installed_recipes`, `derived_daily`, `workout_metrics`, `health_event_updates`, `workout_zones`, and `capacity_metrics`; MCP tools (CRUD + a deterministic statistics engine); OAuth AS + Supabase Auth; public signup; the marketing/login/`/data`/`/agents`/`/settings`/`/legal` surfaces; the recipe catalog; and a per-user agent layer (the user's own dawn-agent runs daily and reports via `mark_recipe_run`). Migrations auto-apply to production via `.github/workflows/migrate.yml` on push to `main`.
 
 ## The load-bearing constraint
 
@@ -90,10 +90,9 @@ Postgres tables, RLS on every user-scoped one, scoped to `auth.uid()`. Drizzle i
 - `workouts` — one row per workout. `date`, `type` (canonical vocabulary — aliases normalized at the MCP boundary by `normalizeWorkoutType` in `lib/mcp/tools/shared.ts`), `duration_min`, `distance_km`, `avg_hr`, `max_hr`, `rpe`, `shoes`, `source`, `source_id` (idempotency key for connector writes), `notes` (qualitative only).
 - `workout_metrics` — optional 1:1 side table keyed by `workout_id`. Running dynamics + effort sensor data (`cadence_spm`, `gct_ms`, `gct_balance_pct_left`, vertical oscillation/ratio, `stride_len_m`, `te_aerobic`/`te_anaerobic`, `vendor_training_load`, stamina start/end/min, `decoupling_pct`, elevation, speeds, `weather_temp_c`, `weather_humidity_pct`, `strength_volume_kg`). Written via the nested `metrics` object on the workout write tools. `date` denormalized for cheap trend queries. Lap splits + vendor labels stay in `daily/*.md`.
 - `workout_zones` — optional 1:1 side table keyed by `workout_id`. Per-activity time-in-zone in seconds (`hr_z1_s…hr_z5_s`, `power_z1_s…power_z7_s`). Written via the nested `zones` object (parallel to `metrics`) on the workout write tools; full replace per workout. Kept separate so the cycling-heavy power nulls don't bloat `workout_metrics`.
-- `daily_entries` — one row per (user, date), enforced by unique. Universal vitals (`sleep_h` + four sleep-stage minute buckets, `hrv_ms`, `rhr_bpm`, `spo2_avg_pct`, `respiration_avg_brpm`, `skin_temp_deviation_c`, `sleep_score`), recovery vendor *scalars* (`stress_score`, `body_battery_morning/high/low/charged/drained`, `training_readiness_score`, `training_status` — free lowercased text, no CHECK), body composition (`weight_kg`, `body_fat_pct`, `muscle_mass_kg`, `bone_mass_kg`, `body_water_pct`), optional health vitals (`bp_systolic_mmhg`, `bp_diastolic_mmhg`, `hydration_ml`), movement totals (`steps`, `active_calories`, `floors_climbed`, `intensity_min_moderate`, `intensity_min_vigorous`), six 1–5 wellness scales (**5 = best, always, even for fatigue/soreness/stress**), and three free-text notes blocks (sleep, wellness, meals). **Narrowed convention:** a vendor composite *scalar* you want to trend/correlate goes in its column; the factor *breakdown / hourly curve / vendor label* (Body Battery curve, Readiness factors) stays in `daily/YYYY-MM-DD.md`. `training_readiness_score` is a captured observation — NOT BI's gate.
+- `daily_entries` — one row per (user, date), enforced by unique. Universal vitals (`sleep_h` + four sleep-stage minute buckets, `hrv_ms`, `rhr_bpm`, `spo2_avg_pct`, `respiration_avg_brpm`, `skin_temp_deviation_c`, `sleep_score`), recovery vendor *scalars* (`stress_score`, `body_battery_morning/high/low/charged/drained`, `training_readiness_score`, `training_status` — free lowercased text, no CHECK), `weight_kg`, movement totals (`steps`, `active_calories`, `floors_climbed`, `intensity_min_moderate`, `intensity_min_vigorous`), and two free-text notes blocks (`sleep_notes`, `wellness_notes`). **Narrowed convention:** a vendor composite *scalar* you want to trend/correlate goes in its column; the factor *breakdown / hourly curve / vendor label* (Body Battery curve, Readiness factors) stays in `daily/YYYY-MM-DD.md`. `training_readiness_score` is a captured observation — NOT BI's gate.
 - `derived_daily` — one row per (user, date), **written only by the user's scheduled agent** via `log_derived_daily` (the app never computes it). `readiness_gate` (green/amber/red) + `gate_reason`, `illness_composite` + per-signal flags, `hrv_z`/`rhr_z`/`sleep_z`, `sleep_debt_7d_min`, `sleep_need_min`, `acute_load_7d`, `chronic_load_28d`, `days_to_race`, provenance. **Full-row replace** on write (opposite of `log_daily`'s merge) so a recompute never leaves stale flags. `/data`'s TodayHero renders the gate from this table with a freshness ladder.
 - `capacity_metrics` — one row per (user, date), written **only by the `capacity-sync` recipe** via `log_capacity` (partial-merge). Slow-moving fitness-capacity *estimates* the wearable provides: `vo2max_running`/`cycling`, lactate threshold (`hr_bpm`/`pace_s_per_km`/`power_w`), `cycling_ftp_w`, `endurance_score`, `hill_score`, `fitness_age_years`, `running_tolerance_km`, race predictions (`5k`/`10k`/`half`/`marathon_s`, seconds). Wide table so each metric is a column addressable by the stats engine. BI stores the estimate; it never computes capacity. Derived training zones go in `THRESHOLDS.md`, achieved PRs in `RECORDS.md`.
-- `meals` — one row per meal. Supported but **optional** — only logged when the user actually tracks food; the dashboard surfaces nothing for meals. `eaten_at`, `meal_type`, required `description`, `calories` + macros required at the MCP boundary (estimate when no authoritative source), optional `fiber_g`. Day-level prose lives in `daily_entries.meal_notes`; dietary philosophy in `NUTRITION.md`.
 - `health_events` — injuries, illnesses, symptoms. `date`, `kind`, `body_part`, `severity`, `notes` (the stable summary), `resolved_date`, `next_milestone` + `next_milestone_date` (the checkpoint gating progression, e.g. an MRI date).
 - `health_event_updates` — dated thread updates on an event (`event_id`, `date`, `note`, `severity_at_time`). Replaces the old pattern of appending "STATUS …" blocks into `health_events.notes`.
 - `documents` — virtual filesystem for memory files, keyed by `(user_id, path)`. Content is text. Standard paths: `MEMORY.md`, `PROFILE.md`, `PRINCIPLES.md`, `GOALS.md`, `CURRENT.md`, `HEALTH_LOG.md`, `NUTRITION.md`, `EQUIPMENT.md`, `THRESHOLDS.md`, `RECORDS.md`. Convention folders: `daily/`, `briefings/`, `recipes/`, `insights/` (Claude-authored interpretation, surfaced atop the Analyze view).
@@ -110,21 +109,20 @@ Capture (insert / upsert):
 - `log_workout(date, type, ..., metrics?, zones?)` → insert/upsert `workouts`; `type` normalized to the canonical vocabulary; optional nested `metrics` object upserts `workout_metrics`, optional nested `zones` object upserts `workout_zones`
 - `log_daily(date, ...partial)` → upsert `daily_entries`; partial merge (also the update path)
 - `log_capacity(date, ...partial)` → upsert `capacity_metrics`; partial merge (capacity-sync recipe only)
-- `log_meal(eaten_at, description, calories, macros, ...)` → insert/upsert `meals`
 - `log_health_event(date, kind, body_part, ...)` → insert `health_events`
 - `add_health_event_update(event_id, date, note, ...)` → append a dated thread update (replace-per-date for idempotency)
 - `log_derived_daily(date, readiness_gate, ...)` → **full-row replace** upsert into `derived_daily` (agents only)
 - `fs_write(path, content)` → upsert `documents`
-- `bulk_log_workouts` / `bulk_log_daily` / `bulk_log_meals` / `bulk_log_capacity` → up to 500 rows for connector backfills
+- `bulk_log_workouts` / `bulk_log_daily` / `bulk_log_capacity` → up to 500 rows for connector backfills
 
-Update / resolve by id: `update_workout`, `update_meal`, `update_health_event` (also sets `next_milestone*`; pass `resolved_date` to resolve), `resolve_health_event(id, note?)`.
+Update / resolve by id: `update_workout`, `update_health_event` (also sets `next_milestone*`; pass `resolved_date` to resolve), `resolve_health_event(id, note?)`.
 
-Delete: `delete_workout`, `delete_daily_entry(date)`, `delete_meal`, `delete_health_event`, `fs_delete(path)`. Filesystem: `fs_move`.
+Delete: `delete_workout`, `delete_daily_entry(date)`, `delete_health_event`, `fs_delete(path)`. Filesystem: `fs_move`.
 
 Read:
 - `fs_read` / `fs_list(prefix?)` / `fs_search(query)` — virtual filesystem
-- `get_recent(days, kinds=['workouts','daily','meals','health_events','derived','capacity'])` — typed bundle
-- `get_workout` (joins `workout_metrics` + `workout_zones`), `get_daily`, `get_meal`, `get_health_event` (returns the thread), `get_capacity(as_of?)` (latest known value per capacity metric), `list_*` range queries
+- `get_recent(days, kinds=['workouts','daily','health_events','derived','capacity'])` — typed bundle
+- `get_workout` (joins `workout_metrics` + `workout_zones`), `get_daily`, `get_health_event` (returns the thread), `get_capacity(as_of?)` (latest known value per capacity metric), `list_*` range queries
 - `get_briefing(date?)` — reads `briefings/YYYY-MM-DD.md`
 - `search_everything(query)` — text search across entity tables + documents
 
@@ -152,7 +150,7 @@ A virtual filesystem of markdown documents per user, stored as rows in `document
 
 Suggested folder layout for organization:
 - `daily/YYYY-MM-DD.md` — per-day vendor scores (Body Battery, Readiness, etc.) and anomalies
-- `weekly/YYYY-Www.md` — weekly-review outputs
+- `weekly/YYYY-Www.md` — weekly summaries
 - `insights/YYYY-Www.md` — the insights recipe's interpretation of the stats engine (surfaced atop the Analyze view)
 - `notes/<topic>.md` — thematic notes (e.g. `notes/altitude-camp-2026.md`)
 - `races/<race-slug>.md` — per-race planning + post-race debriefs
@@ -173,7 +171,7 @@ Suggested folder layout for organization:
 Each template is markdown with embedded fill-in prompts so a new user knows what belongs in each file. Templates are drafted in `lib/memory/templates/` and committed to the repo — they're the source of truth for what gets seeded.
 
 **Format conventions enforced by templates:**
-- `GOALS.md` race blocks use a fixed shape (`## Race: <name>` + `- Date: YYYY-MM-DD` + Tier/Distance/Goal/Notes). The race-countdown recipe parses these — break the convention and the recipe stops firing.
+- `GOALS.md` race blocks use a fixed shape (`## Race: <name>` + `- Date: YYYY-MM-DD` + Tier/Distance/Goal/Notes). The dawn agent parses these — break the convention and days_to_race stops firing.
 - `HEALTH_LOG.md` event blocks use a fixed shape (`## YYYY-MM-DD — <body part> — <kind>` + Mechanism/Severity/Treatment/Resolution/Lessons). The health-log audit recipe relies on this.
 
 ## Recipe library
@@ -183,16 +181,17 @@ Each template is markdown with embedded fill-in prompts so a new user knows what
 `/agents` has two layers. **Your agents** (top): the caller's own automation — recipe docs under `recipes/` in the virtual filesystem (parsed by `lib/agents/recipe-doc.ts`, optional YAML front-matter `title`/`schedule`/`covers`) merged with `installed_recipes` run history, plus any non-catalog recipe id tracked via `mark_recipe_run`. **Recipe library** (below): the catalog. A catalog card whose `covers` tags are fully covered by an active user recipe shows "covered by your <recipe>" instead of "not installed" — deterministic tag intersection, no server reasoning.
 
 Catalog:
-- **Dawn agent** (flagship, `autopilot`, requires Garmin) — daily pass: sync yesterday → compute baselines + readiness gate (`log_derived_daily`) → update health threads (`add_health_event_update`) → write `briefings/YYYY-MM-DD.md`. Reads context from PROFILE/GOALS/PRINCIPLES rather than hardcoding it.
+- **Dawn agent** (flagship, `autopilot`, requires Garmin) — daily pass: sync yesterday → compute baselines + readiness gate (`log_derived_daily`) → update health threads (`add_health_event_update`) → write `briefings/YYYY-MM-DD.md`. Reads context from PROFILE/GOALS/PRINCIPLES rather than hardcoding it. Also covers Strava-only activities, morning check-in, evening catch-up, and race countdown.
 - Onboarding (user-triggered once) — fills PROFILE / GOALS / PRINCIPLES
-- Morning check-in / Evening reflection (manual path for users without a wearable; the dawn agent supersedes them)
-- Weekly review (reads `derived` rows), Race countdown, Health-log audit
-- Garmin sync, Strava sync (sync-only; subsumed by the dawn agent)
+- Health-log audit
+- Garmin sync (sync-only; subsumed by the dawn agent for users who want the full pass)
 - **Capacity sync** (`connector`, weekly, requires Garmin) — pulls slow-moving capacity (VO2max/LT/FTP/endurance/race-predictions) into `capacity_metrics`; refreshes `THRESHOLDS.md` + `RECORDS.md`
 - **Backfill** (`connector`, one-shot, requires Garmin) — iterates the last 90 days of Garmin workouts and `update_workout`s the structured `metrics`/`zones` (HR zones, vendor load, decoupling, weather) + seeds capacity, so training load switches from the RPE fallback to zone-TRIMP and the empty Analyze bands light up retroactively
 - **Insights scan** (`review`, weekly) — reads the statistics engine (correlations, trends, CTL/ATL/TSB, distributions) and writes a plain-language interpretation to `insights/YYYY-Www.md`: the "what to optimize" reasoning the app deliberately never does itself
 
-Full prompts: `docs/recipes.md`.
+User-authored recipe docs under `recipes/` (e.g. sleep-guardian, sunday-architect) live in the virtual filesystem, not this catalog.
+
+Canonical prompts: `lib/agents/recipe-data.ts`. Catalog notes: `docs/recipes.md`.
 
 ## Auth model
 

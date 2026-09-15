@@ -9,7 +9,7 @@ export const searchEverythingInputSchema = {
 export type SearchEverythingInput = { query: string; limit?: number };
 
 type Hit = {
-  kind: "workout" | "daily_entry" | "meal" | "health_event" | "document";
+  kind: "workout" | "daily_entry" | "health_event" | "document";
   id: string;
   date?: string;
   path?: string;
@@ -45,20 +45,9 @@ export async function searchEverything(userId: string, input: SearchEverythingIn
 
   const dailyP = sb
     .from("daily_entries")
-    .select("id, date, sleep_notes, wellness_notes, meal_notes, updated_at")
+    .select("id, date, sleep_notes, wellness_notes, updated_at")
     .eq("user_id", userId)
-    .or(
-      `sleep_notes.ilike.${ilikePattern},wellness_notes.ilike.${ilikePattern},meal_notes.ilike.${ilikePattern}`,
-    )
-    .limit(limit);
-
-  const mealsP = sb
-    .from("meals")
-    .select("id, eaten_at, description, notes, meal_type, updated_at")
-    .eq("user_id", userId)
-    .or(
-      `description.ilike.${ilikePattern},notes.ilike.${ilikePattern},meal_type.ilike.${ilikePattern}`,
-    )
+    .or(`sleep_notes.ilike.${ilikePattern},wellness_notes.ilike.${ilikePattern}`)
     .limit(limit);
 
   const healthEventsP = sb
@@ -68,11 +57,10 @@ export async function searchEverything(userId: string, input: SearchEverythingIn
     .or(`body_part.ilike.${ilikePattern},notes.ilike.${ilikePattern},kind.ilike.${ilikePattern}`)
     .limit(limit);
 
-  const [documents, workouts, daily, meals, healthEvents] = await Promise.all([
+  const [documents, workouts, daily, healthEvents] = await Promise.all([
     documentsP,
     workoutsP,
     dailyP,
-    mealsP,
     healthEventsP,
   ]);
 
@@ -80,7 +68,6 @@ export async function searchEverything(userId: string, input: SearchEverythingIn
     documents.error && `documents: ${documents.error.message}`,
     workouts.error && `workouts: ${workouts.error.message}`,
     daily.error && `daily_entries: ${daily.error.message}`,
-    meals.error && `meals: ${meals.error.message}`,
     healthEvents.error && `health_events: ${healthEvents.error.message}`,
   ].filter(Boolean);
   if (errors.length) throw new Error(`search_everything: ${errors.join("; ")}`);
@@ -105,16 +92,9 @@ export async function searchEverything(userId: string, input: SearchEverythingIn
       id: r.id,
       date: r.date,
       snippet: makeSnippet(
-        [r.sleep_notes, r.wellness_notes, r.meal_notes].filter(Boolean).join(" — "),
+        [r.sleep_notes, r.wellness_notes].filter(Boolean).join(" — "),
         lowerQuery,
       ),
-      updated_at: r.updated_at,
-    })),
-    ...(meals.data ?? []).map<Hit>((r) => ({
-      kind: "meal",
-      id: r.id,
-      date: r.eaten_at,
-      snippet: makeSnippet(`${r.description} — ${r.notes ?? ""}`, lowerQuery),
       updated_at: r.updated_at,
     })),
     ...(healthEvents.data ?? []).map<Hit>((r) => ({

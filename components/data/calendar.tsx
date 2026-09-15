@@ -20,12 +20,6 @@ export type CalendarDaily = {
   sleep_h: string | null;
   hrv_ms: number | null;
   rhr_bpm: number | null;
-  fatigue: number | null;
-  soreness: number | null;
-  mood: number | null;
-  stress: number | null;
-  motivation: number | null;
-  sleep_quality: number | null;
 };
 
 export type CalendarEvent = {
@@ -63,7 +57,7 @@ export function Calendar({
     );
   }
 
-  const wellnessBaseline = computeBaseline(daily.map((d) => wellnessComposite(d)));
+  const sleepBaseline = computeBaseline(daily.map((d) => numSleep(d)));
   const workoutsByDate = groupBy(workouts, (w) => w.date);
   const dailyByDate = new Map(daily.map((d) => [d.date, d] as const));
   const eventsByDate = groupBy(events, (e) => e.date);
@@ -93,7 +87,7 @@ export function Calendar({
           dailyByDate={dailyByDate}
           eventsByDate={eventsByDate}
           gateByDate={gateByDate}
-          wellnessBaseline={wellnessBaseline}
+          sleepBaseline={sleepBaseline}
         />
       ))}
       <Legend />
@@ -111,7 +105,7 @@ function MonthGrid({
   dailyByDate,
   eventsByDate,
   gateByDate,
-  wellnessBaseline,
+  sleepBaseline,
 }: {
   year: number;
   month: number; // 0-indexed
@@ -122,7 +116,7 @@ function MonthGrid({
   dailyByDate: Map<string, CalendarDaily>;
   eventsByDate: Map<string, CalendarEvent[]>;
   gateByDate: Record<string, Gate>;
-  wellnessBaseline: ReturnType<typeof computeBaseline>;
+  sleepBaseline: ReturnType<typeof computeBaseline>;
 }) {
   const monthLabel = new Date(Date.UTC(year, month, 1)).toLocaleDateString(
     undefined,
@@ -183,7 +177,7 @@ function MonthGrid({
             daily={dailyByDate.get(cell.iso)}
             events={eventsByDate.get(cell.iso) ?? []}
             gate={gateByDate[cell.iso]}
-            wellnessBaseline={wellnessBaseline}
+            sleepBaseline={sleepBaseline}
           />
         ))}
       </div>
@@ -200,7 +194,7 @@ function DayCell({
   daily,
   events,
   gate,
-  wellnessBaseline,
+  sleepBaseline,
 }: {
   iso: string;
   inMonth: boolean;
@@ -210,7 +204,7 @@ function DayCell({
   daily: CalendarDaily | undefined;
   events: CalendarEvent[];
   gate: Gate | undefined;
-  wellnessBaseline: ReturnType<typeof computeBaseline>;
+  sleepBaseline: ReturnType<typeof computeBaseline>;
 }) {
   const dayNum = Number(iso.slice(8, 10));
 
@@ -227,8 +221,8 @@ function DayCell({
     );
   }
 
-  const wellness = wellnessComposite(daily);
-  const tone = classify(wellness, wellnessBaseline, true);
+  const sleepH = numSleep(daily);
+  const tone = classify(sleepH, sleepBaseline, true);
   const bg = backgroundClassFor(tone.direction);
 
   const titleLines: string[] = [iso];
@@ -236,7 +230,6 @@ function DayCell({
     const sleep = daily.sleep_h != null ? `${Number(daily.sleep_h).toFixed(1)}h` : "—";
     const hrv = daily.hrv_ms ?? "—";
     titleLines.push(`Sleep ${sleep} · HRV ${hrv}`);
-    if (wellness != null) titleLines.push(`Wellness avg ${wellness.toFixed(2)}/5`);
   }
   if (workouts.length > 0) {
     for (const w of workouts) {
@@ -353,7 +346,7 @@ function Legend() {
         </span>
       </summary>
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-        <LegendItem swatch="bg-emerald-500/30 border-emerald-500/40" label="Wellness above baseline" />
+        <LegendItem swatch="bg-emerald-500/30 border-emerald-500/40" label="Sleep above baseline" />
         <LegendItem swatch="bg-card border-border" label="In baseline" />
         <LegendItem swatch="bg-amber-500/30 border-amber-500/40" label="Below baseline" />
         <span className="mx-2 hidden h-3 w-px bg-border sm:inline-block" />
@@ -395,13 +388,10 @@ function backgroundClassFor(direction: "good" | "warn" | "neutral"): string {
   }
 }
 
-function wellnessComposite(d: CalendarDaily | undefined): number | null {
-  if (!d) return null;
-  const xs = [d.fatigue, d.soreness, d.mood, d.stress, d.motivation, d.sleep_quality].filter(
-    (v): v is number => v != null && Number.isFinite(v),
-  );
-  if (xs.length === 0) return null;
-  return xs.reduce((a, b) => a + b, 0) / xs.length;
+function numSleep(d: CalendarDaily | undefined): number | null {
+  if (!d || d.sleep_h == null) return null;
+  const n = Number(d.sleep_h);
+  return Number.isFinite(n) ? n : null;
 }
 
 function monthsCovering(startDate: string, endDate: string): Array<{ year: number; month: number }> {

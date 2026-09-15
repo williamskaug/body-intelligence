@@ -16,9 +16,9 @@ describe("resolveMetric", () => {
       table: "daily_entries",
       column: "stress_score",
     });
-    expect(resolveMetric("body_fat_pct")).toEqual({
+    expect(resolveMetric("weight_kg")).toEqual({
       table: "daily_entries",
-      column: "body_fat_pct",
+      column: "weight_kg",
     });
     expect(resolveMetric("workout_rpe")).toEqual({ table: "workouts", column: "rpe" });
     expect(resolveMetric("workout_cadence_spm")).toEqual({
