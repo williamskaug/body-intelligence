@@ -15,8 +15,8 @@ export default function NotFound() {
         your data or the recipe library.
       </p>
       <div className="flex flex-wrap justify-center gap-3">
-        <Link href="/data" className={buttonVariants({ size: "lg" })}>
-          Open your data
+        <Link href="/today" className={buttonVariants({ size: "lg" })}>
+          Open the app
         </Link>
         <Link
           href="/"

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
 
 export function McpUrl({ url }: { url: string }) {
   const [copied, setCopied] = useState(false);
@@ -17,11 +16,17 @@ export function McpUrl({ url }: { url: string }) {
   }
 
   return (
-    <div className="flex items-center gap-2 rounded-md border bg-muted/30 p-2">
-      <code className="flex-1 truncate font-mono text-xs">{url}</code>
-      <Button size="sm" variant="outline" onClick={copy}>
+    <div className="flex items-center gap-2">
+      <code className="flex-1 truncate border border-neutral-300 bg-neutral-50 px-2 py-1 font-mono text-[12px]">
+        {url}
+      </code>
+      <button
+        type="button"
+        onClick={copy}
+        className="border border-neutral-300 px-2 py-1 text-[10px] font-medium uppercase tracking-wide hover:bg-neutral-50"
+      >
         {copied ? "Copied" : "Copy"}
-      </Button>
+      </button>
     </div>
   );
 }

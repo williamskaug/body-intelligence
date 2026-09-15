@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
   const cookieJar = await cookies();
   const nextCookie = cookieJar.get(NEXT_COOKIE)?.value;
   const nextParam = searchParams.get("next");
-  const next = pickSafeNext(nextCookie ?? nextParam ?? "/");
+  const next = pickSafeNext(nextCookie ?? nextParam ?? "/today");
 
   // Supabase appends ?error=...&error_code=... when the magic link is
   // invalid, expired, or already-consumed (often by an email link scanner).
@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
 
 function pickSafeNext(value: string): string {
   if (value.startsWith("/") && !value.startsWith("//")) return value;
-  return "/";
+  return "/today";
 }
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;

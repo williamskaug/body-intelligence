@@ -51,7 +51,7 @@ export function CorrelationHeatmap({ metrics, matrix, n }: CorrelationHeatmapPro
                 className="sticky left-0 whitespace-nowrap bg-card pr-2 text-left font-normal"
               >
                 <Link
-                  href={`/data/metric/${mi}`}
+                  href={`/analyze/metric/${mi}`}
                   className="text-muted-foreground hover:text-foreground hover:underline"
                 >
                   {i + 1}. {metricLabel(mi)}

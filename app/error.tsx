@@ -37,7 +37,7 @@ export default function GlobalError({
           Try again
         </Button>
         <Link
-          href="/data"
+          href="/today"
           className={buttonVariants({ variant: "ghost", size: "lg" })}
         >
           Back to your data
