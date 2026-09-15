@@ -1,11 +1,11 @@
 import { z } from "zod";
 import { adminClient } from "@/lib/supabase/admin";
 
-const STREAK_KINDS = ["daily_entry", "meal_logged", "workout"] as const;
+const STREAK_KINDS = ["daily_entry", "workout"] as const;
 
 export const getStreakInputSchema = {
   kind: z.enum(STREAK_KINDS).describe(
-    "Which habit to measure. 'meal_logged' counts a day with ≥3 meals logged.",
+    "Which habit to measure. 'daily_entry' counts any daily_entries row that day; 'workout' counts any workout that day.",
   ),
 };
 
@@ -48,19 +48,6 @@ export async function getStreak(userId: string, input: GetStreakInput) {
     for (const row of (data ?? []) as Array<{ date: string }>) {
       filledDays.add(row.date);
     }
-  } else if (input.kind === "meal_logged") {
-    const { data, error } = await sb
-      .from("meals")
-      .select("eaten_at")
-      .eq("user_id", userId)
-      .gte("eaten_at", `${earliestIso}T00:00:00Z`);
-    if (error) throw new Error(`get_streak meal: ${error.message}`);
-    const counts = new Map<string, number>();
-    for (const row of (data ?? []) as Array<{ eaten_at: string }>) {
-      const day = row.eaten_at.slice(0, 10);
-      counts.set(day, (counts.get(day) ?? 0) + 1);
-    }
-    for (const [day, n] of counts) if (n >= 3) filledDays.add(day);
   }
 
   // Build the contiguous date axis ending today.

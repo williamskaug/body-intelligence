@@ -1,7 +1,7 @@
 # Training thresholds & zones
 
 Refreshed weekly by the capacity-sync recipe from your wearable's lab-style
-estimates. The dawn-agent and race-countdown recipes parse the blocks below to
+estimates. The dawn-agent recipe parses the blocks below to
 set workout targets — keep the block shapes and the `Key: value` lines intact
 or they stop firing. The raw capacity numbers (VO2max, FTP, predictions) live
 in the `capacity_metrics` table; this file holds the derived zones Claude

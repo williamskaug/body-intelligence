@@ -117,7 +117,7 @@ export default async function SettingsPage() {
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
             Derived from the <span className="font-mono">source</span> column on
-            workouts and meals — which connectors have been writing into BI.
+            workouts — which connectors have been writing into BI.
             A primary source is <span className="font-medium">fresh</span> when
             its sync recipe ran today (even on a rest day), and only{" "}
             <span className="font-medium">down</span> when it goes overdue.
@@ -347,19 +347,12 @@ async function loadDataSources(userId: string): Promise<DataSource[]> {
   const sinceIso = new Date(Date.now() - 30 * 86_400_000).toISOString();
   const todayIso = new Date().toISOString().slice(0, 10);
 
-  // workouts + meals contribute (source, max(created_at), count). Recipe runs
+  // workouts contribute (source, max(created_at), count). Recipe runs
   // provide the heartbeat. daily_entries has no source column today.
-  const [workoutRows, mealRows, allWorkoutRows, allMealRows, runs] = await Promise.all([
+  const [workoutRows, allWorkoutRows, runs] = await Promise.all([
     sb.from("workouts").select("source, created_at").eq("user_id", userId).gte("created_at", sinceIso),
-    sb.from("meals").select("source, created_at").eq("user_id", userId).gte("created_at", sinceIso),
     sb
       .from("workouts")
-      .select("source, created_at")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(500),
-    sb
-      .from("meals")
       .select("source, created_at")
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
@@ -370,8 +363,7 @@ async function loadDataSources(userId: string): Promise<DataSource[]> {
       .eq("user_id", userId),
   ]);
   if (workoutRows.error) throw new Error(`loadDataSources workouts: ${workoutRows.error.message}`);
-  if (mealRows.error) throw new Error(`loadDataSources meals: ${mealRows.error.message}`);
-  if (allWorkoutRows.error || allMealRows.error) return [];
+  if (allWorkoutRows.error) return [];
 
   const heartbeatRecipes = new Set(
     ((runs.data ?? []) as Array<{
@@ -395,10 +387,10 @@ async function loadDataSources(userId: string): Promise<DataSource[]> {
     return grouped.get(source)!;
   };
 
-  for (const row of [...(workoutRows.data ?? []), ...(mealRows.data ?? [])] as RawRow[]) {
+  for (const row of (workoutRows.data ?? []) as RawRow[]) {
     ensure(row.source).records_30d += 1;
   }
-  for (const row of [...(allWorkoutRows.data ?? []), ...(allMealRows.data ?? [])] as RawRow[]) {
+  for (const row of (allWorkoutRows.data ?? []) as RawRow[]) {
     const g = ensure(row.source);
     if (!g.last_write_at || row.created_at > g.last_write_at) g.last_write_at = row.created_at;
   }

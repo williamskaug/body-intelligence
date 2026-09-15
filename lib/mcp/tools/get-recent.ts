@@ -4,7 +4,6 @@ import { adminClient } from "@/lib/supabase/admin";
 const KIND_VALUES = [
   "workouts",
   "daily",
-  "meals",
   "health_events",
   "derived",
   "capacity",
@@ -16,7 +15,7 @@ export const getRecentInputSchema = {
     .array(z.enum(KIND_VALUES))
     .optional()
     .describe(
-      "Subset of kinds to return. Omit for all six. 'derived' returns agent-computed derived_daily rows (readiness gate, z-scores, sleep debt); 'capacity' returns capacity_metrics snapshots (VO2max, LT, FTP, race predictions). Unresolved health events are ALWAYS returned regardless of the date window when 'health_events' is in kinds.",
+      "Subset of kinds to return. Omit for all five. 'derived' returns agent-computed derived_daily rows (readiness gate, z-scores, sleep debt); 'capacity' returns capacity_metrics snapshots (VO2max, LT, FTP, race predictions). Unresolved health events are ALWAYS returned regardless of the date window when 'health_events' is in kinds.",
     ),
 };
 
@@ -32,19 +31,16 @@ export async function getRecent(userId: string, input: GetRecentInput) {
   const since = new Date();
   since.setUTCDate(since.getUTCDate() - input.days);
   const sinceDate = since.toISOString().slice(0, 10); // YYYY-MM-DD
-  const sinceIso = since.toISOString();
 
   const result: {
     workouts: unknown[];
     daily: unknown[];
-    meals: unknown[];
     health_events: unknown[];
     derived: unknown[];
     capacity: unknown[];
   } = {
     workouts: [],
     daily: [],
-    meals: [],
     health_events: [],
     derived: [],
     capacity: [],
@@ -70,17 +66,6 @@ export async function getRecent(userId: string, input: GetRecentInput) {
       .order("date", { ascending: false });
     if (error) throw new Error(`get_recent daily: ${error.message}`);
     result.daily = data ?? [];
-  }
-
-  if (wanted.has("meals")) {
-    const { data, error } = await sb
-      .from("meals")
-      .select("*")
-      .eq("user_id", userId)
-      .gte("eaten_at", sinceIso)
-      .order("eaten_at", { ascending: false });
-    if (error) throw new Error(`get_recent meals: ${error.message}`);
-    result.meals = data ?? [];
   }
 
   if (wanted.has("derived")) {

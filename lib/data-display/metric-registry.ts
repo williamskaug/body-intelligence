@@ -11,7 +11,7 @@ export type MetricDef = {
   label: string;
   unit: string;
   decimals: number;
-  // true → higher is better (HRV, sleep); false → lower is better (RHR, soreness
+  // true → higher is better (HRV, sleep); false → lower is better (RHR);
   // in raw terms); null → neutral (weight). Drives band coloring only.
   higherIsBetter: boolean | null;
   domain: MetricDomain;
@@ -34,24 +34,11 @@ const DEFS: MetricDef[] = [
   { key: "stress_score", label: "Stress", unit: "", decimals: 0, higherIsBetter: false, domain: "recovery" },
   { key: "body_battery_morning", label: "Body Battery (wake)", unit: "", decimals: 0, higherIsBetter: true, domain: "recovery" },
   { key: "training_readiness_score", label: "Training readiness", unit: "", decimals: 0, higherIsBetter: true, domain: "recovery" },
-  // ---- wellness scales (5 = best) ----
-  { key: "fatigue", label: "Fatigue (5=best)", unit: "/5", decimals: 0, higherIsBetter: true, domain: "recovery" },
-  { key: "soreness", label: "Soreness (5=best)", unit: "/5", decimals: 0, higherIsBetter: true, domain: "injury" },
-  { key: "mood", label: "Mood", unit: "/5", decimals: 0, higherIsBetter: true, domain: "recovery" },
-  { key: "stress", label: "Stress (5=best)", unit: "/5", decimals: 0, higherIsBetter: true, domain: "recovery" },
-  { key: "motivation", label: "Motivation", unit: "/5", decimals: 0, higherIsBetter: true, domain: "recovery" },
-  { key: "sleep_quality", label: "Sleep quality", unit: "/5", decimals: 0, higherIsBetter: true, domain: "recovery" },
   // ---- movement / body ----
   { key: "steps", label: "Steps", unit: "", decimals: 0, higherIsBetter: true, domain: "body" },
   { key: "active_calories", label: "Active kcal", unit: "", decimals: 0, higherIsBetter: true, domain: "body" },
   { key: "floors_climbed", label: "Floors", unit: "", decimals: 0, higherIsBetter: true, domain: "body" },
   { key: "weight_kg", label: "Weight", unit: "kg", decimals: 1, higherIsBetter: null, domain: "body" },
-  { key: "body_fat_pct", label: "Body fat", unit: "%", decimals: 1, higherIsBetter: null, domain: "body" },
-  { key: "muscle_mass_kg", label: "Muscle mass", unit: "kg", decimals: 1, higherIsBetter: null, domain: "body" },
-  { key: "body_water_pct", label: "Body water", unit: "%", decimals: 1, higherIsBetter: null, domain: "body" },
-  { key: "bp_systolic_mmhg", label: "BP systolic", unit: "mmHg", decimals: 0, higherIsBetter: false, domain: "body" },
-  { key: "bp_diastolic_mmhg", label: "BP diastolic", unit: "mmHg", decimals: 0, higherIsBetter: false, domain: "body" },
-  { key: "hydration_ml", label: "Hydration", unit: "ml", decimals: 0, higherIsBetter: true, domain: "body" },
   // ---- derived ----
   { key: "derived_hrv_z", label: "HRV z-score", unit: "z", decimals: 2, higherIsBetter: true, domain: "recovery" },
   { key: "derived_rhr_z", label: "RHR z-score", unit: "z", decimals: 2, higherIsBetter: false, domain: "recovery" },

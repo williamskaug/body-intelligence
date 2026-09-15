@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { adminClient } from "@/lib/supabase/admin";
-import { dateString, wellnessScale } from "./shared";
+import { dateString } from "./shared";
 
 export const logDailyInputSchema = {
   date: dateString,
@@ -14,13 +14,6 @@ export const logDailyInputSchema = {
   spo2_avg_pct: z.number().min(50).max(100).optional(),
   respiration_avg_brpm: z.number().min(4).max(40).optional(),
   weight_kg: z.number().min(20).max(400).optional(),
-  body_fat_pct: z.number().min(2).max(70).optional(),
-  muscle_mass_kg: z.number().min(0).max(100).optional(),
-  bone_mass_kg: z.number().min(0).max(20).optional(),
-  body_water_pct: z.number().min(0).max(100).optional(),
-  bp_systolic_mmhg: z.number().int().min(50).max(260).optional(),
-  bp_diastolic_mmhg: z.number().int().min(30).max(200).optional(),
-  hydration_ml: z.number().int().min(0).max(20_000).optional(),
   skin_temp_deviation_c: z
     .number()
     .min(-10)
@@ -82,27 +75,8 @@ export const logDailyInputSchema = {
   floors_climbed: z.number().int().min(0).max(2000).optional(),
   intensity_min_moderate: z.number().int().min(0).max(1440).optional(),
   intensity_min_vigorous: z.number().int().min(0).max(1440).optional(),
-  fatigue: wellnessScale
-    .optional()
-    .describe(
-      "1–5. 5 = best (no fatigue). INVERTED relative to natural reading — 5 ALWAYS means good.",
-    ),
-  soreness: wellnessScale
-    .optional()
-    .describe(
-      "1–5. 5 = best (no soreness). INVERTED — 5 ALWAYS means good, same as fatigue and stress.",
-    ),
-  mood: wellnessScale.optional().describe("1–5. 5 = best."),
-  stress: wellnessScale
-    .optional()
-    .describe(
-      "1–5. 5 = best (no stress). INVERTED — 5 ALWAYS means good, same as fatigue and soreness.",
-    ),
-  motivation: wellnessScale.optional().describe("1–5. 5 = best."),
-  sleep_quality: wellnessScale.optional().describe("1–5. 5 = best."),
   sleep_notes: z.string().max(10_000).optional(),
   wellness_notes: z.string().max(10_000).optional(),
-  meal_notes: z.string().max(10_000).optional(),
 };
 
 export type LogDailyInput = {
@@ -117,13 +91,6 @@ export type LogDailyInput = {
   spo2_avg_pct?: number;
   respiration_avg_brpm?: number;
   weight_kg?: number;
-  body_fat_pct?: number;
-  muscle_mass_kg?: number;
-  bone_mass_kg?: number;
-  body_water_pct?: number;
-  bp_systolic_mmhg?: number;
-  bp_diastolic_mmhg?: number;
-  hydration_ml?: number;
   skin_temp_deviation_c?: number;
   sleep_score?: number;
   stress_score?: number;
@@ -139,16 +106,39 @@ export type LogDailyInput = {
   floors_climbed?: number;
   intensity_min_moderate?: number;
   intensity_min_vigorous?: number;
-  fatigue?: number;
-  soreness?: number;
-  mood?: number;
-  stress?: number;
-  motivation?: number;
-  sleep_quality?: number;
   sleep_notes?: string;
   wellness_notes?: string;
-  meal_notes?: string;
 };
+
+export const DAILY_FIELDS = [
+  "sleep_h",
+  "sleep_deep_min",
+  "sleep_light_min",
+  "sleep_rem_min",
+  "sleep_awake_min",
+  "hrv_ms",
+  "rhr_bpm",
+  "spo2_avg_pct",
+  "respiration_avg_brpm",
+  "weight_kg",
+  "skin_temp_deviation_c",
+  "sleep_score",
+  "stress_score",
+  "body_battery_morning",
+  "body_battery_high",
+  "body_battery_low",
+  "body_battery_charged",
+  "body_battery_drained",
+  "training_readiness_score",
+  "training_status",
+  "steps",
+  "active_calories",
+  "floors_climbed",
+  "intensity_min_moderate",
+  "intensity_min_vigorous",
+  "sleep_notes",
+  "wellness_notes",
+] as const;
 
 export async function logDaily(userId: string, input: LogDailyInput) {
   const sb = adminClient();
@@ -156,49 +146,7 @@ export async function logDaily(userId: string, input: LogDailyInput) {
   // Build a partial payload — undefined fields are skipped, so a partial call
   // (e.g. just sleep_h) doesn't clobber unrelated columns.
   const partial: Record<string, unknown> = { updated_at: new Date().toISOString() };
-  for (const key of [
-    "sleep_h",
-    "sleep_deep_min",
-    "sleep_light_min",
-    "sleep_rem_min",
-    "sleep_awake_min",
-    "hrv_ms",
-    "rhr_bpm",
-    "spo2_avg_pct",
-    "respiration_avg_brpm",
-    "weight_kg",
-    "body_fat_pct",
-    "muscle_mass_kg",
-    "bone_mass_kg",
-    "body_water_pct",
-    "bp_systolic_mmhg",
-    "bp_diastolic_mmhg",
-    "hydration_ml",
-    "skin_temp_deviation_c",
-    "sleep_score",
-    "stress_score",
-    "body_battery_morning",
-    "body_battery_high",
-    "body_battery_low",
-    "body_battery_charged",
-    "body_battery_drained",
-    "training_readiness_score",
-    "training_status",
-    "steps",
-    "active_calories",
-    "floors_climbed",
-    "intensity_min_moderate",
-    "intensity_min_vigorous",
-    "fatigue",
-    "soreness",
-    "mood",
-    "stress",
-    "motivation",
-    "sleep_quality",
-    "sleep_notes",
-    "wellness_notes",
-    "meal_notes",
-  ] as const) {
+  for (const key of DAILY_FIELDS) {
     if (input[key] !== undefined) partial[key] = input[key];
   }
 

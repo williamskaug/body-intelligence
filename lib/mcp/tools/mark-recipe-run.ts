@@ -7,7 +7,7 @@ export const markRecipeRunInputSchema = {
     .trim()
     .min(1)
     .max(100)
-    .describe("The recipe id from lib/agents/recipe-data.ts (e.g. 'morning-checkin')."),
+    .describe("The recipe id from lib/agents/recipe-data.ts (e.g. 'dawn-agent')."),
   status: z
     .enum(["ok", "failed"])
     .describe("Mark this run successful or failed."),

@@ -5,7 +5,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { fsWrite } from "@/lib/mcp/tools/fs-write";
 import { logDaily, type LogDailyInput } from "@/lib/mcp/tools/log-daily";
-import { documentPath, wellnessScale, dateString } from "@/lib/mcp/tools/shared";
+import { documentPath, dateString } from "@/lib/mcp/tools/shared";
 
 async function authedUserId(): Promise<string> {
   const sb = await createClient();
@@ -29,12 +29,6 @@ export async function saveMemoryDoc(input: { path: string; content: string }) {
 
 const wellnessFormSchema = z.object({
   date: dateString,
-  fatigue: wellnessScale.optional(),
-  soreness: wellnessScale.optional(),
-  mood: wellnessScale.optional(),
-  stress: wellnessScale.optional(),
-  motivation: wellnessScale.optional(),
-  sleep_quality: wellnessScale.optional(),
   sleep_h: z.number().min(0).max(24).optional(),
   hrv_ms: z.number().int().min(0).max(500).optional(),
   rhr_bpm: z.number().int().min(20).max(200).optional(),

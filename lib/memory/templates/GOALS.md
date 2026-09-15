@@ -1,6 +1,6 @@
 # Goals
 
-Your training targets. The race-countdown recipe parses race blocks below to know when to surface taper guidance — keep the format consistent or it won't fire.
+Your training targets. The dawn agent and the dashboard parse race blocks below — keep the format consistent.
 
 ## Race format convention
 
@@ -42,7 +42,7 @@ A-races are the targets that bend training around them (the recipe surfaces 14-d
 <!-- Add race blocks below this line, ordered by date. Follow the "Race format convention" at the top of this file — recipes parse it strictly. -->
 
 <!--
-Example block (kept commented so the race-countdown recipe doesn't parse it):
+Example block (kept commented so parsers don't treat it as a real race):
 
 ## Race: Example Half
 - Date: 2099-01-01

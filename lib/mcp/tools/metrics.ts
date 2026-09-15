@@ -13,10 +13,9 @@ export const DAILY_METRICS = [
   "spo2_avg_pct",
   "respiration_avg_brpm",
   "weight_kg",
-  "body_fat_pct",
   "skin_temp_deviation_c",
   "sleep_score",
-  // Recovery / readiness vendor scalars + body composition + health vitals.
+  // Recovery / readiness vendor scalars.
   // (training_status is text, not a numeric metric, so it is intentionally
   // excluded — get_stats/get_baseline compute over numbers.)
   "stress_score",
@@ -26,23 +25,11 @@ export const DAILY_METRICS = [
   "body_battery_charged",
   "body_battery_drained",
   "training_readiness_score",
-  "muscle_mass_kg",
-  "bone_mass_kg",
-  "body_water_pct",
-  "bp_systolic_mmhg",
-  "bp_diastolic_mmhg",
-  "hydration_ml",
   "steps",
   "active_calories",
   "floors_climbed",
   "intensity_min_moderate",
   "intensity_min_vigorous",
-  "fatigue",
-  "soreness",
-  "mood",
-  "stress",
-  "motivation",
-  "sleep_quality",
 ] as const;
 
 export const WORKOUT_METRICS = [
