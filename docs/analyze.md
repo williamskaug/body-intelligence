@@ -67,10 +67,10 @@ baselines use a fixed 60-day window with a leave-one-out z (independent of the
 display toggle), and relationship lag-scans anchor on lag 0 with a Fisher-z CI.
 
 **Heatmap metric set:** `hrv_ms`, `rhr_bpm`, `sleep_h`, `derived_sleep_debt_7d_min`,
-`derived_acute_load_7d`, `soreness`, `weight_kg`, `body_fat_pct`.
+`derived_acute_load_7d`, `sleep_score`, `weight_kg`, `stress_score`.
 
-**Relationship pairs (lag auto-scanned 0–3):** sleep→HRV, acute load→soreness,
-heat→HR-pace decoupling, resting HR→sleep quality.
+**Relationship pairs (lag auto-scanned 0–3):** sleep→HRV, acute load→HRV,
+heat→HR-pace decoupling, resting HR→sleep score.
 
 ## min-n / resilience
 

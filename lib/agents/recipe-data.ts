@@ -68,7 +68,7 @@ Call get_setup_guide once at the start so field conventions are fresh.
 
 **Phase 2 — sync DATE_Y from the wearable connector.**
 - Vitals → log_daily(date=DATE_Y, ...): sleep_h + the four sleep-stage minutes, hrv_ms, rhr_bpm, spo2_avg_pct, respiration_avg_brpm, skin_temp_deviation_c, sleep_score, weight_kg (if a weigh-in exists), steps, active_calories, floors_climbed, intensity minutes. Also log_daily(DATE_T) with this morning's sleep + recovery vitals (movement totals stay null — they self-heal on tomorrow's run).
-- Also capture, when the connector exposes them (all SCALARS, columns now): daily stress (get_stress) → stress_score; Body Battery (get_body_battery) → body_battery_morning/high/low/charged/drained; morning readiness (get_morning_training_readiness) → training_readiness_score; training status (get_training_status) → training_status (store the lowercase status string, e.g. "productive"); on a weigh-in day, body composition (get_body_composition / get_weigh_ins) → body_fat_pct, muscle_mass_kg, bone_mass_kg, body_water_pct. If the user logs them, get_blood_pressure → bp_systolic_mmhg/bp_diastolic_mmhg and get_hydration → hydration_ml. The Body Battery curve, the readiness factor breakdown, and the HRV-status label still go to daily/DATE_Y.md — only the scalar lands in a column.
+- Also capture, when the connector exposes them (all SCALARS, columns now): daily stress (get_stress) → stress_score; Body Battery (get_body_battery) → body_battery_morning/high/low/charged/drained; morning readiness (get_morning_training_readiness) → training_readiness_score; training status (get_training_status) → training_status (store the lowercase status string, e.g. "productive"). The Body Battery curve, the readiness factor breakdown, and the HRV-status label still go to daily/DATE_Y.md — only the scalar lands in a column.
 - Activities → log_workout per activity with source + source_id (idempotent), canonical type (the server normalizes aliases), and the metrics object for sensor data: cadence_spm, gct_ms, gct_balance_pct_left, vertical oscillation/ratio, stride_len_m, te_aerobic/anaerobic, vendor_training_load, stamina start/end/min, decoupling_pct (compute first-half vs second-half efficiency for sessions ≥ 60 min), elevation, speeds. notes = qualitative commentary ONLY.
 - For each activity also fetch and pass: HR zones (get_activity_hr_zones) → the zones object hr_z1_s…hr_z5_s (seconds in zone); for rides, power zones (get_activity_power_zones) → power_z1_s…power_z7_s; weather (get_activity_weather) → metrics.weather_temp_c (feels-like) + metrics.weather_humidity_pct; gear (get_activity_gear) → the workout's shoes field (canonical shoe name); for strength sessions, get_activity_exercise_sets → metrics.strength_volume_kg (Σ reps×load), with the per-exercise breakdown written to daily/DATE_Y.md.
 - Vendor composite BREAKDOWNS (Body Battery hourly curve + charge/drain events, the Training Readiness factor list, the sleep-score factor breakdown, HRV-status label) → daily/DATE_Y.md via fs_write (fs_read first — full-document replace; preserve non-Garmin sections). The trendable scalars already went to columns above. Lap splits and vendor labels go here too.
@@ -106,117 +106,13 @@ Greet the user warmly. Briefly explain the three files you'll fill out together 
 
 **PROFILE.md** — ask for: a one-paragraph self-description as an athlete, age, height, weight baseline, typical resting HR, current disciplines, training history (years + biggest blocks), and notable past injuries. Synthesize their answers into clean prose, preserve the section structure, remove the fill-in comments, fs_write the result.
 
-**GOALS.md** — ask for: 1-3 PRs/PBs they care about and any upcoming races (name, date, tier, goal). Help them format race blocks correctly — the race-countdown recipe parses these. Don't pressure them to fill in races they don't have; an empty race section is fine. fs_write.
+**GOALS.md** — ask for: 1-3 PRs/PBs they care about and any upcoming races (name, date, tier, goal). Help them format race blocks correctly — the dawn agent and the dashboard parse these. Don't pressure them to fill in races they don't have; an empty race section is fine. fs_write.
 
 **PRINCIPLES.md** — this one is harder. Ask: "What's one rule you train by? Something specific enough that a coach who doesn't know you could follow it." Iterate until you have 3-5 principles across training, recovery, planning, and red flags. The defaults in the template are good starting points if they're stuck — read them aloud and ask if any feel right. fs_write.
 
-After all three, briefly summarize what you learned about them and end with: "You can always update these — just tell me what changed, or open them directly. Want to install the dawn agent next? It's the daily pass that syncs your wearable, computes your readiness gate, and writes a morning briefing. (No wearable? The morning check-in and evening reflection recipes are the manual path.)"
+After all three, briefly summarize what you learned about them and end with: "You can always update these — just tell me what changed, or open them directly. Want to install the dawn agent next? It's the daily pass that syncs your wearable, computes your readiness gate, and writes a morning briefing."
 
 This recipe is meant to be run once; the schedule is a placeholder. The /agents UI surfaces a "Run onboarding" button that triggers it via Cowork.`,
-  },
-  {
-    id: "morning-checkin",
-    title: "Morning check-in",
-    category: "capture",
-    schedule: "0 7 * * *",
-    description:
-      "Asks for last night's sleep and today's wellness scales. Logs them via log_daily. The manual path — the dawn agent covers this for wearable users.",
-    required_tools: ["log_daily", "fs_read", "mark_recipe_run"],
-    required_connectors: [],
-    covers: ["checkin:morning"],
-    prompt: `It's morning. Ask the user a brief check-in to log their daily entry.
-
-Read PROFILE.md (via fs_read) once at the start so you know the user's name and any logging preferences.
-
-Ask them, in one short message, for:
-- Sleep hours last night
-- HRV and RHR if they've checked Garmin/Oura/etc. (skip if they don't have a wearable)
-- Six 1-5 scales: fatigue, soreness, mood, stress, motivation, sleep_quality. **Always 5 = best, including for fatigue/soreness/stress.** Remind them of this if it's their first time.
-- Any flags worth noting (sore knee, stomach off, etc.)
-
-If they reply with partial info, log what they gave and don't push for the rest. Better to capture 60% than nothing.
-
-Call log_daily with their date (today, in their timezone) and the fields they provided.
-
-Confirm what was logged in one short line. Don't editorialize on the numbers — that's a different conversation.
-
-After everything else, call mark_recipe_run(recipe_id="morning-checkin", status="ok") so the /agents page shows you ran. On failure, pass status="failed" with a short error string.`,
-  },
-  {
-    id: "evening-reflection",
-    title: "Evening reflection",
-    category: "capture",
-    schedule: "0 21 * * *",
-    description: "Prompts for any unlogged workouts from the day.",
-    required_tools: ["log_workout", "get_recent", "mark_recipe_run"],
-    required_connectors: [],
-    covers: ["review:evening"],
-    prompt: `It's evening. Help the user catch up on anything they didn't log during the day.
-
-Call get_recent({days: 1, kinds: ["workouts", "daily"]}) to see what's already logged for today.
-
-If no workout is logged but the user usually trains on this weekday (you can infer from the last 14 days), ask whether they trained today. If yes, prompt for: type, duration, distance, RPE. Call log_workout.
-
-Don't be pushy. If they say they didn't train or want to skip, drop it.
-
-End with a single sentence about what was logged or "all caught up."
-
-After everything else, call mark_recipe_run(recipe_id="evening-reflection", status="ok").`,
-  },
-  {
-    id: "weekly-review",
-    title: "Weekly review",
-    category: "review",
-    schedule: "0 18 * * 0",
-    description:
-      "Summarizes the week's training load and trends. Updates CURRENT.md with the takeaways.",
-    required_tools: ["get_recent", "get_stats", "fs_read", "fs_write", "mark_recipe_run"],
-    required_connectors: [],
-    covers: ["review:weekly"],
-    prompt: `Run a weekly training review.
-
-1. Call get_recent({days: 7}) to pull this week's workouts, daily entries, active health events, and derived rows (the agent-computed gate / z-scores / sleep debt — included by default).
-2. Call get_recent({days: 28}) to pull the broader 4-week context for trends. For specific aggregates use get_stats (e.g. metric='derived_sleep_debt_7d_min' or 'workout_vendor_training_load').
-3. fs_read PRINCIPLES.md, GOALS.md, and CURRENT.md.
-4. Only if derived rows are missing for the week, fall back to fs_list({ prefix: "daily/" }) + fs_read for vendor-side signals.
-
-Write a brief review covering:
-- Training load this week (workout count, total duration, vendor training load or RPE-weighted minutes)
-- How the week compares to the 4-week trend (heavier, lighter, same)
-- Recovery indicators: gate history for the week (how many green/amber/red days), average HRV, RHR, sleep, sleep-debt direction
-- Active health flags from health_events, with each thread's latest update and next milestone
-- One sentence on whether the week tracked toward GOALS.md
-
-Then update CURRENT.md by replacing its "This week" section with the new review and pushing the old one to a "Previous weeks" section if there's space (keep CURRENT.md under 200 lines — archive older content out).
-
-Use fs_write to save. Don't ask for permission — this is a scheduled review, not an interactive session.
-
-After saving, call mark_recipe_run(recipe_id="weekly-review", status="ok").`,
-  },
-  {
-    id: "race-countdown",
-    title: "Race countdown",
-    category: "planning",
-    schedule: "0 8 * * *",
-    description:
-      "Active during the 14 days before any race in GOALS.md. Daily focus message.",
-    required_tools: ["fs_read", "get_recent", "mark_recipe_run"],
-    required_connectors: [],
-    covers: ["race:countdown"],
-    prompt: `Check whether the user is within 14 days of a race.
-
-1. fs_read GOALS.md and look for race dates. **Sanity guard:** if the only race in GOALS.md is dated more than 5 years from today, treat the file as un-edited (the user kept the example placeholder) and exit silently. If no race is within 14 days, also exit silently.
-2. fs_read PRINCIPLES.md for the user's tapering philosophy.
-3. Call get_recent({days: 7}) for current state.
-
-Send the user a brief message:
-- Days to race
-- One specific focus for today (taper-appropriate workout type or rest, hydration cue, sleep target)
-- Any active health flags they should be aware of going into the race
-
-Keep it under 100 words. This runs daily for two weeks — if it gets noisy, the user disables it.
-
-After sending, call mark_recipe_run(recipe_id="race-countdown", status="ok"). If you exited silently because no race is within 14 days, still call mark_recipe_run(recipe_id="race-countdown", status="ok") so the user sees the recipe is alive.`,
   },
   {
     id: "garmin-sync",
@@ -282,45 +178,9 @@ Pass sensor data in the metrics object, NOT in notes: cadence_spm, gct_ms, gct_b
 
 Garmin golf rounds do NOT appear in the activities list — query list_golf_rounds separately and log each round as type='golf' with source_id=<scorecard id>; the scorecard table goes in daily/DATE.md.
 
-**5. Confirm.** Send the user one short line summarising what was synced. No editorialising on the numbers — that's the morning check-in's job.
+**5. Confirm.** Send the user one short line summarising what was synced. No editorialising on the numbers — that's the briefing's job.
 
 **6. Mark the run.** Call mark_recipe_run(recipe_id="garmin-sync", status="ok"). On error, pass status="failed" and a short error message.`,
-  },
-  {
-    id: "strava-sync",
-    title: "Strava sync",
-    category: "connector",
-    schedule: "30 7 * * *",
-    description:
-      "Daily ingest of Strava activities as workouts. Idempotent via source_id. Fallback for activities your primary wearable never saw.",
-    required_tools: ["log_workout", "mark_recipe_run"],
-    required_connectors: ["strava"],
-    covers: ["ingest:strava"],
-    prompt: `Sync yesterday's Strava activities into Body Intelligence.
-
-Call get_setup_guide once at the start.
-
-**Decide the date.** Run for yesterday in the user's timezone. Call this DATE.
-
-**1. Pull Strava activities for DATE.** From the Strava connector MCP, fetch every activity whose local start date is DATE.
-
-**2. For each activity, call log_workout** with:
-- date = DATE
-- type = Strava activity type ('Run' → 'run', 'TrailRun' → 'trail_run', 'Ride'/'VirtualRide' → 'ride', 'WeightTraining' → 'strength', 'Walk'/'Hike' → 'walk'/'hike'). The server normalizes aliases to the canonical vocabulary anyway, so pass what Strava gives you.
-- duration_min = elapsed_time / 60 (rounded)
-- distance_km = distance_meters / 1000 (only if > 0)
-- avg_hr, max_hr (if recorded)
-- source = 'strava'
-- source_id = Strava activity id
-- notes = ONLY qualitative commentary the user wrote on Strava (the activity description). Do NOT dump distance / pace / HR into notes — those have columns.
-
-**3. RPE.** Strava doesn't expose RPE. Leave it null unless the activity description includes an explicit "RPE N" hint, in which case parse it out.
-
-**4. Detect misclassifications.** If duration_min < 5 AND type == 'run' (or trail_run), flag it — these are almost always walking gaps mis-tagged. Log it with type='walk' instead and mention the reclassification in the confirmation line. (The user can fix individual ones via update_workout later.)
-
-**5. Confirm.** One short line summarising activity count and total minutes.
-
-**6. Mark the run.** Call mark_recipe_run(recipe_id="strava-sync", status="ok"). On error, pass status="failed".`,
   },
   {
     id: "capacity-sync",
@@ -451,7 +311,7 @@ Call get_setup_guide once. Set WEEK = the current ISO week (e.g. 2026-W27) and a
 
 **Phase 2 — read the stats engine** (all deterministic — these return numbers, never verdicts):
 - get_load_balance(days=90) → CTL/ATL/TSB trajectory and current form.
-- get_correlation_matrix(metrics=[hrv_ms, rhr_bpm, sleep_h, derived_sleep_debt_7d_min, derived_acute_load_7d, soreness, weight_kg], window_days=90) → the relationships that are real for THIS athlete.
+- get_correlation_matrix(metrics=[hrv_ms, rhr_bpm, sleep_h, derived_sleep_debt_7d_min, derived_acute_load_7d, sleep_score, weight_kg], window_days=90) → the relationships that are real for THIS athlete.
 - get_trend(metric, window_days=90) for the metrics that matter to GOALS.md (e.g. capacity_vo2max_running, weight_kg, hrv_ms, workout_cadence_spm).
 - get_distribution(metric, window_days=90) for any metric whose spread you want to characterize.
 - get_correlation(a, b, lag_days=1) to probe specific dose→response ideas (e.g. acute load → next-day HRV).

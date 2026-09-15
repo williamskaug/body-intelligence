@@ -20,9 +20,8 @@ export async function getCalendar(userId: string, input: GetCalendarInput) {
   const firstDay = `${yyyy}-${String(mm).padStart(2, "0")}-01`;
   const lastDayDt = new Date(Date.UTC(yyyy, mm, 0));
   const lastDay = lastDayDt.toISOString().slice(0, 10);
-  const lastEndIso = `${lastDay}T23:59:59Z`;
 
-  const [workoutRes, dailyRes, mealRes, eventRes] = await Promise.all([
+  const [workoutRes, dailyRes, eventRes] = await Promise.all([
     sb
       .from("workouts")
       .select("date, type, duration_min")
@@ -36,19 +35,13 @@ export async function getCalendar(userId: string, input: GetCalendarInput) {
       .gte("date", firstDay)
       .lte("date", lastDay),
     sb
-      .from("meals")
-      .select("eaten_at")
-      .eq("user_id", userId)
-      .gte("eaten_at", `${firstDay}T00:00:00Z`)
-      .lte("eaten_at", lastEndIso),
-    sb
       .from("health_events")
       .select("date, resolved_date")
       .eq("user_id", userId)
       .lte("date", lastDay),
   ]);
 
-  for (const r of [workoutRes, dailyRes, mealRes, eventRes]) {
+  for (const r of [workoutRes, dailyRes, eventRes]) {
     if (r.error) throw new Error(`get_calendar: ${r.error.message}`);
   }
 
@@ -73,11 +66,6 @@ export async function getCalendar(userId: string, input: GetCalendarInput) {
   const dailyDates = new Set(
     ((dailyRes.data ?? []) as Array<{ date: string }>).map((d) => d.date),
   );
-  const mealCounts = new Map<string, number>();
-  for (const m of (mealRes.data ?? []) as Array<{ eaten_at: string }>) {
-    const d = m.eaten_at.slice(0, 10);
-    mealCounts.set(d, (mealCounts.get(d) ?? 0) + 1);
-  }
 
   // For health events, count those still active on each day (date ≤ day, resolved_date null OR > day).
   const events = (eventRes.data ?? []) as Array<{
@@ -91,7 +79,6 @@ export async function getCalendar(userId: string, input: GetCalendarInput) {
     workout_total_min: number;
     workout_types: string[];
     has_daily_entry: boolean;
-    meal_count: number;
     active_health_event_count: number;
   }> = [];
 
@@ -108,7 +95,6 @@ export async function getCalendar(userId: string, input: GetCalendarInput) {
       workout_total_min: w?.total_min ?? 0,
       workout_types: w ? Array.from(w.types) : [],
       has_daily_entry: dailyDates.has(iso),
-      meal_count: mealCounts.get(iso) ?? 0,
       active_health_event_count: activeEvents,
     });
   }

@@ -52,9 +52,9 @@ const HEATMAP_METRICS: MetricKey[] = [
   "sleep_h",
   "derived_sleep_debt_7d_min",
   "derived_acute_load_7d",
-  "soreness",
+  "sleep_score",
   "weight_kg",
-  "body_fat_pct",
+  "stress_score",
 ];
 
 const DIST_METRICS: MetricKey[] = ["hrv_ms", "rhr_bpm", "sleep_h", "weight_kg"];
@@ -80,9 +80,9 @@ const ZONE_KEYS: MetricKey[] = [
 
 const PAIRS: Array<{ a: MetricKey; b: MetricKey; title: string }> = [
   { a: "sleep_h", b: "hrv_ms", title: "Sleep → HRV" },
-  { a: "derived_acute_load_7d", b: "soreness", title: "Acute load → soreness" },
+  { a: "derived_acute_load_7d", b: "hrv_ms", title: "Acute load → HRV" },
   { a: "workout_weather_temp_c", b: "workout_decoupling_pct", title: "Heat → HR-pace decoupling" },
-  { a: "rhr_bpm", b: "sleep_quality", title: "Resting HR → sleep quality" },
+  { a: "rhr_bpm", b: "sleep_score", title: "Resting HR → sleep score" },
 ];
 
 // Lags (days) scanned for each relationship — b shifted forward by the lag.
@@ -579,7 +579,7 @@ export async function Analyze(props: AnalyzeProps) {
               {pruned.dropped > 0 ? (
                 <p className="mt-1 text-[11px] text-muted-foreground">
                   {pruned.dropped} metric{pruned.dropped === 1 ? "" : "s"} hidden for
-                  insufficient data (e.g. soreness, weight, sleep debt).
+                  insufficient data (e.g. weight, sleep debt).
                 </p>
               ) : null}
             </>

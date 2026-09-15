@@ -8,7 +8,7 @@ export const getSetupGuideInputSchema = {} as const;
 export const getSetupGuideInputZod = z.object({});
 
 export const SETUP_GUIDE = `Body Intelligence (BI) is the user's personal health intelligence store —
-workouts, daily wellness, meals, health events, and a markdown memory layer.
+workouts, daily wellness, health events, and a markdown memory layer.
 Same shape as Project Intelligence, but for the athlete-self.
 
 # The passive principle
@@ -41,11 +41,9 @@ decisions to BI — there is no logic on the server side beyond CRUD.
   skin_temp_deviation_c, sleep_score), recovery vendor SCALARS (stress_score,
   body_battery_morning/high/low/charged/drained, training_readiness_score,
   training_status — a free lowercased string, no enum), body composition
-  (weight_kg, body_fat_pct, muscle_mass_kg, bone_mass_kg, body_water_pct),
-  optional health vitals (bp_systolic_mmhg, bp_diastolic_mmhg, hydration_ml),
-  movement totals (steps, active_calories, floors_climbed,
-  intensity_min_moderate, intensity_min_vigorous), six 1–5 wellness scales,
-  and three free-text blocks (sleep_notes, wellness_notes, meal_notes).
+  (weight_kg), movement totals (steps, active_calories, floors_climbed,
+  intensity_min_moderate, intensity_min_vigorous), and two free-text blocks
+  (sleep_notes, wellness_notes).
   Partial updates allowed — write whatever the source has, leave the rest.
   Store the single vendor composite SCALAR in its column so it can be trended;
   the factor BREAKDOWN / hourly curve / vendor label still goes in
@@ -66,11 +64,6 @@ decisions to BI — there is no logic on the server side beyond CRUD.
   are captured vendor estimates — BI never computes capacity. get_capacity
   returns the latest known value per metric. Written weekly by capacity-sync;
   derived training zones go in THRESHOLDS.md, achieved PRs in RECORDS.md.
-- meals — one row per meal. Supported but OPTIONAL — only prompt for meals if
-  the user has been logging them; day-level food prose can go in
-  daily_entries.meal_notes if the user volunteers it. When writing a meal,
-  calories + protein_g + carbs_g + fat_g are required (estimate from the
-  description if no authoritative source). Dietary philosophy: NUTRITION.md.
 - health_events — injuries / illnesses / symptoms. kind is one of
   'injury' | 'illness' | 'symptom'. resolved_date null = still active.
   notes = the stable summary (mechanism, hypothesis, management plan).
@@ -87,10 +80,10 @@ decisions to BI — there is no logic on the server side beyond CRUD.
 - **NEVER dump a structured field into a prose field.** If the source has
   deep/light/REM/awake sleep minutes, write them to sleep_deep_min /
   sleep_light_min / sleep_rem_min / sleep_awake_min — NOT into sleep_notes
-  prose. Same for HRV, RHR, weight, body fat, steps, active calories, every
+  prose. Same for HRV, RHR, weight, steps, active calories, every
   vital — and same for running dynamics: cadence, GCT balance, training
   effect, stamina go in the metrics object on log_workout, not in workout
-  notes. sleep_notes / wellness_notes / meal_notes / workout notes are for
+  notes. sleep_notes / wellness_notes / workout notes are for
   QUALITATIVE commentary only ("woke once at 3am", "knee felt tight the
   first mile"), not as a dump zone for values that have homes.
 - Vendor composite SCALARS that you'll want to trend/correlate (the single
@@ -100,17 +93,13 @@ decisions to BI — there is no logic on the server side beyond CRUD.
   contributors, Oura Readiness factors) still belong in daily/YYYY-MM-DD.md
   via fs_write — never in sleep_notes. Universal vitals (sleep_h, hrv_ms,
   rhr_bpm, sleep_deep_min, etc.) still go in daily_entries.
-- Wellness scales (fatigue, soreness, mood, stress, motivation, sleep_quality) use
-  5 = best, ALWAYS. Even for fatigue / soreness / stress — 5 means "no fatigue",
-  "no soreness", "no stress". The naming is inverted relative to natural reading.
-- health_events.severity is the OPPOSITE direction: 1–5 with 5 = most severe.
-  This is the one place where 5 = bad. Don't confuse it with the wellness scales.
+- health_events.severity is 1–5 with 5 = most severe.
 - rpe is 1–10 (standard Borg-style RPE), not 1–5.
-- Idempotency: workouts and meals accept (source, source_id). Manual writes leave
-  source_id null and always insert. Connector recipes (Garmin, Strava, MFP, …)
+- Idempotency: workouts accept (source, source_id). Manual writes leave
+  source_id null and always insert. Connector recipes (Garmin, Strava, …)
   set source='garmin' + source_id=<external id> so re-runs upsert cleanly.
 - Dates are stored as DATE in the user's local sense — no timezone conversion on
-  the server. eaten_at on meals is the only true timestamp.
+  the server.
 - All writes are user-scoped automatically. Tools never accept a user_id argument.
 - Full CRUD is available through MCP. log_* tools insert/upsert; update_* tools
   patch existing rows by id; delete_* tools hard-delete. Daily entries don't
@@ -142,9 +131,9 @@ Use folders liberally to organize the user's memory:
 
 - daily/YYYY-MM-DD.md         — per-day vendor data, body battery, anomalies
 - notes/<topic>.md            — thematic notes ('notes/altitude-camp-2026.md')
-- weekly/YYYY-Www.md          — weekly-review outputs ('weekly/2026-W19.md')
+- weekly/YYYY-Www.md          — weekly review outputs ('weekly/2026-W19.md')
 - races/<race-slug>.md        — per-race planning + post-race debriefs
-- recipes/<name>.md           — meals or fuelling notes the user wants saved
+- recipes/<name>.md           — user-authored scheduled-agent recipes
 
 fs_list returns BOTH files (flat list) AND folders (derived from path
 prefixes with file counts), so you can quickly see the user's existing
@@ -163,8 +152,8 @@ daily_entries.
 
 # Reasoning rhythm
 
-The user invokes you through scheduled-agent recipes (dawn agent / morning
-check-in, weekly review, race countdown, …) plus ad-hoc conversations.
+The user invokes you through scheduled-agent recipes (dawn agent, capacity
+sync, insights, …) plus ad-hoc conversations.
 
 At the start of a session, orient yourself by:
 1. get_briefing() — today's (or the latest) agent-written briefing, plus
@@ -175,14 +164,13 @@ At the start of a session, orient yourself by:
 
 Update memory files when you learn something durable (a new pattern, a resolved
 injury, a goal change). Log structured rows when capturing today's data
-(workouts, daily wellness, meals, new health events). Don't duplicate prose —
+(workouts, daily vitals, new health events). Don't duplicate prose —
 one canonical home per piece of information.
 
 # When something feels off
 
-If a scale value looks wrong, suspect the inverted-direction conventions before
-suspecting bad data. If a write fails with a check-constraint error, you almost
-certainly violated one of: wellness 1–5, severity 1–5, rpe 1–10, or health_event
+If a write fails with a check-constraint error, you almost
+certainly violated one of: severity 1–5, rpe 1–10, or health_event
 kind in {injury, illness, symptom}.`;
 
 export function getSetupGuide(): { guide: string } {

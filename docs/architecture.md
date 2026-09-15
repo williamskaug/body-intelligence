@@ -30,7 +30,7 @@ A "Garmin sync" is not a service BI runs. It's a Cowork scheduled-agent recipe w
 
 **Implication for the schema:** `workouts` carries a `source_id` column so connector-driven writes are idempotent across recipe re-runs. `(user_id, source, source_id)` is unique where `source_id is not null`; manual entries (no source_id) can be duplicated freely. `daily_entries` is already idempotent via `(user_id, date)` unique, so it doesn't need the column.
 
-**Implication for recipes:** the Recipe type carries a `required_connectors` field so the `/agents` UI can show users which external MCPs each recipe expects. Recipes that need only BI (morning check-in, weekly review) leave it empty. Recipes that need Garmin or Strava list them explicitly.
+**Implication for recipes:** the Recipe type carries a `required_connectors` field so the `/agents` UI can show users which external MCPs each recipe expects. Recipes that need only BI (onboarding, health-log audit, insights) leave it empty. Recipes that need Garmin list it explicitly.
 
 ## Why Postgres (not markdown files)
 
@@ -87,7 +87,7 @@ Six tables. Each one earns its place:
 
 - **`workouts`** — workouts have richer qualitative content than other entities ("knee twinge mile 4 settled by mile 6"), and there can be multiple per day (brick = ride + run). Free-form `type` field instead of an enum because real training defies clean taxonomies.
 
-- **`daily_entries`** — one row per (user, date). Combines sleep, wellness scales, body metrics (weight/HRV/RHR), and meal notes. We considered separate tables; one wide table won because (a) you log them all at once in the morning, (b) querying "what did my body look like on date X" is a single SELECT, (c) the column count is bounded.
+- **`daily_entries`** — one row per (user, date). Combines sleep, recovery vendor scalars, body metrics (weight/HRV/RHR), movement totals, and qualitative sleep/wellness notes. We considered separate tables; one wide table won because (a) you log them all at once in the morning, (b) querying "what did my body look like on date X" is a single SELECT, (c) the column count is bounded. Subjective 1–5 scales and unused body-comp/vitals were dropped in the solo-user trim.
 
 - **`health_events`** — append-only log keeps the model simple. Active issues are rows with `resolved_date IS NULL`. No state machine, no transitions table.
 
@@ -95,13 +95,13 @@ Six tables. Each one earns its place:
 
 - **`oauth_clients`** + **`oauth_tokens`** — minimum viable OAuth state. DCR creates client rows; the auth flow creates token rows.
 
-The wellness scales convention (**all 1–5, 5 = best**) is critical and worth preserving even when it feels mildly unintuitive at the capture site. It means Claude can sum or average the scales without sign-flipping logic, which keeps recipe prompts simpler.
+Health-event severity is the remaining 1–5 scale (**5 = most severe** — opposite of the old wellness convention). Qualitative flags that used to live on wellness scales now go in `wellness_notes`.
 
 ## MCP surface rationale
 
 Seven tools, organized by capture vs. read. The principle: each tool does one well-named thing, and there's no "do something smart" tool that would smuggle synthesis into the app layer.
 
-`log_daily` accepts partial fields — you might log sleep at 7am and meals at 9pm. Upsert by `(user_id, date)`.
+`log_daily` accepts partial fields — you might log sleep at 7am and notes later. Upsert by `(user_id, date)`.
 
 `get_recent` is the one "convenience" tool — it returns a typed bundle across multiple entity types. Rationale: nearly every reasoning task starts with "what's been going on lately," and it's wasteful to make Claude run three separate queries to get there.
 

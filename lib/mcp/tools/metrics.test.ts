@@ -10,15 +10,31 @@ import {
   WORKOUT_ZONE_METRICS,
 } from "./metrics";
 
+const DROPPED_DAILY = [
+  "fatigue",
+  "soreness",
+  "mood",
+  "stress",
+  "motivation",
+  "sleep_quality",
+  "body_fat_pct",
+  "muscle_mass_kg",
+  "bone_mass_kg",
+  "body_water_pct",
+  "bp_systolic_mmhg",
+  "bp_diastolic_mmhg",
+  "hydration_ml",
+] as const;
+
 describe("resolveMetric", () => {
   it("routes each metric class to the right table and strips the prefix", () => {
     expect(resolveMetric("stress_score")).toEqual({
       table: "daily_entries",
       column: "stress_score",
     });
-    expect(resolveMetric("body_fat_pct")).toEqual({
+    expect(resolveMetric("weight_kg")).toEqual({
       table: "daily_entries",
-      column: "body_fat_pct",
+      column: "weight_kg",
     });
     expect(resolveMetric("workout_rpe")).toEqual({ table: "workouts", column: "rpe" });
     expect(resolveMetric("workout_cadence_spm")).toEqual({
@@ -77,5 +93,15 @@ describe("resolveMetric", () => {
     }
     // No accidental drops or duplicates in the combined enum.
     expect(seen.size).toBe(METRIC_KEYS.length);
+  });
+
+  it("does not expose dropped daily_entries columns as metrics", () => {
+    for (const key of DROPPED_DAILY) {
+      expect(DAILY_METRICS).not.toContain(key);
+      expect(METRIC_KEYS).not.toContain(key);
+    }
+    expect(DAILY_METRICS).toContain("weight_kg");
+    expect(DAILY_METRICS).toContain("hrv_ms");
+    expect(DAILY_METRICS).toContain("stress_score");
   });
 });

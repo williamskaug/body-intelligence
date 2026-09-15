@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { adminClient } from "@/lib/supabase/admin";
-import { logDailyInputSchema } from "./log-daily";
+import { DAILY_FIELDS, logDailyInputSchema } from "./log-daily";
 
 const MAX_BATCH = 500;
 const itemSchema = z.object(logDailyInputSchema);
@@ -14,50 +14,6 @@ export type BulkLogDailyInput = {
   items: z.infer<typeof itemSchema>[];
   on_conflict?: "ignore" | "update";
 };
-
-const DAILY_FIELDS = [
-  "sleep_h",
-  "sleep_deep_min",
-  "sleep_light_min",
-  "sleep_rem_min",
-  "sleep_awake_min",
-  "hrv_ms",
-  "rhr_bpm",
-  "spo2_avg_pct",
-  "respiration_avg_brpm",
-  "weight_kg",
-  "body_fat_pct",
-  "muscle_mass_kg",
-  "bone_mass_kg",
-  "body_water_pct",
-  "bp_systolic_mmhg",
-  "bp_diastolic_mmhg",
-  "hydration_ml",
-  "skin_temp_deviation_c",
-  "sleep_score",
-  "stress_score",
-  "body_battery_morning",
-  "body_battery_high",
-  "body_battery_low",
-  "body_battery_charged",
-  "body_battery_drained",
-  "training_readiness_score",
-  "training_status",
-  "steps",
-  "active_calories",
-  "floors_climbed",
-  "intensity_min_moderate",
-  "intensity_min_vigorous",
-  "fatigue",
-  "soreness",
-  "mood",
-  "stress",
-  "motivation",
-  "sleep_quality",
-  "sleep_notes",
-  "wellness_notes",
-  "meal_notes",
-] as const;
 
 export async function bulkLogDaily(userId: string, input: BulkLogDailyInput) {
   const sb = adminClient();

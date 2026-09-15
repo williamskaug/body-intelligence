@@ -49,9 +49,6 @@ const REGISTRY: Record<string, SourceDef> = {
     note: "Golf now flows through Garmin (source=garmin).",
   },
   manual: { label: "Manual entry", role: "manual" },
-  mfp: { label: "MyFitnessPal", role: "fallback", expectedCadenceDays: 7 },
-  myfitnesspal: { label: "MyFitnessPal", role: "fallback", expectedCadenceDays: 7 },
-  cronometer: { label: "Cronometer", role: "fallback", expectedCadenceDays: 7 },
   apple_health: {
     label: "Apple Health",
     role: "primary",

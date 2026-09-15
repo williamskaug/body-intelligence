@@ -1,5 +1,5 @@
 // Parsers for GOALS.md and CURRENT.md. Kept structurally identical so the
-// race-countdown recipe and the dashboard race-hero strip see the same data.
+// dawn-agent and the dashboard race-hero strip see the same data.
 //
 // Race block convention (from GOALS.md):
 //

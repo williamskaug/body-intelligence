@@ -20,8 +20,6 @@ const CANDIDATES: MetricKey[] = [
   "stress_score",
   "derived_sleep_debt_7d_min",
   "derived_acute_load_7d",
-  "soreness",
-  "fatigue",
   "weight_kg",
   "steps",
   "workout_vendor_training_load",

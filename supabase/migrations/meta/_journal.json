@@ -43,6 +43,13 @@
       "when": 1782814567016,
       "tag": "20260630101607_capture_expansion",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789487763756,
+      "tag": "20260915155603_drop_meals_and_unused_daily_columns",
+      "breakpoints": true
     }
   ]
 }
