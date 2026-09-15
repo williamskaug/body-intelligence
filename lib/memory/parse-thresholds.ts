@@ -1,5 +1,5 @@
 // Parser for THRESHOLDS.md. The capacity-sync recipe writes this file and the
-// dawn-agent / race-countdown recipes read it back to set workout targets, so
+// dawn-agent recipe reads it back to set workout targets, so
 // the block shapes are a contract. Kept structurally close to parse-goals.ts.
 //
 // Block convention (from the seeded template):

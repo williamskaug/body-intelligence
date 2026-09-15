@@ -3,27 +3,7 @@
 import { useState, useTransition } from "react";
 import { saveWellnessEntry } from "@/app/(app)/data/actions";
 
-type WellnessKey = "fatigue" | "soreness" | "mood" | "stress" | "motivation" | "sleep_quality";
-
-const SCALES: ReadonlyArray<{
-  key: WellnessKey;
-  label: string;
-  // The "5 = best" label for the right-hand end of the scale.
-  fiveMeans: string;
-  // Direction note for inverted scales.
-  invertedNote?: string;
-}> = [
-  { key: "fatigue", label: "Fatigue", fiveMeans: "no fatigue", invertedNote: "5 = none" },
-  { key: "soreness", label: "Soreness", fiveMeans: "no soreness", invertedNote: "5 = none" },
-  { key: "mood", label: "Mood", fiveMeans: "great" },
-  { key: "stress", label: "Stress", fiveMeans: "no stress", invertedNote: "5 = none" },
-  { key: "motivation", label: "Motivation", fiveMeans: "high" },
-  { key: "sleep_quality", label: "Sleep quality", fiveMeans: "great" },
-];
-
-type Initial = Partial<
-  Record<WellnessKey, number | null>
-> & {
+type Initial = {
   sleep_h?: number | string | null;
   hrv_ms?: number | null;
   rhr_bpm?: number | null;
@@ -40,15 +20,6 @@ type Props = {
 };
 
 export function WellnessForm({ date, initial, title, subtitle, onSaved }: Props) {
-  const [values, setValues] = useState<Partial<Record<WellnessKey, number>>>(() => {
-    const v: Partial<Record<WellnessKey, number>> = {};
-    if (!initial) return v;
-    for (const k of SCALES.map((s) => s.key)) {
-      const raw = initial[k];
-      if (raw != null && Number.isFinite(Number(raw))) v[k] = Number(raw);
-    }
-    return v;
-  });
   const [sleepH, setSleepH] = useState<string>(
     initial?.sleep_h != null ? String(initial.sleep_h) : "",
   );
@@ -56,7 +27,6 @@ export function WellnessForm({ date, initial, title, subtitle, onSaved }: Props)
   const [rhr, setRhr] = useState<string>(initial?.rhr_bpm != null ? String(initial.rhr_bpm) : "");
   const [sleepNotes, setSleepNotes] = useState<string>(initial?.sleep_notes ?? "");
   const [wellnessNotes, setWellnessNotes] = useState<string>(initial?.wellness_notes ?? "");
-  const [showOptional, setShowOptional] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [pending, startTransition] = useTransition();
@@ -64,10 +34,6 @@ export function WellnessForm({ date, initial, title, subtitle, onSaved }: Props)
   const handleSubmit = () => {
     setError(null);
     const payload: Parameters<typeof saveWellnessEntry>[0] = { date };
-    for (const k of SCALES.map((s) => s.key)) {
-      const v = values[k];
-      if (v != null) payload[k] = v;
-    }
     if (sleepH.trim()) {
       const n = Number(sleepH);
       if (Number.isFinite(n) && n >= 0 && n <= 24) payload.sleep_h = n;
@@ -102,7 +68,7 @@ export function WellnessForm({ date, initial, title, subtitle, onSaved }: Props)
             {title ?? "Daily check-in"}
           </h3>
           <p className="text-xs text-muted-foreground">
-            {subtitle ?? "5 = best on every scale. Skip what you can't answer."}
+            {subtitle ?? "Sleep, HRV, RHR, and notes. Skip what you can't answer."}
           </p>
         </div>
         <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
@@ -110,57 +76,25 @@ export function WellnessForm({ date, initial, title, subtitle, onSaved }: Props)
         </span>
       </header>
 
-      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {SCALES.map((s) => (
-          <ScaleRow
-            key={s.key}
-            label={s.label}
-            fiveMeans={s.fiveMeans}
-            invertedNote={s.invertedNote}
-            value={values[s.key]}
-            onChange={(v) =>
-              setValues((prev) => {
-                const next = { ...prev };
-                if (v == null) delete next[s.key];
-                else next[s.key] = v;
-                return next;
-              })
-            }
-          />
-        ))}
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        <NumberInput label="Sleep" unit="h" value={sleepH} onChange={setSleepH} step="0.1" />
+        <NumberInput label="HRV" unit="ms" value={hrv} onChange={setHrv} step="1" />
+        <NumberInput label="RHR" unit="bpm" value={rhr} onChange={setRhr} step="1" />
+        <TextArea
+          className="sm:col-span-3"
+          label="Sleep notes"
+          placeholder="Qualitative only — woke at 3am, hard time falling asleep, etc."
+          value={sleepNotes}
+          onChange={setSleepNotes}
+        />
+        <TextArea
+          className="sm:col-span-3"
+          label="Wellness notes"
+          placeholder="Anything worth flagging — sore knee, stomach off, …"
+          value={wellnessNotes}
+          onChange={setWellnessNotes}
+        />
       </div>
-
-      <div className="mt-3">
-        <button
-          type="button"
-          onClick={() => setShowOptional((v) => !v)}
-          className="text-xs text-muted-foreground hover:text-foreground"
-        >
-          {showOptional ? "− Hide" : "+ Add"} sleep / HRV / RHR / notes
-        </button>
-      </div>
-
-      {showOptional ? (
-        <div className="mt-3 grid gap-3 sm:grid-cols-3">
-          <NumberInput label="Sleep" unit="h" value={sleepH} onChange={setSleepH} step="0.1" />
-          <NumberInput label="HRV" unit="ms" value={hrv} onChange={setHrv} step="1" />
-          <NumberInput label="RHR" unit="bpm" value={rhr} onChange={setRhr} step="1" />
-          <TextArea
-            className="sm:col-span-3"
-            label="Sleep notes"
-            placeholder="Qualitative only — woke at 3am, hard time falling asleep, etc."
-            value={sleepNotes}
-            onChange={setSleepNotes}
-          />
-          <TextArea
-            className="sm:col-span-3"
-            label="Wellness notes"
-            placeholder="Anything worth flagging — sore knee, stomach off, …"
-            value={wellnessNotes}
-            onChange={setWellnessNotes}
-          />
-        </div>
-      ) : null}
 
       {error ? (
         <div className="mt-3 rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-400">
@@ -182,57 +116,6 @@ export function WellnessForm({ date, initial, title, subtitle, onSaved }: Props)
         >
           {pending ? "Saving…" : initial ? "Update" : "Log check-in"}
         </button>
-      </div>
-    </div>
-  );
-}
-
-function ScaleRow({
-  label,
-  fiveMeans,
-  invertedNote,
-  value,
-  onChange,
-}: {
-  label: string;
-  fiveMeans: string;
-  invertedNote?: string;
-  value: number | undefined;
-  onChange: (v: number | null) => void;
-}) {
-  return (
-    <div className="rounded-lg border bg-card px-3 py-2">
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="text-xs font-medium">{label}</span>
-        {invertedNote ? (
-          <span className="text-[10px] text-amber-700 dark:text-amber-400" title="Inverted scale">
-            {invertedNote}
-          </span>
-        ) : null}
-      </div>
-      <div className="mt-1.5 flex items-center justify-between gap-1">
-        {[1, 2, 3, 4, 5].map((n) => {
-          const active = value === n;
-          return (
-            <button
-              type="button"
-              key={n}
-              aria-pressed={active}
-              onClick={() => onChange(active ? null : n)}
-              className={`h-8 flex-1 rounded-md border text-xs font-medium transition-colors ${
-                active
-                  ? "border-foreground bg-foreground text-background"
-                  : "border-border bg-background text-foreground/70 hover:bg-muted"
-              }`}
-            >
-              {n}
-            </button>
-          );
-        })}
-      </div>
-      <div className="mt-1 flex justify-between text-[9px] text-muted-foreground">
-        <span>1 = worst</span>
-        <span>5 = {fiveMeans}</span>
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
-// Aggregation helpers — grouping by date, weekly buckets, training load,
-// macro totals. Pure functions; no DB access here.
+// Aggregation helpers — grouping by date, weekly buckets, training load.
+// Pure functions; no DB access here.
 
 export type DateKeyed = { date: string };
 
@@ -54,47 +54,6 @@ export function weeklyBuckets(
     bucket.countByType[key] = (bucket.countByType[key] ?? 0) + 1;
   }
   return buckets;
-}
-
-export type MacroTotals = {
-  calories: number;
-  protein_g: number;
-  carbs_g: number;
-  fat_g: number;
-  mealsWithMacros: number;
-  mealsDescriptionOnly: number;
-};
-
-export function macroTotals(
-  meals: ReadonlyArray<{
-    calories: number | null;
-    protein_g: string | null;
-    carbs_g: string | null;
-    fat_g: string | null;
-  }>,
-): MacroTotals {
-  const out: MacroTotals = {
-    calories: 0,
-    protein_g: 0,
-    carbs_g: 0,
-    fat_g: 0,
-    mealsWithMacros: 0,
-    mealsDescriptionOnly: 0,
-  };
-  for (const m of meals) {
-    const hasAny =
-      m.calories != null || m.protein_g != null || m.carbs_g != null || m.fat_g != null;
-    if (!hasAny) {
-      out.mealsDescriptionOnly += 1;
-      continue;
-    }
-    out.mealsWithMacros += 1;
-    out.calories += m.calories ?? 0;
-    out.protein_g += Number(m.protein_g ?? 0);
-    out.carbs_g += Number(m.carbs_g ?? 0);
-    out.fat_g += Number(m.fat_g ?? 0);
-  }
-  return out;
 }
 
 // Sum workout duration by type, returning the top-N descending by hours.

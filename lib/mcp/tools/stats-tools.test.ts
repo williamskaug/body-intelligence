@@ -31,9 +31,9 @@ describe("stats-engine input validation", () => {
           "weight_kg",
           "steps",
           "stress_score",
-          "body_fat_pct",
+          "stress_score",
           "spo2_avg_pct",
-          "mood",
+          "sleep_score",
         ],
       }).success,
     ).toBe(false);

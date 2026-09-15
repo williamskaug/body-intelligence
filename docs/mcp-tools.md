@@ -4,14 +4,14 @@ The MCP surface the BI server exposes. All tools are authenticated via OAuth bea
 
 The surface covers full CRUD for every entity:
 
-- **Capture (insert / upsert):** `log_workout`, `log_daily`, `log_meal`, `log_health_event`, `fs_write`
-- **Update by id:** `update_workout`, `update_meal`, `update_health_event` (no `update_daily_entry` — `log_daily` already serves as both create and update via the `(user, date)` upsert)
-- **Delete:** `delete_workout`, `delete_daily_entry`, `delete_meal`, `delete_health_event`, `fs_delete`
+- **Capture (insert / upsert):** `log_workout`, `log_daily`, `log_health_event`, `fs_write`
+- **Update by id:** `update_workout`, `update_health_event` (no `update_daily_entry` — `log_daily` already serves as both create and update via the `(user, date)` upsert)
+- **Delete:** `delete_workout`, `delete_daily_entry`, `delete_health_event`, `fs_delete`
 - **Filesystem ops:** `fs_move` (rename / relocate a document)
 - **Read:** `fs_read`, `fs_list` (files + folders), `fs_search`, `get_recent`, `search_everything`
-- **Direct getters:** `get_workout(id)`, `get_meal(id)`, `get_daily(date)`, `get_health_event(id)`
-- **Range queries:** `list_workouts`, `list_meals`, `list_daily`, `list_health_events` (cursor-paginated, 200/page)
-- **Bulk writes:** `bulk_log_workouts`, `bulk_log_daily`, `bulk_log_meals` (up to 500/call, returns `{ inserted, updated, errors[] }`)
+- **Direct getters:** `get_workout(id)`, `get_daily(date)`, `get_health_event(id)`
+- **Range queries:** `list_workouts`, `list_daily`, `list_health_events` (cursor-paginated, 200/page)
+- **Bulk writes:** `bulk_log_workouts`, `bulk_log_daily` (up to 500/call, returns `{ inserted, updated, errors[] }`)
 - **Stats:** `get_baseline(metric, window_days)`, `get_stats(metric, from, to, agg)`, `get_streak(kind)`, `compute_training_load(days)`
 - **Calendar rollup:** `get_calendar(year, month)` returns per-day rollups
 - **Health events:** `resolve_health_event(id, resolved_date?)` (alias around `update_health_event`)
@@ -139,33 +139,34 @@ Upsert the daily entry for `(user_id, date)`. Partial fields are allowed — cal
   rhr_bpm?: number;          // resting heart rate
   spo2_avg_pct?: number;     // overnight blood-oxygen avg
   respiration_avg_brpm?: number; // overnight respiration avg
-  // Body composition
+  // Body
   weight_kg?: number;
-  body_fat_pct?: number;     // smart-scale body fat %
+  skin_temp_deviation_c?: number; // overnight skin/wrist temp Δ from baseline, °C
+  sleep_score?: number;           // vendor 0-100 last-night sleep score
+  // Recovery vendor SCALARS (factor breakdowns stay in daily/YYYY-MM-DD.md)
+  stress_score?: number;          // vendor 0-100 daily average stress
+  body_battery_morning?: number;  // 0-100 on waking
+  body_battery_high?: number;
+  body_battery_low?: number;
+  body_battery_charged?: number;
+  body_battery_drained?: number;
+  training_readiness_score?: number; // vendor morning readiness 0-100 — NOT BI's gate
+  training_status?: string;       // lowercased free text (e.g. "productive")
   // Movement totals (the day's accumulated activity)
   steps?: number;
   active_calories?: number;  // kcal above BMR
   floors_climbed?: number;
   intensity_min_moderate?: number; // WHO-standard moderate-intensity minutes
   intensity_min_vigorous?: number; // WHO-standard vigorous-intensity minutes
-  // Subjective wellness (5 = best, always)
-  fatigue?: 1|2|3|4|5;       // 5 = freshest
-  soreness?: 1|2|3|4|5;      // 5 = least sore
-  mood?: 1|2|3|4|5;          // 5 = best
-  stress?: 1|2|3|4|5;        // 5 = least stressed
-  motivation?: 1|2|3|4|5;    // 5 = highest
-  sleep_quality?: 1|2|3|4|5; // 5 = best
   // Free-text
   sleep_notes?: string;
   wellness_notes?: string;
-  meal_notes?: string;
 }
 ```
 
 **Output:** the resulting daily_entries row (after upsert).
 
 **Notes:**
-- All wellness scales follow the **5 = best** convention. This is non-negotiable — recipe prompts and `get_recent` synthesis rely on it.
 - If the row exists, `updated_at` is set to `now()`. If it didn't exist, `created_at` and `updated_at` are both `now()`.
 - There is no `update_daily_entry`. `log_daily` is also the update path — call it again with any subset of fields and only those change.
 
@@ -183,70 +184,6 @@ Hard delete the `daily_entries` row for a given date. Irreversible. Prefer calli
 
 ---
 
-### `log_meal`
-
-Insert or upsert a meal. Manual writes (no `source_id`) always insert a new row; connector-driven writes (with `source_id`) upsert on the unique `(user_id, source, source_id)` key for idempotency across recipe re-runs.
-
-**Input:**
-```ts
-{
-  eaten_at: string;          // ISO timestamp. With offset (`2026-05-08T08:30:00+02:00`) preferred; bare `YYYY-MM-DDTHH:mm:ss` is resolved against the user's timezone.
-  meal_type?: string;        // free-form: "breakfast", "lunch", "snack", "pre-run", "post-workout"
-  description: string;       // required: what was eaten, in prose
-  calories: number;          // REQUIRED — estimate from description if no authoritative source
-  protein_g: number;         // REQUIRED — estimate if not known
-  carbs_g: number;           // REQUIRED — estimate if not known
-  fat_g: number;             // REQUIRED — estimate if not known
-  fiber_g?: number;          // optional
-  notes?: string;
-  source?: string;           // default "manual". Connector recipes pass "mfp", "cronometer", "apple_health", etc.
-  source_id?: string;        // optional. When provided, makes the write idempotent.
-}
-```
-
-**Output:** the created or updated meal row, plus a flag indicating which: `{ row, action: "inserted" | "updated" }`.
-
-**Notes:**
-- `description`, `calories`, `protein_g`, `carbs_g`, and `fat_g` are all required. When the caller does not have authoritative numbers (food label, connector payload, weighed portion), it MUST estimate from the description before writing. Skipping the write because macros are uncertain is wrong — an estimate is the expected behaviour. `fiber_g` stays optional.
-- Manual logging is high-friction; expect this tool to fill mostly via Phase 2 connector recipes (MyFitnessPal, Cronometer, Apple Health). The `source` + `source_id` pattern matches `log_workout` exactly so connector authoring stays consistent across both.
-- BI does not split a meal into per-food rows. If a connector source has food-level granularity, the recipe is responsible for flattening to per-meal totals before calling this tool. Per-food modeling would require a foods catalog and adds schema-vs-payoff debt that v1 explicitly avoids.
-
----
-
-### `update_meal`
-
-Patch fields on an existing meal by id. Pass any subset of fields; only those change. Unlike `log_meal`, macro fields are NOT required here — this tool is for fixing existing rows, so a partial patch can update just the description without re-asserting macros. Pass `null` explicitly to clear a stale value.
-
-**Input:**
-```ts
-{
-  id: string;                // meal uuid
-  eaten_at?: string;
-  meal_type?: string | null;
-  description?: string;
-  calories?: number | null;
-  protein_g?: number | null;
-  carbs_g?: number | null;
-  fat_g?: number | null;
-  fiber_g?: number | null;
-  notes?: string | null;
-}
-```
-
-**Output:** the updated meal row.
-
----
-
-### `delete_meal`
-
-Hard delete a meal row by id. Irreversible.
-
-**Input:** `{ id: string }`
-
-**Output:** `{ id, deleted: true }`
-
----
-
 ### `log_health_event`
 
 Insert a row in `health_events`.
@@ -257,7 +194,7 @@ Insert a row in `health_events`.
   date: string;              // when the event began or was logged
   kind: "injury" | "illness" | "symptom";
   body_part?: string;        // free-form: "L knee", "lower back"
-  severity?: 1|2|3|4|5;      // 5 = most severe (note: OPPOSITE direction from wellness)
+  severity?: 1|2|3|4|5;      // 5 = most severe
   notes?: string;            // mechanism, sensations
   resolved_date?: string;    // optional ISO date if logging retrospectively
 }
@@ -266,7 +203,7 @@ Insert a row in `health_events`.
 **Output:** the created row.
 
 **Notes:**
-- This is the only entity with a 1–5 scale that doesn't follow the "5 = best" convention. Health events are inherently bad, so 5 = worst makes more sense at the call site.
+- Health-event severity is 1–5 with 5 = most severe.
 - To mark an event resolved, call `update_health_event` with `resolved_date`. Qualitative narrative still lives in `HEALTH_LOG.md` via `fs_write`.
 
 ---
@@ -422,7 +359,7 @@ Bundle recent rows across multiple entity tables. Used by nearly every Claude re
 ```ts
 {
   days: number;                                   // 1-90
-  kinds?: Array<"workouts" | "daily" | "meals" | "health_events">; // default: all four
+  kinds?: Array<"workouts" | "daily" | "health_events" | "derived" | "capacity">; // omit for all five
 }
 ```
 
@@ -431,8 +368,9 @@ Bundle recent rows across multiple entity tables. Used by nearly every Claude re
 {
   workouts: WorkoutRow[];           // ordered by date desc
   daily: DailyEntryRow[];           // ordered by date desc
-  meals: MealRow[];                 // ordered by eaten_at desc
   health_events: HealthEventRow[];  // ordered by date desc, includes unresolved older than `days`
+  derived: DerivedDailyRow[];
+  capacity: CapacityRow[];
 }
 ```
 
@@ -453,16 +391,16 @@ Text search across all entity tables and documents.
 **Output:**
 ```ts
 Array<{
-  kind: "workout" | "daily_entry" | "meal" | "health_event" | "document";
+  kind: "workout" | "daily_entry" | "health_event" | "document";
   id: string;
-  date?: string;        // for entity rows (`eaten_at` date for meals)
+  date?: string;        // for entity rows
   path?: string;        // for documents
   snippet: string;      // matched excerpt
   updated_at: string;
 }>
 ```
 
-Implementation: union five separate full-text queries (workouts, daily_entries, meals, health_events, documents) and merge by `updated_at` desc with limit applied at the end.
+Implementation: union four separate queries (workouts, daily_entries, health_events, documents) and merge by `updated_at` desc with limit applied at the end.
 
 ---
 
@@ -470,7 +408,7 @@ Implementation: union five separate full-text queries (workouts, daily_entries, 
 
 - Use `drizzle-zod`'s `createInsertSchema` to derive base schemas, then `.pick()` and `.partial()` to shape each tool's input.
 - Date strings: validate with `z.string().regex(/^\d{4}-\d{2}-\d{2}$/)`.
-- Severity / wellness scales: `z.number().int().min(1).max(5)`.
+- Health-event severity: `z.number().int().min(1).max(5)` (5 = most severe).
 - Path strings: regex `^[A-Za-z0-9_/.\-]+\.md$`. No leading slash. No `..`.
 
 ## Error conventions
@@ -496,9 +434,8 @@ the `(userId, input) => result` shape with inline Zod at the boundary.
   object (parallel to `metrics`) → `workout_zones` (full replace per workout).
   `metrics` gains `weather_temp_c`, `weather_humidity_pct`, `strength_volume_kg`.
   `get_workout` now joins `workout_zones` too.
-- `log_daily` / `bulk_log_daily` gain the new `daily_entries` columns (stress,
-  Body Battery scalars, training readiness/status, body composition, BP,
-  hydration).
+- `log_daily` / `bulk_log_daily` gain the recovery vendor scalars (stress_score,
+  Body Battery, training readiness/status).
 - `log_capacity(date, ...partial)` / `bulk_log_capacity` → `capacity_metrics`
   (partial-merge by `(user, date)`; capacity-sync recipe only).
 - `get_capacity(as_of?)` → latest known value per capacity metric, each with its

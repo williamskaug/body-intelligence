@@ -30,18 +30,13 @@ export type TrendsDaily = {
   spo2_avg_pct: string | null;
   respiration_avg_brpm: string | null;
   weight_kg: string | null;
-  body_fat_pct: string | null;
+  sleep_score: number | null;
+  stress_score: number | null;
   steps: number | null;
   active_calories: number | null;
   floors_climbed: number | null;
   intensity_min_moderate: number | null;
   intensity_min_vigorous: number | null;
-  fatigue: number | null;
-  soreness: number | null;
-  mood: number | null;
-  stress: number | null;
-  motivation: number | null;
-  sleep_quality: number | null;
 };
 
 export type TrendsWorkout = {
@@ -89,11 +84,11 @@ export function Trends({
     hrv_ms: dates.map((d) => dailyByDate.get(d)?.[0]?.hrv_ms ?? null),
     rhr_bpm: dates.map((d) => dailyByDate.get(d)?.[0]?.rhr_bpm ?? null),
     weight_kg: dates.map((d) => num(dailyByDate.get(d)?.[0]?.weight_kg)),
-    wellness: dates.map((d) => wellnessComposite(dailyByDate.get(d)?.[0])),
     steps: dates.map((d) => dailyByDate.get(d)?.[0]?.steps ?? null),
     active_calories: dates.map((d) => dailyByDate.get(d)?.[0]?.active_calories ?? null),
     spo2_avg_pct: dates.map((d) => num(dailyByDate.get(d)?.[0]?.spo2_avg_pct)),
-    body_fat_pct: dates.map((d) => num(dailyByDate.get(d)?.[0]?.body_fat_pct)),
+    sleep_score: dates.map((d) => dailyByDate.get(d)?.[0]?.sleep_score ?? null),
+    stress_score: dates.map((d) => dailyByDate.get(d)?.[0]?.stress_score ?? null),
   };
 
   const baselines = {
@@ -101,11 +96,11 @@ export function Trends({
     hrv_ms: computeBaseline(series.hrv_ms),
     rhr_bpm: computeBaseline(series.rhr_bpm),
     weight_kg: computeBaseline(series.weight_kg),
-    wellness: computeBaseline(series.wellness),
     steps: computeBaseline(series.steps),
     active_calories: computeBaseline(series.active_calories),
     spo2_avg_pct: computeBaseline(series.spo2_avg_pct),
-    body_fat_pct: computeBaseline(series.body_fat_pct),
+    sleep_score: computeBaseline(series.sleep_score),
+    stress_score: computeBaseline(series.stress_score),
   };
 
   const metrics = [
@@ -113,11 +108,11 @@ export function Trends({
     { key: "hrv_ms", label: "HRV", unit: "ms", decimals: 0, higher: true },
     { key: "rhr_bpm", label: "RHR", unit: "bpm", decimals: 0, higher: false },
     { key: "weight_kg", label: "Weight", unit: "kg", decimals: 1, higher: null },
-    { key: "wellness", label: "Wellness avg", unit: "/5", decimals: 2, higher: true },
+    { key: "sleep_score", label: "Sleep score", unit: "", decimals: 0, higher: true },
     { key: "steps", label: "Steps", unit: "", decimals: 0, higher: true },
     { key: "active_calories", label: "Active kcal", unit: "kcal", decimals: 0, higher: true },
     { key: "spo2_avg_pct", label: "SpO₂", unit: "%", decimals: 1, higher: true },
-    { key: "body_fat_pct", label: "Body fat", unit: "%", decimals: 1, higher: null },
+    { key: "stress_score", label: "Stress score", unit: "", decimals: 0, higher: false },
   ] as const;
 
   // Sleep architecture — stage minutes per night (already fetched into daily).
@@ -210,17 +205,7 @@ export function Trends({
         </h3>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {metrics
-            .filter((m) => {
-              // Wellness needs a few composite days to be meaningful — below
-              // that threshold the card simply doesn't render.
-              if (m.key === "wellness") {
-                return (
-                  series.wellness.filter((v) => v != null).length >=
-                  MIN_WELLNESS_DAYS
-                );
-              }
-              return series[m.key].some((v) => v != null);
-            })
+            .filter((m) => series[m.key].some((v) => v != null))
             .map((m) => (
               <MetricCard
                 key={m.key}
@@ -881,21 +866,6 @@ function buildSegments(
     cursor += len;
   }
   return out;
-}
-
-// A day's wellness composite is only meaningful when most of the six scales
-// are filled. Requiring >= 3 stops a phantom "4.0 / 5" from rendering as the
-// hero metric just because mood and fatigue happened to be jotted down once.
-const MIN_SCALES_PER_DAY = 3;
-// And we need at least 3 such days before showing a wellness trend at all.
-const MIN_WELLNESS_DAYS = 3;
-
-function wellnessComposite(d: TrendsDaily | undefined): number | null {
-  if (!d) return null;
-  const xs = [d.fatigue, d.soreness, d.mood, d.stress, d.motivation, d.sleep_quality]
-    .filter((v): v is number => v != null && Number.isFinite(v));
-  if (xs.length < MIN_SCALES_PER_DAY) return null;
-  return xs.reduce((a, b) => a + b, 0) / xs.length;
 }
 
 // Hours per canonical workout type, consolidated through normalizeType so

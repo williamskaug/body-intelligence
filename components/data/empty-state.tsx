@@ -49,18 +49,18 @@ export function EmptyDataState({ email }: { email: string }) {
               >
                 Recipe library
               </Link>{" "}
-              has six starter prompts. Begin with{" "}
+              has the catalog recipes. Begin with{" "}
               <span className="font-mono text-foreground">Onboarding</span> to
               fill in PROFILE/GOALS/PRINCIPLES, then{" "}
-              <span className="font-mono text-foreground">Morning check-in</span>{" "}
-              to start logging daily entries.
+              <span className="font-mono text-foreground">Dawn agent</span>{" "}
+              to sync the wearable and write a daily briefing.
             </>
           }
         />
         <Step
           n={3}
           title="Log anything manually, anytime"
-          body="In any Claude conversation that has your BI MCP connected, ask it to log a workout, log a meal, or write to a memory document. Whatever Claude writes shows up here within seconds."
+          body="In any Claude conversation that has your BI MCP connected, ask it to log a workout or write to a memory document. Whatever Claude writes shows up here within seconds."
         />
       </ol>
 

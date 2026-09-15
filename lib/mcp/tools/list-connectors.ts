@@ -14,25 +14,14 @@ export async function listConnectors(userId: string) {
   const sinceIso = new Date(Date.now() - 30 * 86_400_000).toISOString();
   const todayIso = new Date().toISOString().slice(0, 10);
 
-  const [w30, m30, wAll, mAll, runs] = await Promise.all([
+  const [w30, wAll, runs] = await Promise.all([
     sb
       .from("workouts")
       .select("source, created_at")
       .eq("user_id", userId)
       .gte("created_at", sinceIso),
     sb
-      .from("meals")
-      .select("source, created_at")
-      .eq("user_id", userId)
-      .gte("created_at", sinceIso),
-    sb
       .from("workouts")
-      .select("source, created_at")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(500),
-    sb
-      .from("meals")
       .select("source, created_at")
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
@@ -42,7 +31,7 @@ export async function listConnectors(userId: string) {
       .select("recipe_id, last_run_at, last_run_status")
       .eq("user_id", userId),
   ]);
-  for (const r of [w30, m30, wAll, mAll, runs]) {
+  for (const r of [w30, wAll, runs]) {
     if (r.error) throw new Error(`list_connectors: ${r.error.message}`);
   }
 
@@ -69,10 +58,10 @@ export async function listConnectors(userId: string) {
     return grouped.get(s)!;
   };
 
-  for (const row of [...(w30.data ?? []), ...(m30.data ?? [])] as RawRow[]) {
+  for (const row of (w30.data ?? []) as RawRow[]) {
     ensure(row.source).records_30d += 1;
   }
-  for (const row of [...(wAll.data ?? []), ...(mAll.data ?? [])] as RawRow[]) {
+  for (const row of (wAll.data ?? []) as RawRow[]) {
     const g = ensure(row.source);
     if (!g.last_write_at || row.created_at > g.last_write_at) {
       g.last_write_at = row.created_at;

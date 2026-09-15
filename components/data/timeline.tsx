@@ -46,18 +46,13 @@ export type TimelineDaily = {
   spo2_avg_pct: string | null;
   respiration_avg_brpm: string | null;
   weight_kg: string | null;
-  body_fat_pct: string | null;
+  sleep_score: number | null;
+  stress_score: number | null;
   steps: number | null;
   active_calories: number | null;
   floors_climbed: number | null;
   intensity_min_moderate: number | null;
   intensity_min_vigorous: number | null;
-  fatigue: number | null;
-  soreness: number | null;
-  mood: number | null;
-  stress: number | null;
-  motivation: number | null;
-  sleep_quality: number | null;
   sleep_notes: string | null;
   wellness_notes: string | null;
 };
@@ -95,15 +90,6 @@ export type TimelineProps = {
   metricsByWorkoutId?: Record<string, WorkoutMetricsRow>;
 };
 
-const WELLNESS_KEYS = [
-  { key: "fatigue", short: "Ftg", long: "Fatigue" },
-  { key: "soreness", short: "Sor", long: "Soreness" },
-  { key: "mood", short: "Mood", long: "Mood" },
-  { key: "stress", short: "Strs", long: "Stress" },
-  { key: "motivation", short: "Mtv", long: "Motivation" },
-  { key: "sleep_quality", short: "SlQ", long: "Sleep quality" },
-] as const;
-
 export function Timeline({
   workouts,
   daily,
@@ -124,26 +110,18 @@ export function Timeline({
     );
   }
 
-  // Baselines over the whole window — wellness scales use 1–5 mean,
-  // continuous metrics use their own scale.
+  // Baselines over the whole window.
   const baselines = {
     sleep_h: computeBaseline(daily.map((d) => num(d.sleep_h))),
     hrv_ms: computeBaseline(daily.map((d) => d.hrv_ms)),
     rhr_bpm: computeBaseline(daily.map((d) => d.rhr_bpm)),
     spo2_avg_pct: computeBaseline(daily.map((d) => num(d.spo2_avg_pct))),
     respiration_avg_brpm: computeBaseline(daily.map((d) => num(d.respiration_avg_brpm))),
-    body_fat_pct: computeBaseline(daily.map((d) => num(d.body_fat_pct))),
     steps: computeBaseline(daily.map((d) => d.steps)),
     active_calories: computeBaseline(daily.map((d) => d.active_calories)),
     floors_climbed: computeBaseline(daily.map((d) => d.floors_climbed)),
     intensity_min_moderate: computeBaseline(daily.map((d) => d.intensity_min_moderate)),
     intensity_min_vigorous: computeBaseline(daily.map((d) => d.intensity_min_vigorous)),
-    fatigue: computeBaseline(daily.map((d) => d.fatigue)),
-    soreness: computeBaseline(daily.map((d) => d.soreness)),
-    mood: computeBaseline(daily.map((d) => d.mood)),
-    stress: computeBaseline(daily.map((d) => d.stress)),
-    motivation: computeBaseline(daily.map((d) => d.motivation)),
-    sleep_quality: computeBaseline(daily.map((d) => d.sleep_quality)),
   };
 
   const workoutsByDate = groupBy(workouts, (w) => w.date);
@@ -288,11 +266,6 @@ function DayCard({
     { label: "Wt", value: daily?.weight_kg, unit: "kg", decimals: 1, baseline: null, higherIsBetter: null },
   ];
 
-  const wellnessValues = daily
-    ? WELLNESS_KEYS.map((w) => ({ ...w, value: daily[w.key] as number | null }))
-    : [];
-  const hasWellness = wellnessValues.some((w) => w.value != null);
-
   return (
     <article className="rounded-2xl border bg-card shadow-sm">
       <header className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 px-5 pt-4">
@@ -329,22 +302,6 @@ function DayCard({
           ))}
         </div>
       </header>
-
-      {hasWellness ? (
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 px-5">
-          {wellnessValues.map((w) =>
-            w.value == null ? null : (
-              <WellnessGauge
-                key={w.key}
-                label={w.short}
-                title={w.long}
-                value={w.value}
-                baseline={baselines[w.key] ?? null}
-              />
-            ),
-          )}
-        </div>
-      ) : null}
 
       {workouts.length > 0 ? (
         <div className="mt-3 flex flex-col gap-2 px-5">
@@ -465,52 +422,6 @@ function ContinuousChip({
       ) : null}
     </span>
   );
-}
-
-function WellnessGauge({
-  label,
-  title,
-  value,
-  baseline,
-}: {
-  label: string;
-  title: string;
-  value: number;
-  baseline: ReturnType<typeof computeBaseline>;
-}) {
-  const cls = classify(value, baseline ?? null, true);
-  const filled = gaugeBarColor(cls.direction);
-  const empty = "bg-foreground/15";
-  const baselineLabel = baseline ? ` (baseline ${baseline.mean.toFixed(1)})` : "";
-  return (
-    <span
-      className="inline-flex items-center gap-1.5"
-      title={`${title}: ${value}/5${baselineLabel}`}
-    >
-      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-        {label}
-      </span>
-      <span className="flex gap-[2px]">
-        {[1, 2, 3, 4, 5].map((level) => (
-          <span
-            key={level}
-            className={`h-3 w-[3px] rounded-[1px] ${level <= value ? filled : empty}`}
-          />
-        ))}
-      </span>
-    </span>
-  );
-}
-
-function gaugeBarColor(direction: "good" | "warn" | "neutral"): string {
-  switch (direction) {
-    case "good":
-      return "bg-emerald-500";
-    case "warn":
-      return "bg-amber-500";
-    case "neutral":
-      return "bg-foreground/60";
-  }
 }
 
 function WorkoutRow({
@@ -693,7 +604,7 @@ function sourceLabel(source: string): string {
   return idx === -1 ? source : source.slice(0, idx);
 }
 
-// SpO2, respiration, body fat, steps, active kcal, floors, intensity minutes —
+// SpO2, respiration, steps, active kcal, floors, intensity minutes —
 // all rolled into one collapsed line so the default card stays ≤4 chips.
 function MoreMetricsRow({
   daily,
@@ -712,7 +623,6 @@ function MoreMetricsRow({
   }> = [
     { label: "SpO₂", value: daily.spo2_avg_pct, unit: "%", decimals: 1, baseline: baselines.spo2_avg_pct, higherIsBetter: true },
     { label: "Resp", value: daily.respiration_avg_brpm, unit: "brpm", decimals: 1, baseline: baselines.respiration_avg_brpm, higherIsBetter: null },
-    { label: "BF", value: daily.body_fat_pct, unit: "%", decimals: 1, baseline: baselines.body_fat_pct, higherIsBetter: null },
     { label: "Steps", value: daily.steps, unit: "", decimals: 0, baseline: baselines.steps, higherIsBetter: true },
     { label: "Act", value: daily.active_calories, unit: "kcal", decimals: 0, baseline: baselines.active_calories, higherIsBetter: true },
     { label: "Floors", value: daily.floors_climbed, unit: "", decimals: 0, baseline: baselines.floors_climbed, higherIsBetter: true },

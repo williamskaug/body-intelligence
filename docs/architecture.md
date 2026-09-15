@@ -87,7 +87,7 @@ Six tables. Each one earns its place:
 
 - **`workouts`** — workouts have richer qualitative content than other entities ("knee twinge mile 4 settled by mile 6"), and there can be multiple per day (brick = ride + run). Free-form `type` field instead of an enum because real training defies clean taxonomies.
 
-- **`daily_entries`** — one row per (user, date). Combines sleep, wellness scales, body metrics (weight/HRV/RHR), and meal notes. We considered separate tables; one wide table won because (a) you log them all at once in the morning, (b) querying "what did my body look like on date X" is a single SELECT, (c) the column count is bounded.
+- **`daily_entries`** — one row per (user, date). Combines sleep, recovery vendor scalars (HRV/RHR/stress_score/Body Battery), weight, and movement totals. We considered separate tables; one wide table won because (a) you log them all at once in the morning, (b) querying "what did my body look like on date X" is a single SELECT, (c) the column count is bounded. Subjective 1–5 scales and per-meal capture were dropped in the solo-user trim.
 
 - **`health_events`** — append-only log keeps the model simple. Active issues are rows with `resolved_date IS NULL`. No state machine, no transitions table.
 
@@ -95,13 +95,13 @@ Six tables. Each one earns its place:
 
 - **`oauth_clients`** + **`oauth_tokens`** — minimum viable OAuth state. DCR creates client rows; the auth flow creates token rows.
 
-The wellness scales convention (**all 1–5, 5 = best**) is critical and worth preserving even when it feels mildly unintuitive at the capture site. It means Claude can sum or average the scales without sign-flipping logic, which keeps recipe prompts simpler.
+Health-event severity stays **1–5, 5 = most severe** (the opposite of the old wellness-scale convention, which was dropped). Vendor `stress_score` is 0–100, higher = more stress.
 
 ## MCP surface rationale
 
 Seven tools, organized by capture vs. read. The principle: each tool does one well-named thing, and there's no "do something smart" tool that would smuggle synthesis into the app layer.
 
-`log_daily` accepts partial fields — you might log sleep at 7am and meals at 9pm. Upsert by `(user_id, date)`.
+`log_daily` accepts partial fields — you might log sleep at 7am and notes later. Upsert by `(user_id, date)`.
 
 `get_recent` is the one "convenience" tool — it returns a typed bundle across multiple entity types. Rationale: nearly every reasoning task starts with "what's been going on lately," and it's wasteful to make Claude run three separate queries to get there.
 
