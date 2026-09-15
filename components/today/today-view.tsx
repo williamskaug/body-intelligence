@@ -5,7 +5,7 @@ import { SvgLine } from "@/components/app/charts";
 import { addDays, isoWeek, weekdayShort } from "@/lib/app/dates";
 import { formatClock, formatClockDelta, formatHours, formatKm, formatPace, formatZScore, num, paceFromWorkout } from "@/lib/app/format";
 import { parseWeekPlan } from "@/lib/app/parse-week";
-import type { AppSnapshot } from "@/lib/app/snapshot";
+import type { AppSnapshot, RaceInfo } from "@/lib/app/snapshot";
 import {
   isRunType,
   runningEfficiency,
@@ -82,10 +82,11 @@ export function TodayView({
 
   const weekKmCap = 60;
   const weekHCap = 10;
+  const goalLabel = race ? shortGoal(race) : null;
 
   return (
     <div className="flex flex-col gap-px p-px">
-      <div className="grid grid-cols-2 gap-px bg-neutral-200 @5xl:grid-cols-8">
+      <div className="grid min-w-0 grid-cols-2 gap-px bg-neutral-200 @5xl:grid-cols-8">
         <Kpi
           label="Pred. marathon"
           value={formatClock(predSec)}
@@ -101,8 +102,8 @@ export function TodayView({
         <Kpi
           label="Days to race"
           value={race ? Math.max(0, race.daysOut) : "[N]"}
-          sub={plan.block ? plan.block.split("\n")[0] : race?.name}
-          href="/memory?path=GOALS.md"
+          sub={plan.blockLabel ?? race?.name ?? undefined}
+          href="/memory?path=CURRENT.md"
         />
         <Kpi
           label="Run km · wk"
@@ -162,23 +163,36 @@ export function TodayView({
             href="/memory?path=GOALS.md"
             hrefLabel="GOALS.md"
           />
-          <div className="px-3 pt-2 text-[11px] text-neutral-500">
-            {race ? (
-              <span>
-                {race.name}
-                {race.tier ? ` · ${race.tier}-race` : ""} · {race.daysOut}d
-                {race.goal ? ` · goal ${race.goal}` : ""}
-                {predSec != null && race.goalSeconds != null ? (
-                  <span className={predSec <= race.goalSeconds ? " text-emerald-700" : " text-rose-600"}>
-                    {" "}
-                    gap {formatClockDelta(predSec - race.goalSeconds)}
-                  </span>
-                ) : null}
-              </span>
-            ) : (
-              "No A-race in GOALS.md"
-            )}
-            {plan.block ? <span className="ml-3 uppercase tracking-wide">{plan.block.split("\n")[0]}</span> : null}
+          <div className="flex min-w-0 items-start justify-between gap-3 px-3 pt-2 text-[11px]">
+            <div className="min-w-0 text-neutral-600">
+              {race ? (
+                <>
+                  <div className="truncate">
+                    {race.name}
+                    {race.tier ? ` · ${race.tier}-race` : ""} · {race.daysOut}d
+                  </div>
+                  <div className="mt-0.5 truncate text-neutral-500">
+                    {goalLabel ? `goal ${goalLabel}` : null}
+                    {predSec != null && race.goalSeconds != null ? (
+                      <span className={predSec <= race.goalSeconds ? " text-emerald-700" : " text-rose-600"}>
+                        {goalLabel ? " · " : ""}
+                        gap {formatClockDelta(predSec - race.goalSeconds)}
+                      </span>
+                    ) : null}
+                  </div>
+                </>
+              ) : (
+                "No A-race in GOALS.md"
+              )}
+            </div>
+            {plan.blockLabel ? (
+              <div className="shrink-0 text-right">
+                <div className="text-[10px] uppercase tracking-wide text-neutral-400">Block</div>
+                <div className="max-w-[11rem] truncate font-medium text-neutral-700" title={plan.blockLabel}>
+                  {plan.blockLabel}
+                </div>
+              </div>
+            ) : null}
           </div>
           <SvgLine
             points={marathonSeries.length ? marathonSeries : weeks.map((w) => ({ x: w.label, y: null }))}
@@ -435,7 +449,7 @@ function WeekPlan({
           >
             <span className="w-8 text-neutral-400">{item.dow}</span>
             {item.type ? <TypeChip>{item.type}</TypeChip> : null}
-            <span className="min-w-0 flex-1">{item.title}</span>
+            <span className="min-w-0 flex-1 truncate">{item.title}</span>
             {logged || item.done ? (
               <span className="text-[10px] uppercase text-emerald-700">{isToday ? "today" : "done"}</span>
             ) : null}
@@ -450,6 +464,13 @@ function pctDelta(curr: number, prev: number): string {
   if (prev <= 0) return "—";
   const p = ((curr - prev) / prev) * 100;
   return `${p >= 0 ? "+" : ""}${p.toFixed(0)} %`;
+}
+
+function shortGoal(race: RaceInfo): string | null {
+  if (race.goalSeconds != null) return formatClock(race.goalSeconds);
+  if (!race.goal) return null;
+  const first = race.goal.split(/[,(]/)[0]!.trim();
+  return first.length > 28 ? `${first.slice(0, 27).trimEnd()}…` : first;
 }
 
 function insightLead(content: string): string {

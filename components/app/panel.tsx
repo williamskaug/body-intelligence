@@ -81,9 +81,18 @@ export function Kpi({
 }) {
   const inner = (
     <>
-      <div className="bi-label break-words leading-tight">{label}</div>
-      <div className="mt-1 font-mono text-lg tabular-nums leading-none tracking-tight @5xl:text-xl">{value}</div>
-      {sub ? <div className="mt-1 min-w-0 break-words text-[10px] leading-snug text-neutral-500">{sub}</div> : null}
+      <div className="bi-label leading-tight">{label}</div>
+      <div className="mt-1 font-mono text-lg tabular-nums leading-none tracking-tight whitespace-nowrap @5xl:text-xl">
+        {value}
+      </div>
+      {sub ? (
+        <div
+          className="mt-1 min-w-0 truncate text-[10px] leading-snug text-neutral-500"
+          title={typeof sub === "string" ? sub : undefined}
+        >
+          {sub}
+        </div>
+      ) : null}
     </>
   );
   if (href) {
