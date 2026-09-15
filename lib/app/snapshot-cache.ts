@@ -17,6 +17,10 @@ export function analyzeExtrasCacheKey(userId: string, days: number, focusRun: bo
   return ["analyze-extras", userId, String(days), focusRun ? "run" : "all"];
 }
 
+export function statusChromeCacheKey(userId: string): string[] {
+  return ["status-chrome", userId];
+}
+
 export function dehydrateContentMap(map: Map<string, string>): Record<string, string> {
   return Object.fromEntries(map);
 }

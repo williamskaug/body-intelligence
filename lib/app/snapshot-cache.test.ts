@@ -4,6 +4,7 @@ import {
   dehydrateContentMap,
   hydrateContentMap,
   snapshotCacheKey,
+  statusChromeCacheKey,
   userDataTag,
 } from "./snapshot-cache";
 
@@ -25,6 +26,7 @@ describe("snapshot cache helpers", () => {
       "run",
     ]);
     expect(analyzeExtrasCacheKey("u1", 90, false)).toEqual(["analyze-extras", "u1", "90", "all"]);
+    expect(statusChromeCacheKey("u1")).toEqual(["status-chrome", "u1"]);
   });
 
   it("round-trips document content through a JSON-safe record (unstable_cache cannot store Map)", () => {

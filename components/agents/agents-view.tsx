@@ -91,8 +91,8 @@ export function AgentsView({
       {(capture.weightDaysAgo != null && capture.weightDaysAgo > 14) ||
       capture.notesDays < 10 ||
       capture.missing.length > 0 ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-3 py-2 text-[12px]">
-          <p className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-amber-200 bg-amber-50 px-3 py-2 text-[12px]">
+          <p className="min-w-0 flex-1 text-pretty">
             <span className="mr-2 border border-amber-300 px-1.5 py-px text-[10px] uppercase tracking-wide text-amber-800">
               Capture gap
             </span>
@@ -146,7 +146,7 @@ export function AgentsView({
                     </span>
                   </td>
                   <td className="py-1.5 font-mono">{a.state?.run_count ?? 0}</td>
-                  <td className="py-1.5 text-neutral-500">
+                  <td className="max-w-[18rem] py-1.5 text-pretty text-neutral-500 [overflow-wrap:break-word]">
                     {a.covers.map(shortCover).join(" · ") || "—"}
                   </td>
                   <td className="py-1.5 text-right">
@@ -184,7 +184,7 @@ export function AgentsView({
             ?
           </span>
         </h2>
-        <ul className="mt-3 grid gap-px bg-neutral-200 sm:grid-cols-2 @5xl:grid-cols-3">
+        <ul className="mt-3 grid gap-px bg-neutral-200 sm:grid-cols-2 @7xl:grid-cols-3">
           {recipes.map((recipe) => {
             const state = installState.get(recipe.id);
             const covered = coveredBy(recipe);

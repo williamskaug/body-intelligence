@@ -1,4 +1,3 @@
-import { PageChrome } from "@/components/app/page-chrome";
 import { AgentsView, type CaptureGap, type InstallState } from "@/components/agents/agents-view";
 import { parseRecipeDoc, type UserRecipeDoc } from "@/lib/agents/recipe-doc";
 import { addDays } from "@/lib/app/dates";
@@ -20,12 +19,9 @@ export default async function AgentsPage() {
   ]);
 
   return (
-    <PageChrome
-      snapshot={snapshot}
-      action={{ label: "+ Install recipe", href: "/agents#recipe-library" }}
-    >
+    <div className="h-full min-h-0 overflow-auto">
       <AgentsView installState={installState} userDocs={userDocs} capture={capture} />
-    </PageChrome>
+    </div>
   );
 }
 

@@ -102,10 +102,9 @@ export function BaselineBandChart({
           />
         </ComposedChart>
       </ChartContainer>
-      <p className="mt-1 text-[11px] text-muted-foreground">
+      <p className="mt-1 text-pretty text-[11px] leading-snug text-muted-foreground">
         Normal range {(mean - sd).toFixed(decimals)}–{(mean + sd).toFixed(decimals)}
-        {unit ? ` ${unit}` : ""} (mean ±1 SD over the window). Descriptive — not a
-        readiness gate.
+        {unit ? ` ${unit}` : ""} (mean ±1 SD). Descriptive — not a readiness gate.
       </p>
     </div>
   );

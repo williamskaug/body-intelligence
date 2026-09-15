@@ -4,7 +4,7 @@ import { EmptyNote, Kpi, Panel, PanelHeader, TypeChip } from "@/components/app/p
 import { SvgLine } from "@/components/app/charts";
 import { addDays, isoWeek, weekdayShort } from "@/lib/app/dates";
 import { formatClock, formatClockDelta, formatHours, formatKm, formatPace, formatZScore, num, paceFromWorkout } from "@/lib/app/format";
-import { parseWeekPlan } from "@/lib/app/parse-week";
+import { parseWeekPlan, planExcerpt, clipAtWord } from "@/lib/app/parse-week";
 import type { AppSnapshot, RaceInfo } from "@/lib/app/snapshot";
 import {
   isRunType,
@@ -86,7 +86,7 @@ export function TodayView({
 
   return (
     <div className="flex flex-col gap-px p-px">
-      <div className="grid min-w-0 grid-cols-2 gap-px bg-neutral-200 @5xl:grid-cols-8">
+      <div className="grid min-w-0 grid-cols-2 gap-px bg-neutral-200 @xl:grid-cols-4 @7xl:grid-cols-8">
         <Kpi
           label="Pred. marathon"
           value={formatClock(predSec)}
@@ -164,14 +164,14 @@ export function TodayView({
             hrefLabel="GOALS.md"
           />
           <div className="flex min-w-0 items-start justify-between gap-3 px-3 pt-2 text-[11px]">
-            <div className="min-w-0 text-neutral-600">
+            <div className="min-w-0 text-pretty text-neutral-600">
               {race ? (
                 <>
-                  <div className="truncate">
+                  <div>
                     {race.name}
                     {race.tier ? ` · ${race.tier}-race` : ""} · {race.daysOut}d
                   </div>
-                  <div className="mt-0.5 truncate text-neutral-500">
+                  <div className="mt-0.5 text-neutral-500">
                     {goalLabel ? `goal ${goalLabel}` : null}
                     {predSec != null && race.goalSeconds != null ? (
                       <span className={predSec <= race.goalSeconds ? " text-emerald-700" : " text-rose-600"}>
@@ -186,12 +186,14 @@ export function TodayView({
               )}
             </div>
             {plan.blockLabel ? (
-              <div className="shrink-0 text-right">
+              <a
+                href="/memory?path=CURRENT.md"
+                className="shrink-0 text-right"
+                title="Open CURRENT.md"
+              >
                 <div className="text-[10px] uppercase tracking-wide text-neutral-400">Block</div>
-                <div className="max-w-[11rem] truncate font-medium text-neutral-700" title={plan.blockLabel}>
-                  {plan.blockLabel}
-                </div>
-              </div>
+                <div className="max-w-[11rem] font-medium text-pretty text-neutral-700">{plan.blockLabel}</div>
+              </a>
             ) : null}
           </div>
           <SvgLine
@@ -360,7 +362,7 @@ export function TodayView({
             }
             hrefLabel="dawn-agent"
           />
-          <div className="max-h-40 overflow-y-auto px-3 py-2 text-[12px] leading-relaxed text-neutral-700">
+          <div className="max-h-40 overflow-y-auto px-3 py-2 text-[12px] leading-relaxed text-pretty text-neutral-700">
             {briefing ? (
               <Markdown>{briefing}</Markdown>
             ) : insight ? (
@@ -430,8 +432,14 @@ function WeekPlan({
   raw: string;
 }) {
   if (items.length === 0) {
-    return raw ? (
-      <pre className="whitespace-pre-wrap font-sans text-[11px] leading-relaxed text-neutral-600">{raw}</pre>
+    const excerpt = planExcerpt(raw);
+    return excerpt ? (
+      <p className="text-[11px] leading-relaxed text-pretty text-neutral-600">
+        {excerpt}{" "}
+        <a href="/memory?path=CURRENT.md" className="uppercase tracking-wide text-neutral-400 hover:text-foreground">
+          CURRENT.md
+        </a>
+      </p>
     ) : (
       <p className="text-[11px] text-neutral-400">No week plan in CURRENT.md.</p>
     );
@@ -449,7 +457,9 @@ function WeekPlan({
           >
             <span className="w-8 text-neutral-400">{item.dow}</span>
             {item.type ? <TypeChip>{item.type}</TypeChip> : null}
-            <span className="min-w-0 flex-1 truncate">{item.title}</span>
+            <span className="min-w-0 flex-1 text-pretty [overflow-wrap:break-word]">
+              {clipAtWord(item.title, 64)}
+            </span>
             {logged || item.done ? (
               <span className="text-[10px] uppercase text-emerald-700">{isToday ? "today" : "done"}</span>
             ) : null}

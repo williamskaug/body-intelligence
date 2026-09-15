@@ -1,7 +1,8 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { AppRail } from "@/components/app/app-rail";
-import { loadDawnFooter, requireUser } from "@/lib/app/snapshot";
+import { AppShell } from "@/components/app/app-shell";
+import { loadDawnFooter, loadStatusChrome, requireUser } from "@/lib/app/snapshot";
 
 export default async function AppLayout({
   children,
@@ -22,8 +23,11 @@ export default async function AppLayout({
       <Suspense fallback={<AppRail dawn={{ status: "none", lastRunLabel: null }} />}>
         <DawnRail userId={user.id} />
       </Suspense>
-      <main id="main-content" className="@container flex min-h-0 min-w-0 flex-1 flex-col">
-        {children}
+      <main id="main-content" className="@container flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden">
+        <Suspense fallback={<div className="h-11 shrink-0 border-b border-neutral-200 bg-white" />}>
+          <ChromeBar userId={user.id} />
+        </Suspense>
+        <div className="min-h-0 min-w-0 flex-1 overflow-hidden">{children}</div>
       </main>
     </div>
   );
@@ -32,4 +36,9 @@ export default async function AppLayout({
 async function DawnRail({ userId }: { userId: string }) {
   const dawn = await loadDawnFooter(userId);
   return <AppRail dawn={dawn} />;
+}
+
+async function ChromeBar({ userId }: { userId: string }) {
+  const chrome = await loadStatusChrome(userId);
+  return <AppShell chrome={chrome} />;
 }

@@ -1,4 +1,3 @@
-import { PageChrome } from "@/components/app/page-chrome";
 import { MemoryView } from "@/components/memory/memory-view";
 import { loadAppSnapshot, loadDocument, requireUser } from "@/lib/app/snapshot";
 import { parseWindow } from "@/lib/app/window";
@@ -32,10 +31,7 @@ export default async function MemoryPage({ searchParams }: { searchParams: Searc
     snapshot.documents.find((d) => d.path === selectedPath)?.updated_at ?? loaded?.updated_at ?? null;
 
   return (
-    <PageChrome
-      snapshot={snapshot}
-      action={{ label: "Save file", form: "memory-save", type: "submit" }}
-    >
+    <div className="h-full min-h-0 overflow-hidden">
       <MemoryView
         key={selectedPath}
         files={files}
@@ -43,6 +39,6 @@ export default async function MemoryPage({ searchParams }: { searchParams: Searc
         content={content}
         updatedAt={updatedAt}
       />
-    </PageChrome>
+    </div>
   );
 }

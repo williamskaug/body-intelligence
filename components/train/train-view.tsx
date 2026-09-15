@@ -28,8 +28,8 @@ export function TrainList({
   const rpeFallback = weeks.reduce((a, w) => a + w.rpeFallback, 0);
 
   return (
-    <div className="flex min-h-full flex-col">
-      <div className="grid min-w-0 gap-px bg-neutral-200 @5xl:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)]">
+    <div className="flex h-full min-h-0 min-w-0 flex-col">
+      <div className="grid min-w-0 shrink-0 gap-px bg-neutral-200 @5xl:grid-cols-[minmax(0,1fr)_minmax(14rem,20rem)]">
         <Panel>
           <PanelHeader
             title="Weekly load"
@@ -57,10 +57,10 @@ export function TrainList({
         </Panel>
       </div>
 
-      <div className="grid min-h-0 min-w-0 flex-1 gap-px bg-neutral-200 @5xl:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)]">
-        <Panel className="flex min-h-0 flex-col">
-        <div className="min-w-0 overflow-x-auto">
-            <table className="w-full min-w-[48rem] text-left text-[12px]">
+      <div className="grid min-h-0 min-w-0 flex-1 gap-px bg-neutral-200 @5xl:grid-cols-[minmax(0,1fr)_minmax(16rem,22rem)]">
+        <Panel className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+        <div className="min-h-0 min-w-0 flex-1 overflow-auto">
+            <table className="w-full text-left text-[12px]">
               <thead className="sticky top-0 bg-white text-[10px] uppercase tracking-wide text-neutral-400">
                 <tr className="border-b border-neutral-200">
                   {["Date", "Type", "Title", "Dur", "Km", "Avg HR", "Load", "Src"].map((h) => (
@@ -81,7 +81,7 @@ export function TrainList({
                   const active = selected?.id === w.id;
                   return (
                     <tr key={w.id} className={active ? "bg-neutral-900 text-white" : "hover:bg-neutral-50"}>
-                      <td className="px-2 py-1 font-mono">
+                      <td className="whitespace-nowrap px-2 py-1 font-mono">
                         <Link href={trainHref(snapshot, w.id)} className="block">
                           {w.date}
                         </Link>
@@ -89,11 +89,13 @@ export function TrainList({
                       <td className="px-2 py-1">
                         <TypeChip>{shortLabelForType(w.type)}</TypeChip>
                       </td>
-                      <td className="min-w-0 max-w-[16rem] px-2 py-1">{workoutTitle(w)}</td>
-                      <td className="px-2 py-1 font-mono">{formatDurationMin(w.duration_min)}</td>
-                      <td className="px-2 py-1 font-mono">{formatKm(num(w.distance_km))}</td>
-                      <td className="px-2 py-1 font-mono">{w.avg_hr ?? "—"}</td>
-                      <td className="px-2 py-1 font-mono">{load > 0 ? Math.round(load) : "—"}</td>
+                      <td className="min-w-0 px-2 py-1 text-pretty [overflow-wrap:break-word]">
+                        {workoutTitle(w)}
+                      </td>
+                      <td className="whitespace-nowrap px-2 py-1 font-mono">{formatDurationMin(w.duration_min)}</td>
+                      <td className="whitespace-nowrap px-2 py-1 font-mono">{formatKm(num(w.distance_km))}</td>
+                      <td className="whitespace-nowrap px-2 py-1 font-mono">{w.avg_hr ?? "—"}</td>
+                      <td className="whitespace-nowrap px-2 py-1 font-mono">{load > 0 ? Math.round(load) : "—"}</td>
                       <td className="px-2 py-1 text-neutral-400">{w.source}</td>
                     </tr>
                   );
@@ -158,7 +160,7 @@ function WorkoutDetail({
     : [];
   const zTot = z.reduce((a, [, s]) => a + s, 0);
   return (
-    <Panel>
+    <Panel className="flex min-h-0 min-w-0 flex-col overflow-auto">
       <PanelHeader title={workoutTitle(workout)} extra={workout.date} />
       <dl className="grid grid-cols-2 gap-x-3 gap-y-1 px-3 py-2 text-[12px]">
         <KV k="Duration" v={workout.duration_min != null ? `${workout.duration_min} min` : "—"} />
@@ -198,7 +200,9 @@ function WorkoutDetail({
       ) : null}
       <div className="border-t border-neutral-100 px-3 py-2">
         <div className="bi-label mb-1">Notes</div>
-        <p className="min-h-16 text-[12px] text-neutral-600">{workout.notes ?? ""}</p>
+        <p className="min-h-16 text-[12px] text-pretty text-neutral-600 [overflow-wrap:break-word]">
+          {workout.notes ?? ""}
+        </p>
       </div>
     </Panel>
   );

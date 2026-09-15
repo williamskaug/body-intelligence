@@ -65,6 +65,26 @@ export function parseWeekPlan(currentMd: string): {
 
 const BLOCK_MAX = 42;
 
+/** Word-safe clip. Never cuts inside a token when a nearby space exists. */
+export function clipAtWord(s: string, max: number): string {
+  if (s.length <= max) return s;
+  const slice = s.slice(0, Math.max(1, max - 1));
+  const sp = slice.lastIndexOf(" ");
+  const cut = sp >= Math.floor(max * 0.45) ? slice.slice(0, sp) : slice;
+  return `${cut.trimEnd()}…`;
+}
+
+/** One-line excerpt of a CURRENT.md section for panels — never a document dump. */
+export function planExcerpt(raw: string, max = 160): string {
+  const stripped = raw
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/[#*_>`]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!stripped) return "";
+  return clipAtWord(stripped, max);
+}
+
 /** Short chip for KPI / race-trajectory. Never returns a document body. */
 export function blockLabel(block: string, maxLen = BLOCK_MAX): string | null {
   const stripped = block
@@ -93,22 +113,14 @@ export function blockLabel(block: string, maxLen = BLOCK_MAX): string | null {
 
   if (name && week && name.length <= 24) {
     const combined = `${name} · ${week}`;
-    return combined.length <= maxLen ? combined : truncateAtWord(combined, maxLen);
+    return combined.length <= maxLen ? combined : clipAtWord(combined, maxLen);
   }
   if (name && name.length <= maxLen && name.length < stripped.length) {
     return week && !name.toLowerCase().includes("wk") ? `${name} · ${week}` : name;
   }
   const firstSentence = stripped.split(/(?<=\.)\s+/)[0] ?? stripped;
   if (firstSentence.length <= maxLen) return firstSentence;
-  return truncateAtWord(stripped, maxLen);
-}
-
-function truncateAtWord(s: string, max: number): string {
-  if (s.length <= max) return s;
-  const slice = s.slice(0, Math.max(1, max - 1));
-  const sp = slice.lastIndexOf(" ");
-  const cut = sp >= Math.floor(max * 0.45) ? slice.slice(0, sp) : slice;
-  return `${cut.trimEnd()}…`;
+  return clipAtWord(stripped, maxLen);
 }
 
 function capitalizeDow(s: string): string {

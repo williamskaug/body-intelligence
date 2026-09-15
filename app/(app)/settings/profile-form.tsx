@@ -92,9 +92,8 @@ export function ProfileForm({ defaults }: ProfileFormProps) {
           </button>
         </div>
         {isUtc ? (
-          <span className="mt-1 block text-[11px] text-amber-600 dark:text-amber-400">
-            UTC is the default, not your real zone — set it so day boundaries
-            land correctly.
+          <span className="mt-1 block text-pretty text-[11px] leading-snug text-amber-600 dark:text-amber-400">
+            UTC is the default — pick your real zone so day boundaries land correctly.
           </span>
         ) : null}
       </Field>

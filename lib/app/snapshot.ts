@@ -22,9 +22,10 @@ import {
   dehydrateContentMap,
   hydrateContentMap,
   snapshotCacheKey,
+  statusChromeCacheKey,
   userDataTag,
 } from "./snapshot-cache";
-import { applyFocus } from "./training";
+import { applyFocus, isRunType, workoutTitle } from "./training";
 import type { AppWindow, WindowDays } from "./window";
 
 export type DawnFooter = {
@@ -554,3 +555,112 @@ export const loadDawnFooter = cache(async (userId: string): Promise<DawnFooter> 
     { tags: [userDataTag(userId)], revalidate: 45 },
   )();
 });
+
+/** Lightweight chrome for the shared layout — not the 120-day snapshot. */
+export type StatusChrome = {
+  todayDate: string;
+  derived: DerivedDailyRow | null;
+  hrvMs: number | null;
+  rhrBpm: number | null;
+  todayWorkout: { type: string; title: string } | null;
+  briefingPath: string | null;
+  insightPath: string | null;
+  gateHistory: Array<{ date: string; gate: Gate | null }>;
+};
+
+export const loadStatusChrome = cache(async (userId: string): Promise<StatusChrome> => {
+  return unstable_cache(
+    async () => loadStatusChromeUncached(userId),
+    statusChromeCacheKey(userId),
+    { tags: [userDataTag(userId)], revalidate: 45 },
+  )();
+});
+
+async function loadStatusChromeUncached(userId: string): Promise<StatusChrome> {
+  const timezone = await loadTimezone(userId);
+  const todayDate = localDateInTz(new Date(), timezone);
+  const since14 = addDays(todayDate, -13);
+  const sb = adminClient();
+  const [derivedRes, dailyRes, workoutRes, briefingRes, insightRes] = await Promise.all([
+    sb
+      .from("derived_daily")
+      .select("*")
+      .eq("user_id", userId)
+      .gte("date", since14)
+      .order("date", { ascending: false }),
+    sb
+      .from("daily_entries")
+      .select("date, hrv_ms, rhr_bpm")
+      .eq("user_id", userId)
+      .order("date", { ascending: false })
+      .limit(3),
+    sb
+      .from("workouts")
+      .select("date, type, notes, distance_km")
+      .eq("user_id", userId)
+      .eq("date", todayDate)
+      .limit(1),
+    sb
+      .from("documents")
+      .select("path")
+      .eq("user_id", userId)
+      .like("path", "briefings/%")
+      .order("path", { ascending: false })
+      .limit(5),
+    sb
+      .from("documents")
+      .select("path")
+      .eq("user_id", userId)
+      .like("path", "insights/%")
+      .order("path", { ascending: false })
+      .limit(1),
+  ]);
+
+  for (const r of [derivedRes, dailyRes, workoutRes, briefingRes, insightRes]) {
+    if (r.error && !isMissingRelation(r.error)) throw new Error(r.error.message);
+  }
+
+  const derivedRows = (derivedRes.data ?? []) as DerivedDailyRow[];
+  const derivedToday =
+    derivedRows.find((d) => d.date === todayDate) ?? derivedRows[0] ?? null;
+  const derivedGateByDate: Record<string, Gate> = {};
+  for (const d of derivedRows) {
+    if (d.readiness_gate) derivedGateByDate[d.date] = d.readiness_gate;
+  }
+  const gateHistory = Array.from({ length: 14 }, (_, i) => {
+    const date = addDays(todayDate, -(13 - i));
+    return { date, gate: derivedGateByDate[date] ?? null };
+  });
+
+  const dailyRows = (dailyRes.data ?? []) as Array<{
+    date: string;
+    hrv_ms: number | null;
+    rhr_bpm: number | null;
+  }>;
+  const todayDaily = dailyRows.find((d) => d.date === todayDate) ?? dailyRows[0] ?? null;
+
+  const workout = (workoutRes.data ?? [])[0] as
+    | { date: string; type: string; notes: string | null; distance_km: string | null }
+    | undefined;
+
+  const briefingPaths = ((briefingRes.data ?? []) as Array<{ path: string }>).map((d) => d.path);
+  const briefingPath =
+    briefingPaths.find((p) => p === `briefings/${todayDate}.md`) ?? briefingPaths[0] ?? null;
+  const insightPath = ((insightRes.data ?? []) as Array<{ path: string }>)[0]?.path ?? null;
+
+  return {
+    todayDate,
+    derived: derivedToday,
+    hrvMs: todayDaily?.hrv_ms ?? null,
+    rhrBpm: todayDaily?.rhr_bpm ?? null,
+    todayWorkout: workout
+      ? {
+          type: isRunType(workout.type) ? "run" : workout.type,
+          title: workoutTitle(workout),
+        }
+      : null,
+    briefingPath,
+    insightPath,
+    gateHistory,
+  };
+}

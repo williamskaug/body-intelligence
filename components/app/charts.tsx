@@ -1,3 +1,5 @@
+import { shouldShowAxisLabel } from "@/lib/app/axis-ticks";
+
 export function SvgBars({
   values,
   labels,
@@ -17,39 +19,49 @@ export function SvgBars({
   const width = 100;
   const gap = 0.35;
   const barW = (width - gap * (n - 1)) / n;
+  const chartH = labels?.length ? height - 16 : height;
   return (
-    <svg
-      viewBox={`0 0 ${width} ${height}`}
-      width="100%"
-      height={height}
-      preserveAspectRatio="none"
-      role="img"
-      aria-label={ariaLabel}
-      className="block"
-    >
-      {values.map((v, i) => {
-        const h = (v / max) * (height - 14);
-        const x = i * (barW + gap);
-        const y = height - 12 - h;
-        const current = i === currentIndex;
-        return (
-          <g key={i}>
-            <rect x={x} y={y} width={barW} height={Math.max(h, 0)} fill={current ? "#171717" : "#d4d4d4"} />
-            {labels?.[i] ? (
-              <text
-                x={x + barW / 2}
-                y={height - 2}
-                textAnchor="middle"
-                fontSize={3.2}
-                fill="#737373"
-              >
-                {labels[i]}
-              </text>
-            ) : null}
-          </g>
-        );
-      })}
-    </svg>
+    <div className="min-w-0">
+      <svg
+        viewBox={`0 0 ${width} ${chartH}`}
+        width="100%"
+        height={chartH}
+        preserveAspectRatio="none"
+        role="img"
+        aria-label={ariaLabel}
+        className="block"
+      >
+        {values.map((v, i) => {
+          const h = (v / max) * chartH;
+          const x = i * (barW + gap);
+          const y = chartH - h;
+          const current = i === currentIndex;
+          return (
+            <rect
+              key={i}
+              x={x}
+              y={y}
+              width={barW}
+              height={Math.max(h, 0)}
+              fill={current ? "#171717" : "#d4d4d4"}
+            />
+          );
+        })}
+      </svg>
+      {labels?.length ? (
+        <div className="mt-1 flex min-w-0">
+          {labels.map((label, i) => (
+            <span
+              key={`${label}-${i}`}
+              className="min-w-0 flex-1 truncate text-center text-[9px] leading-none text-neutral-400"
+              title={label}
+            >
+              {shouldShowAxisLabel(i, n, currentIndex) ? label : ""}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -94,15 +106,17 @@ export function SvgLine({
   if (ys.length < 2) {
     return <p className="px-3 py-8 text-center text-xs text-muted-foreground">Not enough history yet.</p>;
   }
-  const padL = 36;
+  const padL = 52;
   const padR = 8;
-  const padT = 8;
+  const padT = 10;
   const padB = 18;
   const width = 320;
   const innerW = width - padL - padR;
   const innerH = height - padT - padB;
-  let yMin = Math.min(...ys);
-  let yMax = Math.max(...ys);
+  const dataMin = Math.min(...ys);
+  const dataMax = Math.max(...ys);
+  let yMin = dataMin;
+  let yMax = dataMax;
   for (const r of refs ?? []) {
     yMin = Math.min(yMin, r.y);
     yMax = Math.max(yMax, r.y);
@@ -145,12 +159,22 @@ export function SvgLine({
       {lastIdx != null && points[lastIdx]!.y != null ? (
         <circle cx={x(lastIdx)} cy={y(points[lastIdx]!.y!)} r={2.4} fill="#171717" />
       ) : null}
-      <text x={4} y={y(yMax) + 3} fontSize={7} fill="#737373">
-        {yFormat ? yFormat(yMax) : yMax.toFixed(0)}
+      <text x={2} y={y(dataMax) + 3} fontSize={9} fill="#737373">
+        {yFormat ? yFormat(dataMax) : dataMax.toFixed(0)}
       </text>
-      <text x={4} y={y(yMin) + 3} fontSize={7} fill="#737373">
-        {yFormat ? yFormat(yMin) : yMin.toFixed(0)}
+      <text x={2} y={y(dataMin) + 3} fontSize={9} fill="#737373">
+        {yFormat ? yFormat(dataMin) : dataMin.toFixed(0)}
       </text>
+      {lastIdx != null && points[lastIdx]!.y != null ? (
+        <text
+          x={Math.min(x(lastIdx) + 6, width - 4)}
+          y={y(points[lastIdx]!.y!) - 6}
+          fontSize={9}
+          fill="#171717"
+        >
+          {yFormat ? yFormat(points[lastIdx]!.y!) : points[lastIdx]!.y!.toFixed(0)}
+        </text>
+      ) : null}
     </svg>
   );
 }
@@ -175,34 +199,51 @@ export function SvgStackedWeekly({
   const width = 100;
   const gap = 0.3;
   const barW = (width - gap * (n - 1)) / n;
+  const chartH = height - 16;
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} preserveAspectRatio="none" className="block">
-      {labels.map((label, i) => {
-        const x = i * (barW + gap);
-        let y = height - 12;
-        return (
-          <g key={label}>
-            {series.map((s, si) => {
-              const v = s[i] ?? 0;
-              const h = (v / max) * (height - 16);
-              y -= h;
-              return (
-                <rect
-                  key={si}
-                  x={x}
-                  y={y}
-                  width={barW}
-                  height={Math.max(h, 0)}
-                  fill={i === currentIndex && si === 0 ? "#171717" : colors[si] ?? "#a3a3a3"}
-                />
-              );
-            })}
-            <text x={x + barW / 2} y={height - 2} textAnchor="middle" fontSize={3} fill="#737373">
-              {label}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
+    <div className="min-w-0">
+      <svg
+        viewBox={`0 0 ${width} ${chartH}`}
+        width="100%"
+        height={chartH}
+        preserveAspectRatio="none"
+        className="block"
+      >
+        {labels.map((label, i) => {
+          const x = i * (barW + gap);
+          let y = chartH;
+          return (
+            <g key={`${label}-${i}`}>
+              {series.map((s, si) => {
+                const v = s[i] ?? 0;
+                const h = (v / max) * chartH;
+                y -= h;
+                return (
+                  <rect
+                    key={si}
+                    x={x}
+                    y={y}
+                    width={barW}
+                    height={Math.max(h, 0)}
+                    fill={i === currentIndex && si === 0 ? "#171717" : colors[si] ?? "#a3a3a3"}
+                  />
+                );
+              })}
+            </g>
+          );
+        })}
+      </svg>
+      <div className="mt-1 flex min-w-0">
+        {labels.map((label, i) => (
+          <span
+            key={`${label}-${i}`}
+            className="min-w-0 flex-1 truncate text-center text-[9px] leading-none text-neutral-400"
+            title={label}
+          >
+            {shouldShowAxisLabel(i, n, currentIndex) ? label : ""}
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }

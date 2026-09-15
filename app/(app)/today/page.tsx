@@ -1,4 +1,3 @@
-import { PageChrome } from "@/components/app/page-chrome";
 import { TodayView } from "@/components/today/today-view";
 import { EmptyDataState } from "@/components/data/empty-state";
 import { loadAppSnapshot, requireUser } from "@/lib/app/snapshot";
@@ -31,7 +30,7 @@ export default async function TodayPage({ searchParams }: { searchParams: Search
   }
 
   return (
-    <PageChrome snapshot={snapshot} showStatus action={{ label: "Log check-in", href: "/body#check-in" }}>
+    <div className="h-full min-h-0 overflow-auto">
       {hasData ? (
         <TodayView snapshot={snapshot} ctl={ctl} tsb={tsb} ctlRamp={ctlRamp} />
       ) : (
@@ -39,6 +38,6 @@ export default async function TodayPage({ searchParams }: { searchParams: Search
           <EmptyDataState email={user.email} />
         </div>
       )}
-    </PageChrome>
+    </div>
   );
 }

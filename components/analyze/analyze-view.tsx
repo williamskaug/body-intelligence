@@ -89,7 +89,9 @@ export function AnalyzeView({
           <span className="border border-neutral-300 px-1.5 py-px text-[10px] uppercase tracking-wide text-neutral-500">
             Insight
           </span>
-          <p className="min-w-0 flex-1 text-[12px] leading-snug [overflow-wrap:anywhere]">{extras.insightLead}</p>
+          <p className="min-w-0 flex-1 text-[12px] leading-snug text-pretty [overflow-wrap:break-word] line-clamp-2">
+            {extras.insightLead}
+          </p>
           {extras.insightPath ? (
             <Link
               href={`/memory?path=${encodeURIComponent(extras.insightPath)}`}
@@ -162,15 +164,19 @@ function BuildTab({ snapshot, extras }: { snapshot: AppSnapshot; extras: Analyze
           />
         </Panel>
       </div>
-      <div className="grid gap-px @5xl:grid-cols-3">
+      <div className="grid gap-px @5xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+        <div className="grid gap-px @3xl:grid-cols-2">
         <Panel>
           <PanelHeader title="Ramp compliance" hint="Week-over-week change in run km." />
-          <div className="flex h-40 items-end gap-1 px-3 py-3">
+          <div className="flex items-end gap-1 px-3 pt-3 pb-2">
             {ramps.map((r, i) => (
-              <div key={weeks[i]!.weekStart} className="flex flex-1 flex-col items-center justify-end">
+              <div key={weeks[i]!.weekStart} className="flex min-w-0 flex-1 flex-col items-center justify-end gap-1">
+                <span className="max-w-full truncate font-mono text-[9px] text-neutral-500">
+                  {r == null ? "—" : `${r >= 0 ? "+" : ""}${Math.round(r)}%`}
+                </span>
                 <div
                   className="w-full bg-neutral-800"
-                  style={{ height: `${r == null ? 4 : Math.min(100, Math.abs(r) * 2)}%` }}
+                  style={{ height: `${r == null ? 4 : Math.min(96, Math.max(6, Math.abs(r)))}px` }}
                   title={`${weeks[i]!.label}: ${r == null ? "—" : `${r.toFixed(0)}%`}`}
                 />
               </div>
@@ -189,9 +195,13 @@ function BuildTab({ snapshot, extras }: { snapshot: AppSnapshot; extras: Analyze
             />
           </div>
         </Panel>
+        </div>
         <Panel>
-          <PanelHeader title="Load balance" />
-          <div className="p-2">
+          <PanelHeader
+            title="Load balance"
+            hint="CTL / ATL / TSB and 7-day fitness ramp are load statistics, not a verdict. Shaded: high-fatigue (below) / fresh (above)."
+          />
+          <div className="min-w-0 p-2">
             <PerformanceManagementChart data={pmc} ramp={extras.load?.current.ctl_ramp_7d ?? null} minDays={10} />
           </div>
         </Panel>
@@ -280,7 +290,7 @@ function FitnessTab({ snapshot, extras }: { snapshot: AppSnapshot; extras: Analy
         </Panel>
         <Panel>
           <PanelHeader title="Threshold anchor" href="/memory?path=THRESHOLDS.md" hrefLabel="THRESHOLDS.md" />
-          <dl className="grid grid-cols-2 gap-2 px-3 py-2 text-[12px]">
+          <dl className="grid grid-cols-1 gap-3 px-3 py-3 text-[12px] @md:grid-cols-2">
             <KV k="LTHR" v={lthr != null ? `${lthr} bpm` : "—"} />
             <KV k="LT pace" v={ltPace ?? "—"} />
             <KV

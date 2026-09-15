@@ -1,4 +1,5 @@
 import { GATE_FILL_CLASS, type Gate } from "@/lib/data-display/derived";
+import { cn } from "@/lib/utils";
 
 export type GateStripDay = {
   date: string;
@@ -11,15 +12,22 @@ export function GateStrip({
   days,
   size = "sm",
   nowrap = false,
+  className,
 }: {
   days: ReadonlyArray<GateStripDay>;
   size?: "sm" | "md";
   nowrap?: boolean;
+  className?: string;
 }) {
-  const box = size === "sm" ? "h-2.5 w-2.5" : "h-4 w-4";
+  const box = size === "sm" ? "h-2.5 w-2.5" : "h-3.5 w-3.5";
   return (
     <div
-      className={nowrap ? "flex shrink-0 items-center gap-[3px]" : "flex flex-wrap items-center gap-[3px]"}
+      className={cn(
+        nowrap
+          ? "flex shrink-0 items-center gap-[3px]"
+          : "grid grid-cols-[repeat(auto-fill,minmax(0.7rem,1fr))] gap-1",
+        className,
+      )}
       role="img"
       aria-label="Readiness gate history"
     >

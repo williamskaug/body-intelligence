@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blockLabel, parseWeekPlan } from "./parse-week";
+import { blockLabel, clipAtWord, parseWeekPlan, planExcerpt } from "./parse-week";
 
 describe("parseWeekPlan", () => {
   it("reads weekday rows from CURRENT.md This week", () => {
@@ -47,5 +47,25 @@ describe("blockLabel", () => {
   it("returns null for empty / comment-only sections", () => {
     expect(blockLabel("")).toBeNull();
     expect(blockLabel("   \n  ")).toBeNull();
+  });
+});
+
+describe("planExcerpt", () => {
+  it("collapses a This-week essay into a short line instead of the document body", () => {
+    const raw = `**Phase 0** is easy aerobic volume.\n\nRead plans/oslo-marathon-2027.md before every re-plan.`;
+    const excerpt = planExcerpt(raw, 60);
+    expect(excerpt.length).toBeLessThanOrEqual(60);
+    expect(excerpt.startsWith("Phase 0")).toBe(true);
+    expect(excerpt).not.toContain("oslo-marathon");
+  });
+
+  it("clipAtWord does not split a token", () => {
+    const source = "Rebuilding aerobic volume after the summer break";
+    const clipped = clipAtWord(source, 24);
+    expect(clipped.endsWith("…")).toBe(true);
+    const stem = clipped.slice(0, -1);
+    expect(source.startsWith(stem)).toBe(true);
+    const next = source[stem.length];
+    expect(next === undefined || /\s/.test(next)).toBe(true);
   });
 });

@@ -33,15 +33,15 @@ export function HealthView({
     null;
 
   return (
-    <div className="grid min-h-full min-w-0 gap-px bg-neutral-200 @5xl:grid-cols-[minmax(0,16rem)_minmax(0,1fr)_minmax(0,20rem)]">
-      <aside className="bg-white">
+    <div className="grid h-full min-h-0 min-w-0 gap-px bg-neutral-200 @3xl:grid-cols-[minmax(0,16rem)_minmax(0,1fr)] @7xl:grid-cols-[minmax(0,16rem)_minmax(0,1fr)_minmax(0,22rem)]">
+      <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-white">
         <div className="flex items-center justify-between border-b border-neutral-200 px-3 py-2">
           <h2 className="text-[13px] font-semibold">Events</h2>
           <span className="font-mono text-[10px] uppercase text-neutral-500">
             {open.length} open · {resolved.length} resolved
           </span>
         </div>
-        <ul>
+        <ul className="min-h-0 flex-1 overflow-auto">
           {events.map((e) => {
             const active = selected?.id === e.id;
             const isOpen = e.resolved_date == null;
@@ -50,11 +50,11 @@ export function HealthView({
                 <Link
                   href={`/health?event=${e.id}`}
                   className={cn(
-                    "flex items-center justify-between gap-2 px-3 py-2 text-[12px]",
+                    "flex items-start justify-between gap-2 px-3 py-2 text-[12px]",
                     active ? "bg-foreground text-background" : "hover:bg-neutral-50",
                   )}
                 >
-                  <span className="min-w-0 truncate">
+                  <span className="min-w-0 text-pretty [overflow-wrap:break-word]">
                     <span className="mr-2 font-mono text-[10px] opacity-70">{e.date}</span>
                     {e.body_part ?? e.kind}
                   </span>
@@ -82,7 +82,7 @@ export function HealthView({
           <LogEventDialog todayDate={todayDate} />
         </div>
       </aside>
-      <section className="bg-white">
+      <section className="min-h-0 min-w-0 overflow-hidden bg-white">
         {selected ? (
           <EventDetail event={selected} todayDate={todayDate} />
         ) : (
@@ -91,7 +91,7 @@ export function HealthView({
           </p>
         )}
       </section>
-      <aside className="flex min-h-0 flex-col bg-white">
+      <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-white @3xl:col-span-2 @7xl:col-span-1">
         <div className="flex items-center justify-between border-b border-neutral-200 px-3 py-2">
           <h2 className="font-mono text-[12px] font-semibold">HEALTH_LOG.md</h2>
           <span className="text-[10px] uppercase tracking-wide text-neutral-400">append-only</span>
@@ -124,10 +124,10 @@ function EventDetail({ event, todayDate }: { event: ThreadedHealthEvent; todayDa
   const [editingMilestone, setEditingMilestone] = useState(false);
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col">
       <header className="flex items-start justify-between gap-3 border-b border-neutral-200 px-4 py-3">
-        <div>
-          <h2 className="text-[15px] font-semibold tracking-tight">
+        <div className="min-w-0">
+          <h2 className="text-[15px] font-semibold tracking-tight text-pretty [overflow-wrap:break-word]">
             {event.body_part ?? event.kind}
             {event.kind !== "injury" ? ` — ${event.kind}` : ""}
           </h2>

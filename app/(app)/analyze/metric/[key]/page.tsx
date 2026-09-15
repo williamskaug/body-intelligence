@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { PageChrome } from "@/components/app/page-chrome";
 import { HistogramChart } from "@/components/data/charts/histogram-chart";
 import { MultiSeriesLine } from "@/components/data/charts/multi-series-line";
 import { formatMetricValue, metricDef, metricLabel } from "@/lib/data-display/metric-registry";
@@ -104,8 +103,7 @@ export default async function MetricPage({
   }
 
   return (
-    <PageChrome snapshot={snapshot} action={{ label: "Back to Analyze", href: "/analyze?tab=stats" }}>
-      <div className="bg-white px-4 py-4">
+    <div className="h-full min-h-0 overflow-auto bg-white px-4 py-4">
         <Link
           href="/analyze?tab=stats"
           className="text-[11px] uppercase tracking-wide text-neutral-500 hover:text-foreground"
@@ -192,8 +190,7 @@ export default async function MetricPage({
           )}
           <p className="mt-2 text-[11px] text-neutral-400">Pearson r over the last year — a coefficient, not causation.</p>
         </section>
-      </div>
-    </PageChrome>
+    </div>
   );
 }
 
