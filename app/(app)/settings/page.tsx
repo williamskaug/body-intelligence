@@ -1,7 +1,8 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { PageChrome } from "@/components/app/page-chrome";
+import { loadAppSnapshot, requireUser } from "@/lib/app/snapshot";
+import { parseWindow } from "@/lib/app/window";
 import { createClient } from "@/lib/supabase/server";
 import { adminClient } from "@/lib/supabase/admin";
 import { recipes } from "@/lib/agents/recipe-data";
@@ -28,12 +29,11 @@ type ConnectedApp = {
 };
 
 export default async function SettingsPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await requireUser();
   if (!user) redirect("/login");
 
+  const snapshot = await loadAppSnapshot(user.id, user.email, parseWindow({}));
+  const supabase = await createClient();
   const profileRes = await supabase
     .from("user_profiles")
     .select("display_name, timezone, units_system, locale")
@@ -47,177 +47,48 @@ export default async function SettingsPage() {
   const mcpUrl = await resolveMcpUrl();
 
   return (
-    <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-8 sm:px-6 sm:py-12">
-      <header className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Profile, MCP endpoint, connected applications, and account
-          maintenance.
-        </p>
-      </header>
-
-      <div className="space-y-6">
-        <section
-          aria-labelledby="mcp-heading"
-          className="rounded-2xl border bg-gradient-to-br from-card to-card/60 p-6 shadow-sm ring-1 ring-foreground/[0.03]"
-        >
-          <div className="flex items-baseline justify-between gap-3">
-            <h2 id="mcp-heading" className="text-base font-semibold tracking-tight">
-              MCP endpoint
-            </h2>
-            <Badge variant="outline" className="font-mono text-[10px]">
-              OAuth 2.1 · DCR
-            </Badge>
-          </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Add this URL to Cowork (or any MCP-compatible Claude client). The
-            first connection runs OAuth — approve once and Claude has scoped
-            read/write access to your data.
+    <PageChrome
+      snapshot={snapshot}
+      action={{ label: "Save profile", form: "profile-form", type: "submit" }}
+    >
+      <div className="grid gap-px bg-neutral-200 lg:grid-cols-2">
+        <section className="bg-white p-4">
+          <h2 className="text-[13px] font-semibold">MCP endpoint</h2>
+          <p className="mt-1 text-[12px] text-neutral-500">
+            Add in Cowork → Connectors. OAuth 2.1 + DCR, no API keys.
           </p>
-          <div className="mt-4">
+          <div className="mt-3">
             <McpUrl url={mcpUrl} />
           </div>
         </section>
 
-        <section
-          aria-labelledby="profile-heading"
-          className="rounded-2xl border bg-card p-6 shadow-sm"
-        >
-          <h2 id="profile-heading" className="text-base font-semibold tracking-tight">
-            Profile
-          </h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Used by capture recipes for date boundaries and unit conversion.
-            Reasoning recipes pull deeper context from{" "}
-            <span className="font-mono">PROFILE.md</span>.
-          </p>
+        <section className="bg-white p-4">
+          <h2 className="text-[13px] font-semibold">Profile</h2>
           <ProfileForm
-            email={user.email ?? ""}
+            email={user.email}
             defaults={{
               display_name: profile?.display_name ?? "",
               timezone: profile?.timezone ?? "",
               units_system:
-                (profile?.units_system === "imperial" ? "imperial" : "metric") as
-                  | "metric"
-                  | "imperial",
+                profile?.units_system === "imperial" ? "imperial" : "metric",
               locale: profile?.locale ?? "",
             }}
           />
         </section>
 
-        <section
-          aria-labelledby="sources-heading"
-          className="rounded-2xl border bg-card p-6 shadow-sm"
-        >
-          <div className="flex items-center justify-between gap-3">
-            <h2 id="sources-heading" className="text-base font-semibold tracking-tight">
-              Connected data sources
-            </h2>
-            <Badge variant="outline">{dataSources.length}</Badge>
-          </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Derived from the <span className="font-mono">source</span> column on
-            workouts — which connectors have been writing into BI.
-            A primary source is <span className="font-medium">fresh</span> when
-            its sync recipe ran today (even on a rest day), and only{" "}
-            <span className="font-medium">down</span> when it goes overdue.
-            Fallback sources sit <span className="font-medium">idle</span> until
-            needed; manual entry isn&apos;t a connector.
-          </p>
-
-          {dataSources.length === 0 ? (
-            <div className="mt-6 rounded-lg border border-dashed bg-muted/20 p-5 text-sm text-muted-foreground">
-              <p className="font-medium text-foreground">No data sources yet</p>
-              <p className="mt-1">
-                Install the Garmin or Strava sync recipe from{" "}
-                <a href="/agents" className="underline underline-offset-4 hover:text-foreground">
-                  the Agents page
-                </a>{" "}
-                to start piping data into BI.
-              </p>
-            </div>
-          ) : (
-            <ul className="mt-6 divide-y">
-              {dataSources.map((src) => {
-                const tone = STATUS_TONE[src.status];
-                return (
-                  <li
-                    key={src.source}
-                    className="flex flex-col items-start gap-2 py-3 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-sm font-medium">{src.label}</span>
-                        <span
-                          className={`rounded-md border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${tone.classes}`}
-                        >
-                          {tone.label}
-                        </span>
-                      </div>
-                      <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-                        source = {src.source}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {src.last_write_at
-                          ? `last write ${timeAgo(src.last_write_at)}`
-                          : "no writes yet"}
-                        {" · "}
-                        {src.records_30d} record{src.records_30d === 1 ? "" : "s"} in 30d
-                      </p>
-                      {src.note ? (
-                        <p className="mt-1 text-[11px] text-muted-foreground/80">{src.note}</p>
-                      ) : null}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
-
-        <section
-          aria-labelledby="apps-heading"
-          className="rounded-2xl border bg-card p-6 shadow-sm"
-        >
-          <div className="flex items-center justify-between gap-3">
-            <h2 id="apps-heading" className="text-base font-semibold tracking-tight">
-              Connected applications
-            </h2>
-            <Badge variant="outline">{apps.length}</Badge>
-          </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            MCP clients (typically a Cowork install) that hold an active access
-            token to your data.
-          </p>
-
+        <section className="bg-white p-4">
+          <h2 className="text-[13px] font-semibold">Connected applications</h2>
           {apps.length === 0 ? (
-            <div className="mt-6 rounded-lg border border-dashed bg-muted/20 p-5 text-sm text-muted-foreground">
-              <p className="font-medium text-foreground">No applications yet</p>
-              <p className="mt-1">
-                Add the MCP URL above to Cowork to authorize one. New tokens
-                will appear here automatically.
-              </p>
-            </div>
+            <p className="mt-3 text-[12px] text-neutral-500">No applications yet. Add the MCP URL to Cowork.</p>
           ) : (
-            <ul className="mt-6 divide-y">
+            <ul className="mt-2 divide-y divide-neutral-100">
               {apps.map((app) => (
-                <li
-                  key={app.client_id}
-                  className="flex flex-col items-start gap-3 py-4 sm:flex-row sm:items-start sm:justify-between"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium">{app.name}</p>
-                    <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
-                      {app.client_id}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {app.active_tokens} active token
-                      {app.active_tokens === 1 ? "" : "s"}
-                      {" · "}
-                      issued {timeAgo(app.earliest_issued_at)}
-                      {app.last_used_at
-                        ? ` · last used ${timeAgo(app.last_used_at)}`
-                        : " · never used"}
+                <li key={app.client_id} className="flex items-center justify-between gap-3 py-2 text-[12px]">
+                  <div>
+                    <p className="font-medium">{app.name}</p>
+                    <p className="font-mono text-[11px] text-neutral-500">
+                      issued {app.earliest_issued_at.slice(0, 10)}
+                      {app.last_used_at ? ` · refreshed ${timeAgo(app.last_used_at)}` : ""}
                     </p>
                   </div>
                   <RevokeClientButton clientId={app.client_id} clientName={app.name} />
@@ -227,54 +98,66 @@ export default async function SettingsPage() {
           )}
         </section>
 
-        <section
-          aria-labelledby="onboarding-heading"
-          className="rounded-2xl border border-dashed bg-card/40 p-5"
-        >
-          <div className="flex items-baseline justify-between gap-3">
-            <h2
-              id="onboarding-heading"
-              className="text-sm font-semibold tracking-tight"
-            >
-              Re-run onboarding
-            </h2>
-            {onboarding ? <InstallRecipeButton recipe={onboarding} /> : null}
-          </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Walk through PROFILE.md, GOALS.md, and PRINCIPLES.md so your future
-            Claude conversations have real context to reason against.{" "}
-            <a href="/agents" className="underline underline-offset-4 hover:text-foreground">
-              Browse all recipes →
-            </a>
-          </p>
+        <section className="bg-white p-4">
+          <h2 className="text-[13px] font-semibold">Data sources</h2>
+          {dataSources.length === 0 ? (
+            <p className="mt-3 text-[12px] text-neutral-500">
+              No connector writes yet. Install Garmin or Strava from{" "}
+              <a href="/agents" className="underline">
+                Agents
+              </a>
+              .
+            </p>
+          ) : (
+            <ul className="mt-2 divide-y divide-neutral-100">
+              {dataSources.map((src) => {
+                const tone = STATUS_TONE[src.status];
+                return (
+                  <li key={src.source} className="flex items-center justify-between gap-3 py-2 text-[12px]">
+                    <span className="font-medium">{src.label}</span>
+                    <span className="flex items-center gap-2">
+                      <span
+                        className={`border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${tone.classes}`}
+                      >
+                        {src.status === "fresh" ? "active" : tone.label}
+                      </span>
+                      <span className="font-mono text-[11px] text-neutral-500">
+                        {src.last_write_at ? `last write ${timeAgo(src.last_write_at)}` : "no writes in 90 d"}
+                      </span>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </section>
 
-        <section
-          aria-labelledby="session-heading"
-          className="flex flex-col gap-3 border-t pt-6 sm:flex-row sm:items-center sm:justify-between"
-        >
-          <div>
-            <h2
-              id="session-heading"
-              className="text-sm font-medium tracking-tight"
-            >
-              Browser session
-            </h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Connected applications above continue to have MCP access until you
-              revoke them.
-            </p>
+        <section className="bg-white p-4 lg:col-span-2">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-[13px] font-semibold">Browser session</h2>
+              <p className="mt-1 text-[12px] text-neutral-500">
+                Connected applications keep MCP access until you revoke them.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {onboarding ? <InstallRecipeButton recipe={onboarding} compact /> : null}
+              <form action="/auth/signout" method="post">
+                <button
+                  type="submit"
+                  className="border border-neutral-300 px-2 py-1 text-[11px] hover:bg-neutral-50"
+                >
+                  Sign out
+                </button>
+              </form>
+            </div>
           </div>
-          <form action="/auth/signout" method="post">
-            <Button type="submit" variant="outline" size="sm">
-              Sign out of this browser
-            </Button>
-          </form>
         </section>
       </div>
-    </div>
+    </PageChrome>
   );
 }
+
 
 async function resolveMcpUrl(): Promise<string> {
   const h = await headers();

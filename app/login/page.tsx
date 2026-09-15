@@ -23,7 +23,7 @@ export default async function LoginPage({
     data: { user },
   } = await supabase.auth.getUser();
   if (user) {
-    redirect(safeNext || "/data");
+    redirect(safeNext || "/today");
   }
 
   return (

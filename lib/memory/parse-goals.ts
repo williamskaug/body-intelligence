@@ -118,8 +118,14 @@ export function parseCurrentSection(
   if (!content) return "";
   const stripped = content.replace(/<!--[\s\S]*?-->/g, "");
   const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const re = new RegExp(`^##\\s+${escaped}\\s*$([\\s\\S]*?)(?=^##\\s|\\Z)`, "im");
-  const m = re.exec(stripped);
-  if (!m) return "";
-  return m[1]!.trim();
+  const startRe = new RegExp(`^##\\s+${escaped}\\s*$`, "i");
+  const lines = stripped.split(/\n/);
+  const start = lines.findIndex((l) => startRe.test(l));
+  if (start < 0) return "";
+  const body: string[] = [];
+  for (let i = start + 1; i < lines.length; i++) {
+    if (/^##\s/.test(lines[i]!)) break;
+    body.push(lines[i]!);
+  }
+  return body.join("\n").trim();
 }

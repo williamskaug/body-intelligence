@@ -35,7 +35,7 @@ function supportedTimezones(): string[] {
   ];
 }
 
-export function ProfileForm({ defaults, email }: ProfileFormProps) {
+export function ProfileForm({ defaults }: ProfileFormProps) {
   const [state, action, pending] = useActionState(updateProfileAction, {});
   const [timezone, setTimezone] = useState(defaults.timezone);
   const zones = supportedTimezones();
@@ -51,24 +51,14 @@ export function ProfileForm({ defaults, email }: ProfileFormProps) {
   };
 
   return (
-    <form action={action} className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
-      <Field label="Email" hint="Managed by your magic-link sign-in.">
-        <input
-          type="email"
-          value={email}
-          disabled
-          className="block w-full rounded-md border bg-muted/30 px-3 py-2 font-mono text-sm text-muted-foreground"
-        />
-      </Field>
-
+    <form id="profile-form" action={action} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       <Field label="Display name">
         <input
           type="text"
           name="display_name"
           defaultValue={defaults.display_name}
           maxLength={80}
-          placeholder="What should we call you?"
-          className="block w-full rounded-md border bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          className="mt-0.5 block w-full border border-neutral-300 px-2 py-1 text-[12px]"
         />
       </Field>
 
@@ -81,7 +71,7 @@ export function ProfileForm({ defaults, email }: ProfileFormProps) {
             name="timezone"
             value={timezone}
             onChange={(e) => setTimezone(e.target.value)}
-            className="block w-full rounded-md border bg-background px-3 py-2 font-mono text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            className="block w-full border border-neutral-300 px-2 py-1 font-mono text-[12px]"
           >
             {/* Ensure the current value is selectable even if not in the list. */}
             {zones.includes(timezone) ? null : (
@@ -113,7 +103,7 @@ export function ProfileForm({ defaults, email }: ProfileFormProps) {
         <select
           name="units_system"
           defaultValue={defaults.units_system}
-          className="block w-full rounded-md border bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          className="block w-full border border-neutral-300 px-2 py-1 text-[12px]"
         >
           <option value="metric">Metric (kg, km)</option>
           <option value="imperial">Imperial (lb, mi)</option>
@@ -127,7 +117,7 @@ export function ProfileForm({ defaults, email }: ProfileFormProps) {
           defaultValue={defaults.locale}
           placeholder="en"
           autoComplete="off"
-          className="block w-full rounded-md border bg-background px-3 py-2 font-mono text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          className="block w-full border border-neutral-300 px-2 py-1 font-mono text-[12px]"
         />
       </Field>
 
@@ -165,7 +155,7 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <span className="text-[10px] font-medium uppercase tracking-wide text-neutral-500">
         {label}
       </span>
       <div className="mt-1">{children}</div>

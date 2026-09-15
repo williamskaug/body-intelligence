@@ -13,7 +13,13 @@ import {
 } from "@/components/ui/dialog";
 import type { Recipe } from "@/lib/agents/recipe-data";
 
-export function InstallRecipeButton({ recipe }: { recipe: Recipe }) {
+export function InstallRecipeButton({
+  recipe,
+  compact = false,
+}: {
+  recipe: Recipe;
+  compact?: boolean;
+}) {
   const [copied, setCopied] = useState<"prompt" | "schedule" | null>(null);
 
   async function copy(text: string, which: "prompt" | "schedule") {
@@ -30,7 +36,20 @@ export function InstallRecipeButton({ recipe }: { recipe: Recipe }) {
 
   return (
     <Dialog>
-      <DialogTrigger render={<Button size="sm">Install →</Button>} />
+      <DialogTrigger
+        render={
+          compact ? (
+            <button
+              type="button"
+              className="text-[10px] font-medium uppercase tracking-wide text-neutral-600 hover:text-foreground"
+            >
+              Prompt
+            </button>
+          ) : (
+            <Button size="sm">Install →</Button>
+          )
+        }
+      />
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>{recipe.title}</DialogTitle>
