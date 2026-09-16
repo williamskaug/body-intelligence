@@ -1,3 +1,5 @@
+import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { computeBaseline, type Baseline } from "@/lib/data-display/baseline";
 import type { DerivedDailyRow, Gate } from "@/lib/data-display/derived";
 import type {
@@ -15,8 +17,21 @@ import {
 import { parseThresholds, type ParsedThresholds } from "@/lib/memory/parse-thresholds";
 import { adminClient } from "@/lib/supabase/admin";
 import { addDays, isMissingRelation, localDateInTz } from "./dates";
-import { applyFocus } from "./training";
-import type { AppWindow } from "./window";
+import { timeAgo } from "./format";
+import {
+  dehydrateContentMap,
+  hydrateContentMap,
+  snapshotCacheKey,
+  statusChromeCacheKey,
+  userDataTag,
+} from "./snapshot-cache";
+import { applyFocus, isRunType, workoutTitle } from "./training";
+import type { AppWindow, WindowDays } from "./window";
+
+export type DawnFooter = {
+  status: "ok" | "failed" | "stale" | "none";
+  lastRunLabel: string | null;
+};
 
 export type WorkoutRow = {
   id: string;
@@ -200,7 +215,7 @@ const ZONES_SELECT =
 const CAPACITY_SELECT =
   "date, vo2max_running, vo2max_cycling, lactate_threshold_hr_bpm, lactate_threshold_pace_s_per_km, lactate_threshold_power_w, cycling_ftp_w, endurance_score, race_pred_5k_s, race_pred_10k_s, race_pred_half_s, race_pred_marathon_s";
 
-export async function loadAppSnapshot(
+async function loadAppSnapshotUncached(
   userId: string,
   email: string,
   window: AppWindow,
@@ -448,7 +463,34 @@ export async function loadAppSnapshot(
   };
 }
 
-export async function loadTimezone(userId: string): Promise<string> {
+type SnapshotDTO = Omit<AppSnapshot, "contentByPath"> & {
+  contentByPath: Record<string, string>;
+};
+
+/** Per-request + 45s tagged cache. Section switches reuse this instead of 12 DB round-trips. */
+export async function loadAppSnapshot(
+  userId: string,
+  email: string,
+  window: AppWindow,
+): Promise<AppSnapshot> {
+  return cachedSnapshot(userId, email, window.days, window.focusRun);
+}
+
+const cachedSnapshot = cache(
+  async (userId: string, email: string, days: WindowDays, focusRun: boolean): Promise<AppSnapshot> => {
+    const dto = await unstable_cache(
+      async (): Promise<SnapshotDTO> => {
+        const snap = await loadAppSnapshotUncached(userId, email, { days, focusRun });
+        return { ...snap, contentByPath: dehydrateContentMap(snap.contentByPath) };
+      },
+      snapshotCacheKey(userId, email, days, focusRun),
+      { tags: [userDataTag(userId)], revalidate: 45 },
+    )();
+    return { ...dto, contentByPath: hydrateContentMap(dto.contentByPath) };
+  },
+);
+
+export const loadTimezone = cache(async (userId: string): Promise<string> => {
   const sb = adminClient();
   const { data } = await sb
     .from("user_profiles")
@@ -457,7 +499,7 @@ export async function loadTimezone(userId: string): Promise<string> {
     .maybeSingle();
   const tz = (data as { timezone?: string } | null)?.timezone;
   return tz && tz !== "UTC" ? tz : "Europe/Oslo";
-}
+});
 
 export async function loadDocument(
   userId: string,
@@ -474,7 +516,25 @@ export async function loadDocument(
   return (data as { path: string; content: string; updated_at: string } | null) ?? null;
 }
 
-export async function requireUser(): Promise<{ id: string; email: string } | null> {
+/** Paths only — Memory does not need the 120-day workout snapshot. */
+export const loadDocumentIndex = cache(async (userId: string) => {
+  return unstable_cache(
+    async (): Promise<Array<{ path: string; updated_at: string }>> => {
+      const sb = adminClient();
+      const { data, error } = await sb
+        .from("documents")
+        .select("path, updated_at")
+        .eq("user_id", userId)
+        .order("path", { ascending: true });
+      if (error) throw new Error(error.message);
+      return (data ?? []) as Array<{ path: string; updated_at: string }>;
+    },
+    ["doc-index", userId],
+    { tags: [userDataTag(userId)], revalidate: 45 },
+  )();
+});
+
+export const requireUser = cache(async (): Promise<{ id: string; email: string } | null> => {
   const { createClient } = await import("@/lib/supabase/server");
   const supabase = await createClient();
   const {
@@ -482,4 +542,143 @@ export async function requireUser(): Promise<{ id: string; email: string } | nul
   } = await supabase.auth.getUser();
   if (!user) return null;
   return { id: user.id, email: user.email ?? "" };
+});
+
+export const loadDawnFooter = cache(async (userId: string): Promise<DawnFooter> => {
+  return unstable_cache(
+    async (): Promise<DawnFooter> => {
+      const sb = adminClient();
+      const { data } = await sb
+        .from("installed_recipes")
+        .select("last_run_at, last_run_status")
+        .eq("user_id", userId)
+        .eq("recipe_id", "dawn-agent")
+        .maybeSingle();
+      const row = data as { last_run_at: string | null; last_run_status: string | null } | null;
+      if (!row?.last_run_at) return { status: "none", lastRunLabel: null };
+      const ageH = (Date.now() - new Date(row.last_run_at).getTime()) / 3_600_000;
+      const status: DawnFooter["status"] =
+        row.last_run_status === "failed" ? "failed" : ageH > 36 ? "stale" : "ok";
+      const label = new Date(row.last_run_at).toLocaleTimeString("en-GB", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      });
+      return {
+        status,
+        lastRunLabel: ageH < 24 ? `ran ${label}` : `ran ${timeAgo(row.last_run_at)}`,
+      };
+    },
+    ["dawn-footer", userId],
+    { tags: [userDataTag(userId)], revalidate: 45 },
+  )();
+});
+
+/** Lightweight chrome for the shared layout — not the 120-day snapshot. */
+export type StatusChrome = {
+  todayDate: string;
+  derived: DerivedDailyRow | null;
+  hrvMs: number | null;
+  rhrBpm: number | null;
+  todayWorkout: { type: string; title: string } | null;
+  briefingPath: string | null;
+  insightPath: string | null;
+  gateHistory: Array<{ date: string; gate: Gate | null }>;
+};
+
+export const loadStatusChrome = cache(async (userId: string): Promise<StatusChrome> => {
+  return unstable_cache(
+    async () => loadStatusChromeUncached(userId),
+    statusChromeCacheKey(userId),
+    { tags: [userDataTag(userId)], revalidate: 45 },
+  )();
+});
+
+async function loadStatusChromeUncached(userId: string): Promise<StatusChrome> {
+  const timezone = await loadTimezone(userId);
+  const todayDate = localDateInTz(new Date(), timezone);
+  const since14 = addDays(todayDate, -13);
+  const sb = adminClient();
+  const [derivedRes, dailyRes, workoutRes, briefingRes, insightRes] = await Promise.all([
+    sb
+      .from("derived_daily")
+      .select("*")
+      .eq("user_id", userId)
+      .gte("date", since14)
+      .order("date", { ascending: false }),
+    sb
+      .from("daily_entries")
+      .select("date, hrv_ms, rhr_bpm")
+      .eq("user_id", userId)
+      .order("date", { ascending: false })
+      .limit(3),
+    sb
+      .from("workouts")
+      .select("date, type, notes, distance_km")
+      .eq("user_id", userId)
+      .eq("date", todayDate)
+      .limit(1),
+    sb
+      .from("documents")
+      .select("path")
+      .eq("user_id", userId)
+      .like("path", "briefings/%")
+      .order("path", { ascending: false })
+      .limit(5),
+    sb
+      .from("documents")
+      .select("path")
+      .eq("user_id", userId)
+      .like("path", "insights/%")
+      .order("path", { ascending: false })
+      .limit(1),
+  ]);
+
+  for (const r of [derivedRes, dailyRes, workoutRes, briefingRes, insightRes]) {
+    if (r.error && !isMissingRelation(r.error)) throw new Error(r.error.message);
+  }
+
+  const derivedRows = (derivedRes.data ?? []) as DerivedDailyRow[];
+  const derivedToday =
+    derivedRows.find((d) => d.date === todayDate) ?? derivedRows[0] ?? null;
+  const derivedGateByDate: Record<string, Gate> = {};
+  for (const d of derivedRows) {
+    if (d.readiness_gate) derivedGateByDate[d.date] = d.readiness_gate;
+  }
+  const gateHistory = Array.from({ length: 14 }, (_, i) => {
+    const date = addDays(todayDate, -(13 - i));
+    return { date, gate: derivedGateByDate[date] ?? null };
+  });
+
+  const dailyRows = (dailyRes.data ?? []) as Array<{
+    date: string;
+    hrv_ms: number | null;
+    rhr_bpm: number | null;
+  }>;
+  const todayDaily = dailyRows.find((d) => d.date === todayDate) ?? dailyRows[0] ?? null;
+
+  const workout = (workoutRes.data ?? [])[0] as
+    | { date: string; type: string; notes: string | null; distance_km: string | null }
+    | undefined;
+
+  const briefingPaths = ((briefingRes.data ?? []) as Array<{ path: string }>).map((d) => d.path);
+  const briefingPath =
+    briefingPaths.find((p) => p === `briefings/${todayDate}.md`) ?? briefingPaths[0] ?? null;
+  const insightPath = ((insightRes.data ?? []) as Array<{ path: string }>)[0]?.path ?? null;
+
+  return {
+    todayDate,
+    derived: derivedToday,
+    hrvMs: todayDaily?.hrv_ms ?? null,
+    rhrBpm: todayDaily?.rhr_bpm ?? null,
+    todayWorkout: workout
+      ? {
+          type: isRunType(workout.type) ? "run" : workout.type,
+          title: workoutTitle(workout),
+        }
+      : null,
+    briefingPath,
+    insightPath,
+    gateHistory,
+  };
 }

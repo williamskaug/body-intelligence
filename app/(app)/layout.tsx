@@ -1,21 +1,16 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
-import { AppRail, type DawnFooter } from "@/components/app/app-rail";
-import { timeAgo } from "@/lib/app/format";
-import { adminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
+import { AppRail } from "@/components/app/app-rail";
+import { AppShell } from "@/components/app/app-shell";
+import { loadDawnFooter, loadStatusChrome, requireUser } from "@/lib/app/snapshot";
 
 export default async function AppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await requireUser();
   if (!user) redirect("/login");
-
-  const dawn = await loadDawnFooter(user.id);
 
   return (
     <div className="flex h-dvh min-h-0 bg-neutral-50">
@@ -25,34 +20,25 @@ export default async function AppLayout({
       >
         Skip to content
       </a>
-      <AppRail dawn={dawn} />
-      <main id="main-content" className="flex min-w-0 flex-1 flex-col">
-        {children}
+      <Suspense fallback={<AppRail dawn={{ status: "none", lastRunLabel: null }} />}>
+        <DawnRail userId={user.id} />
+      </Suspense>
+      <main id="main-content" className="@container flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden">
+        <Suspense fallback={<div className="h-11 shrink-0 border-b border-neutral-200 bg-white" />}>
+          <ChromeBar userId={user.id} />
+        </Suspense>
+        <div className="min-h-0 min-w-0 flex-1 overflow-hidden">{children}</div>
       </main>
     </div>
   );
 }
 
-async function loadDawnFooter(userId: string): Promise<DawnFooter> {
-  const sb = adminClient();
-  const { data } = await sb
-    .from("installed_recipes")
-    .select("last_run_at, last_run_status")
-    .eq("user_id", userId)
-    .eq("recipe_id", "dawn-agent")
-    .maybeSingle();
-  const row = data as { last_run_at: string | null; last_run_status: string | null } | null;
-  if (!row?.last_run_at) return { status: "none", lastRunLabel: null };
-  const ageH = (Date.now() - new Date(row.last_run_at).getTime()) / 3_600_000;
-  const status: DawnFooter["status"] =
-    row.last_run_status === "failed" ? "failed" : ageH > 36 ? "stale" : "ok";
-  const label = new Date(row.last_run_at).toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-  return {
-    status,
-    lastRunLabel: ageH < 24 ? `ran ${label}` : `ran ${timeAgo(row.last_run_at)}`,
-  };
+async function DawnRail({ userId }: { userId: string }) {
+  const dawn = await loadDawnFooter(userId);
+  return <AppRail dawn={dawn} />;
+}
+
+async function ChromeBar({ userId }: { userId: string }) {
+  const chrome = await loadStatusChrome(userId);
+  return <AppShell chrome={chrome} />;
 }

@@ -10,7 +10,7 @@ export function Panel({
   id?: string;
 }) {
   return (
-    <section id={id} className={cn("bi-panel bg-white", className)}>
+    <section id={id} className={cn("bi-panel min-w-0 bg-white", className)}>
       {children}
     </section>
   );
@@ -27,12 +27,14 @@ export function PanelHeader({
   hint?: string;
   href?: string;
   hrefLabel?: string;
-  extra?: React.ReactNode;
+      extra?: React.ReactNode;
 }) {
   return (
-    <header className="flex items-center justify-between gap-2 border-b border-neutral-200 px-3 py-1.5">
+    <header className="flex items-start justify-between gap-2 border-b border-neutral-200 px-3 py-1.5">
       <div className="flex min-w-0 items-center gap-1.5">
-        <h2 className="text-[13px] font-semibold tracking-tight">{title}</h2>
+        <h2 className="min-w-0 text-[13px] font-semibold tracking-tight text-pretty [overflow-wrap:break-word]">
+          {title}
+        </h2>
         {hint ? (
           <span
             title={hint}
@@ -81,17 +83,28 @@ export function Kpi({
 }) {
   const inner = (
     <>
-      <div className="bi-label">{label}</div>
-      <div className="mt-1 font-mono text-xl tabular-nums leading-none tracking-tight">{value}</div>
-      {sub ? <div className="mt-1 text-[10px] text-neutral-500">{sub}</div> : null}
+      <div className="bi-label truncate" title={label}>
+        {label}
+      </div>
+      <div className="mt-1 font-mono text-lg tabular-nums leading-none tracking-tight whitespace-nowrap @7xl:text-xl">
+        {value}
+      </div>
+      {sub ? (
+        <div
+          className="mt-1 min-w-0 text-[10px] leading-snug text-pretty text-neutral-500 [overflow-wrap:break-word] line-clamp-2"
+          title={typeof sub === "string" ? sub : undefined}
+        >
+          {sub}
+        </div>
+      ) : null}
     </>
   );
   if (href) {
     return (
-      <a href={href} className="bi-panel block px-3 py-2.5 hover:bg-neutral-50">
+      <a href={href} className="bi-panel block min-w-0 px-2.5 py-2 hover:bg-neutral-50 @7xl:px-3 @7xl:py-2.5">
         {inner}
       </a>
     );
   }
-  return <div className="bi-panel px-3 py-2.5">{inner}</div>;
+  return <div className="bi-panel min-w-0 px-2.5 py-2 @7xl:px-3 @7xl:py-2.5">{inner}</div>;
 }

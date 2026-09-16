@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { AnalyzeView, ANALYZE_TABS, parseAnalyzeTab } from "@/components/analyze/analyze-view";
-import { PageChrome } from "@/components/app/page-chrome";
-import { loadAnalyzeExtras } from "@/lib/app/analyze-extras";
+import { beginAnalyzeExtras, loadAnalyzeExtras } from "@/lib/app/analyze-extras";
 import { isoWeek } from "@/lib/app/dates";
 import { loadAppSnapshot, requireUser } from "@/lib/app/snapshot";
 import { parseWindow, windowQuery } from "@/lib/app/window";
@@ -21,23 +20,19 @@ export default async function AnalyzePage({ searchParams }: { searchParams: Sear
   if (!user) return null;
   const params = await searchParams;
   const window = parseWindow(params);
-  const snapshot = await loadAppSnapshot(user.id, user.email, window);
   const tab = parseAnalyzeTab(params.tab);
-  const extras = await loadAnalyzeExtras(user.id, snapshot);
+  const extrasDays = Math.min(365, Math.max(window.days, 90));
+  const [snapshot, heavy] = await Promise.all([
+    loadAppSnapshot(user.id, user.email, window),
+    beginAnalyzeExtras(user.id, extrasDays, window.focusRun),
+  ]);
+  const extras = await loadAnalyzeExtras(user.id, snapshot, heavy);
   const week = isoWeek(snapshot.todayDate);
 
   return (
-    <PageChrome
-      snapshot={snapshot}
-      showStatus
-      action={
-        extras.insightPath
-          ? { label: "Read this week's insight", href: `/memory?path=${encodeURIComponent(extras.insightPath)}` }
-          : null
-      }
-    >
-      <div className="flex items-center justify-between border-b border-neutral-200 bg-white px-3 py-1.5">
-        <nav className="flex flex-wrap gap-3 text-[11px] font-medium uppercase tracking-wide">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="flex shrink-0 items-center justify-between border-b border-neutral-200 bg-white px-3 py-1.5">
+        <nav className="flex min-w-0 flex-wrap gap-3 text-[11px] font-medium uppercase tracking-wide">
           {ANALYZE_TABS.map((t) => (
             <Link
               key={t.id}
@@ -51,9 +46,11 @@ export default async function AnalyzePage({ searchParams }: { searchParams: Sear
             </Link>
           ))}
         </nav>
-        <span className="font-mono text-[11px] text-neutral-500">{week.label}</span>
+        <span className="shrink-0 font-mono text-[11px] text-neutral-500">{week.label}</span>
       </div>
-      <AnalyzeView snapshot={snapshot} tab={tab} extras={extras} />
-    </PageChrome>
+      <div className="min-h-0 min-w-0 flex-1 overflow-auto">
+        <AnalyzeView snapshot={snapshot} tab={tab} extras={extras} />
+      </div>
+    </div>
   );
 }

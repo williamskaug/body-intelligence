@@ -10,7 +10,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-export function LogEventDialog({ todayDate }: { todayDate: string }) {
+export function LogEventDialog({ todayDate, compact = false }: { todayDate: string; compact?: boolean }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -21,7 +21,11 @@ export function LogEventDialog({ todayDate }: { todayDate: string }) {
         render={
           <button
             type="button"
-            className="w-full border border-foreground bg-foreground px-2.5 py-1 text-[11px] font-medium text-background"
+            className={
+              compact
+                ? "border border-foreground bg-foreground px-2.5 py-1 text-[11px] font-medium text-background"
+                : "w-full border border-foreground bg-foreground px-2.5 py-1 text-[11px] font-medium text-background"
+            }
           >
             + Log event
           </button>

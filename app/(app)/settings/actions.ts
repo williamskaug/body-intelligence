@@ -1,7 +1,7 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { revalidateApp } from "@/lib/app/revalidate";
 import { createClient } from "@/lib/supabase/server";
 import { adminClient } from "@/lib/supabase/admin";
 
@@ -25,7 +25,7 @@ export async function revokeClientAction(formData: FormData) {
     .is("revoked_at", null);
   if (error) throw new Error(`revokeClientAction: ${error.message}`);
 
-  revalidatePath("/settings");
+  revalidateApp(user.id);
 }
 
 const UNITS = new Set(["metric", "imperial"]);
@@ -75,7 +75,7 @@ export async function updateProfileAction(
     .eq("user_id", user.id);
   if (error) return { error: error.message };
 
-  revalidatePath("/settings");
+  revalidateApp(user.id);
   return { ok: true };
 }
 

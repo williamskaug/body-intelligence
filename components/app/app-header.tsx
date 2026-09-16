@@ -43,17 +43,17 @@ export function AppHeader({
   }
 
   return (
-    <header className="flex h-11 shrink-0 items-center gap-3 border-b border-neutral-200 bg-white px-3">
+    <header className="flex min-h-11 min-w-0 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-neutral-200 bg-white px-3 py-1.5">
       <div className="flex min-w-0 items-baseline gap-2">
         <h1 className="text-[15px] font-semibold tracking-tight">{sectionTitle(section)}</h1>
-        <span className="hidden font-mono text-[11px] uppercase tracking-wide text-neutral-500 sm:inline">
+        <span className="hidden shrink-0 font-mono text-[11px] uppercase tracking-wide text-neutral-500 sm:inline">
           {formatHeaderDate(todayDate)}
         </span>
       </div>
 
       <SearchBox />
 
-      <div className="ml-auto flex items-center gap-1.5">
+      <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1.5">
         <div role="group" aria-label="Time range" className="hidden items-center border border-neutral-300 sm:flex">
           {WINDOW_DAYS.map((d) => {
             const active = d === days;
@@ -93,7 +93,8 @@ export function AppHeader({
           action.href ? (
             <Link
               href={action.href}
-              className="border border-foreground bg-foreground px-2.5 py-1 text-[11px] font-medium text-background hover:bg-foreground/90"
+              title={action.label}
+              className="max-w-[11rem] truncate border border-foreground bg-foreground px-2.5 py-1 text-[11px] font-medium text-background hover:bg-foreground/90 @5xl:max-w-none"
             >
               {action.label}
             </Link>
@@ -101,7 +102,8 @@ export function AppHeader({
             <button
               type={action.type ?? "submit"}
               form={action.form}
-              className="border border-foreground bg-foreground px-2.5 py-1 text-[11px] font-medium text-background hover:bg-foreground/90"
+              title={action.label}
+              className="max-w-[11rem] truncate border border-foreground bg-foreground px-2.5 py-1 text-[11px] font-medium text-background hover:bg-foreground/90 @5xl:max-w-none"
               onClick={
                 action.type === "button"
                   ? () => router.refresh()
@@ -172,7 +174,7 @@ function SearchBox() {
   const open = q.trim().length > 0;
 
   return (
-    <div className="relative min-w-0 flex-1 max-w-md">
+    <div className="relative min-w-0 flex-1 basis-40 max-w-md">
       <input
         type="search"
         value={q}

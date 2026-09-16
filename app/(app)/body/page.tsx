@@ -1,4 +1,3 @@
-import { PageChrome } from "@/components/app/page-chrome";
 import { BodyView } from "@/components/body/body-view";
 import { loadAppSnapshot, requireUser } from "@/lib/app/snapshot";
 import { parseWindow } from "@/lib/app/window";
@@ -14,12 +13,8 @@ export default async function BodyPage({ searchParams }: { searchParams: SearchP
   const snapshot = await loadAppSnapshot(user.id, user.email, window);
 
   return (
-    <PageChrome
-      snapshot={snapshot}
-      showStatus
-      action={{ label: "Save check-in", form: "check-in-form", type: "submit" }}
-    >
+    <div className="h-full min-h-0 overflow-auto">
       <BodyView snapshot={snapshot} />
-    </PageChrome>
+    </div>
   );
 }

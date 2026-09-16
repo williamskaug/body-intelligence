@@ -131,18 +131,18 @@ export function PerformanceManagementChart({
         </ComposedChart>
       </ChartContainer>
       {last ? (
-        <p className="mt-1 text-[11px] text-muted-foreground">
-          <span className="font-mono">CTL {fmt(last.ctl)}</span> ·{" "}
-          <span className="font-mono">ATL {fmt(last.atl)}</span> ·{" "}
+        <p className="mt-1 text-pretty text-[11px] leading-snug text-muted-foreground">
+          <span className="font-mono">CTL {fmt(last.ctl)}</span>
+          {" · "}
+          <span className="font-mono">ATL {fmt(last.atl)}</span>
+          {" · "}
           <span className="font-mono">TSB {fmtSigned(last.tsb)}</span>
           {ramp != null ? (
             <>
-              {" "}
-              · <span className="font-mono">ramp {fmtSigned(ramp)}/wk</span>
+              {" · "}
+              <span className="font-mono">ramp {fmtSigned(ramp)}/wk</span>
             </>
-          ) : null}{" "}
-          — fitness, fatigue, form, and 7-day fitness ramp (load statistics, not a
-          verdict). Shaded: high-fatigue (below) / fresh (above).
+          ) : null}
         </p>
       ) : null}
     </div>

@@ -1,6 +1,4 @@
 import Link from "next/link";
-import { PageChrome } from "@/components/app/page-chrome";
-import { AddWorkoutDialog } from "@/components/train/add-workout-dialog";
 import { TrainCalendar, TrainList } from "@/components/train/train-view";
 import { loadAppSnapshot, requireUser } from "@/lib/app/snapshot";
 import { parseWindow, windowQuery } from "@/lib/app/window";
@@ -26,8 +24,8 @@ export default async function TrainPage({ searchParams }: { searchParams: Search
   const hours = snapshot.allWorkouts.reduce((a, w) => a + (w.duration_min ?? 0), 0) / 60;
 
   return (
-    <PageChrome snapshot={snapshot} showStatus extra={<AddWorkoutDialog todayDate={snapshot.todayDate} />}>
-      <div className="flex items-center justify-between border-b border-neutral-200 bg-white px-3 py-1.5">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="flex shrink-0 items-center justify-between border-b border-neutral-200 bg-white px-3 py-1.5">
         <nav className="flex gap-3 text-[11px] font-medium uppercase tracking-wide">
           <Link
             href={`/train${windowQuery(window, { view: "list" })}`}
@@ -54,11 +52,15 @@ export default async function TrainPage({ searchParams }: { searchParams: Search
           </span>
         </div>
       </div>
-      {view === "calendar" ? (
-        <TrainCalendar snapshot={snapshot} />
-      ) : (
-        <TrainList snapshot={snapshot} selectedId={params.workout ?? null} />
-      )}
-    </PageChrome>
+      <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
+        {view === "calendar" ? (
+          <div className="h-full overflow-auto">
+            <TrainCalendar snapshot={snapshot} />
+          </div>
+        ) : (
+          <TrainList snapshot={snapshot} selectedId={params.workout ?? null} />
+        )}
+      </div>
+    </div>
   );
 }

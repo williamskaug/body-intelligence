@@ -34,11 +34,9 @@ export async function getCorrelationMatrix(userId: string, input: GetCorrelation
   const corr = method === "spearman" ? spearman : pearson;
   const metrics = input.metrics;
 
-  // Fetch each metric's daily series once.
-  const series: Array<Map<string, number>> = [];
-  for (const m of metrics) {
-    series.push((await dailySeriesForMetric(userId, m, from, to)).map);
-  }
+  const series = await Promise.all(
+    metrics.map(async (m) => (await dailySeriesForMetric(userId, m, from, to)).map),
+  );
 
   const matrix: Array<Array<number | null>> = [];
   const nMatrix: number[][] = [];

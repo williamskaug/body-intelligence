@@ -1,8 +1,6 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { PageChrome } from "@/components/app/page-chrome";
-import { loadAppSnapshot, requireUser } from "@/lib/app/snapshot";
-import { parseWindow } from "@/lib/app/window";
+import { requireUser } from "@/lib/app/snapshot";
 import { createClient } from "@/lib/supabase/server";
 import { adminClient } from "@/lib/supabase/admin";
 import { recipes } from "@/lib/agents/recipe-data";
@@ -32,7 +30,6 @@ export default async function SettingsPage() {
   const user = await requireUser();
   if (!user) redirect("/login");
 
-  const snapshot = await loadAppSnapshot(user.id, user.email, parseWindow({}));
   const supabase = await createClient();
   const profileRes = await supabase
     .from("user_profiles")
@@ -47,11 +44,8 @@ export default async function SettingsPage() {
   const mcpUrl = await resolveMcpUrl();
 
   return (
-    <PageChrome
-      snapshot={snapshot}
-      action={{ label: "Save profile", form: "profile-form", type: "submit" }}
-    >
-      <div className="grid gap-px bg-neutral-200 lg:grid-cols-2">
+    <div className="h-full min-h-0 overflow-auto">
+      <div className="grid min-w-0 gap-px bg-neutral-200 @3xl:grid-cols-2">
         <section className="bg-white p-4">
           <h2 className="text-[13px] font-semibold">MCP endpoint</h2>
           <p className="mt-1 text-[12px] text-neutral-500">
@@ -132,8 +126,8 @@ export default async function SettingsPage() {
           )}
         </section>
 
-        <section className="bg-white p-4 lg:col-span-2">
-          <div className="flex items-center justify-between gap-3">
+        <section className="bg-white p-4 @3xl:col-span-2">
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="text-[13px] font-semibold">Browser session</h2>
               <p className="mt-1 text-[12px] text-neutral-500">
@@ -154,7 +148,7 @@ export default async function SettingsPage() {
           </div>
         </section>
       </div>
-    </PageChrome>
+    </div>
   );
 }
 

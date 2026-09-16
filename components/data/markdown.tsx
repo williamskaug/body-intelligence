@@ -7,7 +7,7 @@ import remarkGfm from "remark-gfm";
 // the briefings lean on.
 export function Markdown({ children }: { children: string }) {
   return (
-    <div className="prose prose-sm max-w-none prose-neutral prose-headings:font-semibold prose-headings:tracking-tight prose-h1:text-lg prose-h2:text-base prose-h3:text-sm prose-p:leading-relaxed prose-table:text-xs prose-th:font-medium prose-code:before:content-none prose-code:after:content-none">
+    <div className="prose prose-sm max-w-none prose-neutral prose-headings:font-semibold prose-headings:tracking-tight prose-h1:text-lg prose-h2:text-base prose-h3:text-sm prose-p:leading-relaxed prose-table:text-xs prose-th:font-medium prose-code:before:content-none prose-code:after:content-none prose-pre:max-w-full prose-pre:overflow-x-auto prose-pre:whitespace-pre-wrap prose-pre:break-words">
       <ReactMarkdown remarkPlugins={[remarkGfm]}>{children}</ReactMarkdown>
     </div>
   );

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseWeekPlan } from "./parse-week";
+import { blockLabel, clipAtWord, parseWeekPlan, planExcerpt } from "./parse-week";
 
 describe("parseWeekPlan", () => {
   it("reads weekday rows from CURRENT.md This week", () => {
@@ -17,5 +17,55 @@ Base 2 · wk 3/4
     expect(parsed.items[1]?.done).toBe(true);
     expect(parsed.items[2]?.type).toBe("strength");
     expect(parsed.block).toMatch(/Base 2/);
+    expect(parsed.blockLabel).toBe("Base 2 · wk 3/4");
+  });
+});
+
+describe("blockLabel", () => {
+  it("keeps a short mock-style block line as-is", () => {
+    expect(blockLabel("Base 2 · wk 3/4")).toBe("Base 2 · wk 3/4");
+  });
+
+  it("compresses a Phase 0 essay into a chip, not the document body", () => {
+    const essay = `**Phase 0 — Structure & consistency (Sep 14 – Oct 11 2026), week 1 of 4.** The re-scope is resolved: the A-race is Oslo Marathon 2027-09-18, goal sub-3:00, and the 53-week periodised build lives in \`plans/oslo-marathon-2027.md\` (rev. 3, run-first — read it before every re-plan). The diagnosis that shapes the year: Garmin speed markers are already ~sub-3-equivalent (VO2max 59.6, LT 4:07/km, 5K-predict 18:46); the gap is **endurance/durability and run-specific tissue tolerance**, so the whole first phase is easy aerobic volume with zero quality — no threshold/intervals until January.`;
+    expect(blockLabel(essay)).toBe("Phase 0 · wk 1/4");
+  });
+
+  it("truncates a long first line at a word boundary instead of mid-word", () => {
+    const source =
+      "Rebuilding aerobic volume after the summer break with lots of easy riding and no quality sessions planned until the next block starts";
+    const label = blockLabel(source);
+    expect(label).not.toBeNull();
+    expect(label!.length).toBeLessThanOrEqual(42);
+    expect(label!.endsWith("…")).toBe(true);
+    const stem = label!.slice(0, -1);
+    expect(source.startsWith(stem)).toBe(true);
+    const next = source[stem.length];
+    expect(next === undefined || /\s/.test(next)).toBe(true);
+  });
+
+  it("returns null for empty / comment-only sections", () => {
+    expect(blockLabel("")).toBeNull();
+    expect(blockLabel("   \n  ")).toBeNull();
+  });
+});
+
+describe("planExcerpt", () => {
+  it("collapses a This-week essay into a short line instead of the document body", () => {
+    const raw = `**Phase 0** is easy aerobic volume.\n\nRead plans/oslo-marathon-2027.md before every re-plan.`;
+    const excerpt = planExcerpt(raw, 60);
+    expect(excerpt.length).toBeLessThanOrEqual(60);
+    expect(excerpt.startsWith("Phase 0")).toBe(true);
+    expect(excerpt).not.toContain("oslo-marathon");
+  });
+
+  it("clipAtWord does not split a token", () => {
+    const source = "Rebuilding aerobic volume after the summer break";
+    const clipped = clipAtWord(source, 24);
+    expect(clipped.endsWith("…")).toBe(true);
+    const stem = clipped.slice(0, -1);
+    expect(source.startsWith(stem)).toBe(true);
+    const next = source[stem.length];
+    expect(next === undefined || /\s/.test(next)).toBe(true);
   });
 });

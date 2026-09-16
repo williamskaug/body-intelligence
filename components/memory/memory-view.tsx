@@ -52,8 +52,8 @@ export function MemoryView({
   const folders = groupFiles(visible);
 
   return (
-    <div className="grid min-h-full lg:grid-cols-[16rem_1fr]">
-      <aside className="border-r border-neutral-200 bg-white">
+    <div className="grid h-full min-h-0 min-w-0 @3xl:grid-cols-[minmax(12rem,18rem)_minmax(0,1fr)]">
+      <aside className="flex min-h-0 min-w-0 flex-col border-r border-neutral-200 bg-white">
         <div className="border-b border-neutral-200 p-2">
           <input
             type="search"
@@ -63,7 +63,7 @@ export function MemoryView({
             className="w-full border border-neutral-300 px-2 py-1 text-[12px] outline-none focus:border-neutral-500"
           />
         </div>
-        <nav className="overflow-auto py-1 text-[12px]">
+        <nav className="min-h-0 flex-1 overflow-auto py-1 text-[12px]">
           {folders.map((group) => (
             <div key={group.label} className="mb-1">
               {group.label !== "root" ? (
@@ -79,12 +79,12 @@ export function MemoryView({
                     key={f.path}
                     type="button"
                     className={cn(
-                      "flex w-full px-3 py-1 text-left font-mono text-[11px]",
+                      "flex w-full min-w-0 px-3 py-1 text-left font-mono text-[11px]",
                       active ? "bg-foreground text-background" : "hover:bg-neutral-50",
                     )}
                     onClick={() => router.push(`/memory?path=${encodeURIComponent(f.path)}`)}
                   >
-                    {name}
+                    <span className="min-w-0 truncate">{name}</span>
                   </button>
                 );
               })}
@@ -92,10 +92,10 @@ export function MemoryView({
           ))}
         </nav>
       </aside>
-      <section className="flex min-h-0 flex-col bg-white">
+      <section className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-white">
         <header className="flex items-center justify-between gap-3 border-b border-neutral-200 px-4 py-2">
           <div>
-            <h2 className="font-mono text-[13px] font-semibold">{selectedPath}</h2>
+            <h2 className="min-w-0 break-all font-mono text-[13px] font-semibold">{selectedPath}</h2>
             <p className="font-mono text-[10px] text-neutral-500">
               {updatedAt ? `updated ${updatedAt.slice(0, 10)}` : "new"}
               {draft ? ` · ${formatBytes(new Blob([draft]).size)}` : ""}

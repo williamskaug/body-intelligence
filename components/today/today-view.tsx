@@ -4,8 +4,8 @@ import { EmptyNote, Kpi, Panel, PanelHeader, TypeChip } from "@/components/app/p
 import { SvgLine } from "@/components/app/charts";
 import { addDays, isoWeek, weekdayShort } from "@/lib/app/dates";
 import { formatClock, formatClockDelta, formatHours, formatKm, formatPace, formatZScore, num, paceFromWorkout } from "@/lib/app/format";
-import { parseWeekPlan } from "@/lib/app/parse-week";
-import type { AppSnapshot } from "@/lib/app/snapshot";
+import { parseWeekPlan, planExcerpt, clipAtWord } from "@/lib/app/parse-week";
+import type { AppSnapshot, RaceInfo } from "@/lib/app/snapshot";
 import {
   isRunType,
   runningEfficiency,
@@ -82,10 +82,11 @@ export function TodayView({
 
   const weekKmCap = 60;
   const weekHCap = 10;
+  const goalLabel = race ? shortGoal(race) : null;
 
   return (
     <div className="flex flex-col gap-px p-px">
-      <div className="grid grid-cols-2 gap-px bg-neutral-200 lg:grid-cols-8">
+      <div className="grid min-w-0 grid-cols-2 gap-px bg-neutral-200 @xl:grid-cols-4 @7xl:grid-cols-8">
         <Kpi
           label="Pred. marathon"
           value={formatClock(predSec)}
@@ -101,8 +102,8 @@ export function TodayView({
         <Kpi
           label="Days to race"
           value={race ? Math.max(0, race.daysOut) : "[N]"}
-          sub={plan.block ? plan.block.split("\n")[0] : race?.name}
-          href="/memory?path=GOALS.md"
+          sub={plan.blockLabel ?? race?.name ?? undefined}
+          href="/memory?path=CURRENT.md"
         />
         <Kpi
           label="Run km · wk"
@@ -154,7 +155,7 @@ export function TodayView({
         />
       </div>
 
-      <div className="grid gap-px bg-neutral-200 lg:grid-cols-[1.15fr_1fr_0.9fr]">
+      <div className="grid min-w-0 gap-px bg-neutral-200 @5xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,0.9fr)]">
         <Panel>
           <PanelHeader
             title="Race trajectory"
@@ -162,23 +163,38 @@ export function TodayView({
             href="/memory?path=GOALS.md"
             hrefLabel="GOALS.md"
           />
-          <div className="px-3 pt-2 text-[11px] text-neutral-500">
-            {race ? (
-              <span>
-                {race.name}
-                {race.tier ? ` · ${race.tier}-race` : ""} · {race.daysOut}d
-                {race.goal ? ` · goal ${race.goal}` : ""}
-                {predSec != null && race.goalSeconds != null ? (
-                  <span className={predSec <= race.goalSeconds ? " text-emerald-700" : " text-rose-600"}>
-                    {" "}
-                    gap {formatClockDelta(predSec - race.goalSeconds)}
-                  </span>
-                ) : null}
-              </span>
-            ) : (
-              "No A-race in GOALS.md"
-            )}
-            {plan.block ? <span className="ml-3 uppercase tracking-wide">{plan.block.split("\n")[0]}</span> : null}
+          <div className="flex min-w-0 items-start justify-between gap-3 px-3 pt-2 text-[11px]">
+            <div className="min-w-0 text-pretty text-neutral-600">
+              {race ? (
+                <>
+                  <div>
+                    {race.name}
+                    {race.tier ? ` · ${race.tier}-race` : ""} · {race.daysOut}d
+                  </div>
+                  <div className="mt-0.5 text-neutral-500">
+                    {goalLabel ? `goal ${goalLabel}` : null}
+                    {predSec != null && race.goalSeconds != null ? (
+                      <span className={predSec <= race.goalSeconds ? " text-emerald-700" : " text-rose-600"}>
+                        {goalLabel ? " · " : ""}
+                        gap {formatClockDelta(predSec - race.goalSeconds)}
+                      </span>
+                    ) : null}
+                  </div>
+                </>
+              ) : (
+                "No A-race in GOALS.md"
+              )}
+            </div>
+            {plan.blockLabel ? (
+              <a
+                href="/memory?path=CURRENT.md"
+                className="shrink-0 text-right"
+                title="Open CURRENT.md"
+              >
+                <div className="text-[10px] uppercase tracking-wide text-neutral-400">Block</div>
+                <div className="max-w-[11rem] font-medium text-pretty text-neutral-700">{plan.blockLabel}</div>
+              </a>
+            ) : null}
           </div>
           <SvgLine
             points={marathonSeries.length ? marathonSeries : weeks.map((w) => ({ x: w.label, y: null }))}
@@ -209,9 +225,9 @@ export function TodayView({
           <div className="px-3 py-2">
             {todayWorkout ? (
               <div>
-                <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <TypeChip>{shortLabelForType(todayWorkout.type)}</TypeChip>
-                  <span className="text-sm font-semibold">{workoutTitle(todayWorkout)}</span>
+                  <span className="min-w-0 text-sm font-semibold">{workoutTitle(todayWorkout)}</span>
                 </div>
                 <div className="mt-1 font-mono text-[11px] text-neutral-500">
                   HR {todayWorkout.avg_hr ?? "—"}
@@ -269,7 +285,7 @@ export function TodayView({
               series={capacity.map((c) => (c.vo2max_running != null ? Number(c.vo2max_running) : null))}
               sub={vo2Delta != null ? `${vo2Delta >= 0 ? "+" : ""}${vo2Delta.toFixed(1)} · 90 d` : undefined}
             />
-            <div className="flex items-center justify-between px-3 py-2 text-[11px]">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-[11px]">
               <span className="uppercase tracking-wide text-neutral-400">CTL</span>
               <span className="font-mono">
                 {ctl != null ? Math.round(ctl) : "—"}
@@ -282,7 +298,7 @@ export function TodayView({
         </Panel>
       </div>
 
-      <div className="grid gap-px bg-neutral-200 lg:grid-cols-3">
+      <div className="grid min-w-0 gap-px bg-neutral-200 @5xl:grid-cols-3">
         <Panel>
           <PanelHeader title="Last night" />
           {lastNight ? (
@@ -346,7 +362,7 @@ export function TodayView({
             }
             hrefLabel="dawn-agent"
           />
-          <div className="max-h-40 overflow-hidden px-3 py-2 text-[12px] leading-relaxed text-neutral-700">
+          <div className="max-h-40 overflow-y-auto px-3 py-2 text-[12px] leading-relaxed text-pretty text-neutral-700">
             {briefing ? (
               <Markdown>{briefing}</Markdown>
             ) : insight ? (
@@ -380,7 +396,14 @@ function FitRow({
         <div className="font-mono text-sm tabular-nums">{value}</div>
         {sub ? <div className="text-[10px] text-neutral-400">{sub}</div> : null}
       </div>
-      <Sparkline values={series} baseline={base} width={120} height={36} stroke="#171717" />
+      <Sparkline
+        values={series}
+        baseline={base}
+        width={120}
+        height={36}
+        stroke="#171717"
+        className="w-[7.5rem] shrink-0"
+      />
     </div>
   );
 }
@@ -409,8 +432,14 @@ function WeekPlan({
   raw: string;
 }) {
   if (items.length === 0) {
-    return raw ? (
-      <pre className="whitespace-pre-wrap font-sans text-[11px] leading-relaxed text-neutral-600">{raw}</pre>
+    const excerpt = planExcerpt(raw);
+    return excerpt ? (
+      <p className="text-[11px] leading-relaxed text-pretty text-neutral-600">
+        {excerpt}{" "}
+        <a href="/memory?path=CURRENT.md" className="uppercase tracking-wide text-neutral-400 hover:text-foreground">
+          CURRENT.md
+        </a>
+      </p>
     ) : (
       <p className="text-[11px] text-neutral-400">No week plan in CURRENT.md.</p>
     );
@@ -428,7 +457,9 @@ function WeekPlan({
           >
             <span className="w-8 text-neutral-400">{item.dow}</span>
             {item.type ? <TypeChip>{item.type}</TypeChip> : null}
-            <span className="min-w-0 flex-1 truncate">{item.title}</span>
+            <span className="min-w-0 flex-1 text-pretty [overflow-wrap:break-word]">
+              {clipAtWord(item.title, 64)}
+            </span>
             {logged || item.done ? (
               <span className="text-[10px] uppercase text-emerald-700">{isToday ? "today" : "done"}</span>
             ) : null}
@@ -443,6 +474,13 @@ function pctDelta(curr: number, prev: number): string {
   if (prev <= 0) return "—";
   const p = ((curr - prev) / prev) * 100;
   return `${p >= 0 ? "+" : ""}${p.toFixed(0)} %`;
+}
+
+function shortGoal(race: RaceInfo): string | null {
+  if (race.goalSeconds != null) return formatClock(race.goalSeconds);
+  if (!race.goal) return null;
+  const first = race.goal.split(/[,(]/)[0]!.trim();
+  return first.length > 28 ? `${first.slice(0, 27).trimEnd()}…` : first;
 }
 
 function insightLead(content: string): string {

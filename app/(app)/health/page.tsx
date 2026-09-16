@@ -1,6 +1,4 @@
-import { PageChrome } from "@/components/app/page-chrome";
 import { HealthView } from "@/components/health/health-view";
-import { LogEventDialog } from "@/components/health/log-event-dialog";
 import { loadAppSnapshot, requireUser } from "@/lib/app/snapshot";
 import { parseWindow } from "@/lib/app/window";
 
@@ -22,13 +20,13 @@ export default async function HealthPage({ searchParams }: { searchParams: Searc
   const healthLog = snapshot.contentByPath.get("HEALTH_LOG.md") ?? null;
 
   return (
-    <PageChrome snapshot={snapshot} extra={<LogEventDialog todayDate={snapshot.todayDate} />}>
+    <div className="h-full min-h-0 overflow-hidden">
       <HealthView
         events={snapshot.events}
         todayDate={snapshot.todayDate}
         selectedId={params.event ?? null}
         healthLog={healthLog}
       />
-    </PageChrome>
+    </div>
   );
 }

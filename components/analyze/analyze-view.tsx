@@ -3,12 +3,14 @@ import { EmptyNote, Panel, PanelHeader } from "@/components/app/panel";
 import { SvgBars, SvgHBars, SvgLine, SvgStackedWeekly } from "@/components/app/charts";
 import { Sparkline } from "@/components/data/sparkline";
 import { CorrelationHeatmap } from "@/components/data/charts/correlation-heatmap";
-import { HistogramChart } from "@/components/data/charts/histogram-chart";
-import { PerformanceManagementChart } from "@/components/data/charts/performance-management-chart";
-import { RatioBandChart } from "@/components/data/charts/ratio-band-chart";
-import { ScatterRegression } from "@/components/data/charts/scatter-regression";
-import { BaselineBandChart } from "@/components/data/charts/baseline-band-chart";
-import { MultiSeriesLine } from "@/components/data/charts/multi-series-line";
+import {
+  BaselineBandChart,
+  HistogramChart,
+  MultiSeriesLine,
+  PerformanceManagementChart,
+  RatioBandChart,
+  ScatterRegression,
+} from "@/components/analyze/lazy-charts";
 import { GateStrip } from "@/components/data/gate-strip";
 import { addDays } from "@/lib/app/dates";
 import { formatClock, formatHours, formatKm, formatPace, num, paceFromWorkout } from "@/lib/app/format";
@@ -87,7 +89,9 @@ export function AnalyzeView({
           <span className="border border-neutral-300 px-1.5 py-px text-[10px] uppercase tracking-wide text-neutral-500">
             Insight
           </span>
-          <p className="min-w-0 flex-1 truncate">{extras.insightLead}</p>
+          <p className="min-w-0 flex-1 text-[12px] leading-snug text-pretty [overflow-wrap:break-word] line-clamp-2">
+            {extras.insightLead}
+          </p>
           {extras.insightPath ? (
             <Link
               href={`/memory?path=${encodeURIComponent(extras.insightPath)}`}
@@ -133,7 +137,7 @@ function BuildTab({ snapshot, extras }: { snapshot: AppSnapshot; extras: Analyze
 
   return (
     <div className="grid gap-px bg-neutral-200">
-      <div className="grid gap-px lg:grid-cols-[1.4fr_0.7fr]">
+      <div className="grid gap-px @5xl:grid-cols-[1.4fr_0.7fr]">
         <Panel>
           <PanelHeader
             title="Weekly volume"
@@ -160,15 +164,19 @@ function BuildTab({ snapshot, extras }: { snapshot: AppSnapshot; extras: Analyze
           />
         </Panel>
       </div>
-      <div className="grid gap-px lg:grid-cols-3">
+      <div className="grid gap-px @5xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+        <div className="grid gap-px @3xl:grid-cols-2">
         <Panel>
           <PanelHeader title="Ramp compliance" hint="Week-over-week change in run km." />
-          <div className="flex h-40 items-end gap-1 px-3 py-3">
+          <div className="flex items-end gap-1 px-3 pt-3 pb-2">
             {ramps.map((r, i) => (
-              <div key={weeks[i]!.weekStart} className="flex flex-1 flex-col items-center justify-end">
+              <div key={weeks[i]!.weekStart} className="flex min-w-0 flex-1 flex-col items-center justify-end gap-1">
+                <span className="max-w-full truncate font-mono text-[9px] text-neutral-500">
+                  {r == null ? "—" : `${r >= 0 ? "+" : ""}${Math.round(r)}%`}
+                </span>
                 <div
                   className="w-full bg-neutral-800"
-                  style={{ height: `${r == null ? 4 : Math.min(100, Math.abs(r) * 2)}%` }}
+                  style={{ height: `${r == null ? 4 : Math.min(96, Math.max(6, Math.abs(r)))}px` }}
                   title={`${weeks[i]!.label}: ${r == null ? "—" : `${r.toFixed(0)}%`}`}
                 />
               </div>
@@ -187,9 +195,13 @@ function BuildTab({ snapshot, extras }: { snapshot: AppSnapshot; extras: Analyze
             />
           </div>
         </Panel>
+        </div>
         <Panel>
-          <PanelHeader title="Load balance" />
-          <div className="p-2">
+          <PanelHeader
+            title="Load balance"
+            hint="CTL / ATL / TSB and 7-day fitness ramp are load statistics, not a verdict. Shaded: high-fatigue (below) / fresh (above)."
+          />
+          <div className="min-w-0 p-2">
             <PerformanceManagementChart data={pmc} ramp={extras.load?.current.ctl_ramp_7d ?? null} minDays={10} />
           </div>
         </Panel>
@@ -227,7 +239,7 @@ function FitnessTab({ snapshot, extras }: { snapshot: AppSnapshot; extras: Analy
 
   return (
     <div className="grid gap-px bg-neutral-200">
-      <div className="grid gap-px lg:grid-cols-2">
+      <div className="grid gap-px @5xl:grid-cols-2">
         <Panel>
           <PanelHeader title="Efficiency factor" extra="12 mo" hint="Distance (m) / (avg HR × minutes)." />
           <SvgLine
@@ -265,7 +277,7 @@ function FitnessTab({ snapshot, extras }: { snapshot: AppSnapshot; extras: Analy
           </p>
         </Panel>
       </div>
-      <div className="grid gap-px lg:grid-cols-3">
+      <div className="grid gap-px @5xl:grid-cols-3">
         <Panel>
           <PanelHeader title="VO₂max" />
           <div className="p-2">
@@ -278,7 +290,7 @@ function FitnessTab({ snapshot, extras }: { snapshot: AppSnapshot; extras: Analy
         </Panel>
         <Panel>
           <PanelHeader title="Threshold anchor" href="/memory?path=THRESHOLDS.md" hrefLabel="THRESHOLDS.md" />
-          <dl className="grid grid-cols-2 gap-2 px-3 py-2 text-[12px]">
+          <dl className="grid grid-cols-1 gap-3 px-3 py-3 text-[12px] @md:grid-cols-2">
             <KV k="LTHR" v={lthr != null ? `${lthr} bpm` : "—"} />
             <KV k="LT pace" v={ltPace ?? "—"} />
             <KV
@@ -298,7 +310,7 @@ function FitnessTab({ snapshot, extras }: { snapshot: AppSnapshot; extras: Analy
             Last 3 weeks of riding: {formatHours(rideH)} h. EF now {latestEf != null ? latestEf.toFixed(2) : "—"}.
           </p>
           <div className="px-3 pb-3">
-            <Sparkline values={efs.slice().reverse().map((e) => e.ef)} width={260} height={80} stroke="#2563eb" />
+            <Sparkline values={efs.slice().reverse().map((e) => e.ef)} width={640} height={80} stroke="#2563eb" className="w-full" />
           </div>
         </Panel>
       </div>
@@ -309,7 +321,7 @@ function FitnessTab({ snapshot, extras }: { snapshot: AppSnapshot; extras: Analy
 function LongRunTab({ snapshot }: { snapshot: AppSnapshot }) {
   const longs = snapshot.allWorkouts.filter(isLongRun);
   return (
-    <div className="grid gap-px bg-neutral-200 lg:grid-cols-[1.4fr_0.7fr]">
+    <div className="grid gap-px bg-neutral-200 @5xl:grid-cols-[1.4fr_0.7fr]">
       <Panel>
         <PanelHeader
           title="Long-run progression"
@@ -344,8 +356,9 @@ function LongRunTab({ snapshot }: { snapshot: AppSnapshot }) {
           refs={[{ y: 5, color: "#e11d48", dash: true }]}
         />
       </Panel>
-      <Panel className="lg:col-span-2">
-        <table className="w-full text-left text-[12px]">
+      <Panel className="min-w-0 @5xl:col-span-2">
+        <div className="min-w-0 overflow-x-auto">
+        <table className="w-full min-w-[52rem] text-left text-[12px]">
           <thead className="text-[10px] uppercase tracking-wide text-neutral-400">
             <tr>
               {["Date", "Title", "Km", "Avg HR", "Pace", "Decoupling", "Cadence", "Weather", "Note"].map((h) => (
@@ -380,6 +393,7 @@ function LongRunTab({ snapshot }: { snapshot: AppSnapshot }) {
             })}
           </tbody>
         </table>
+        </div>
         {longs.length === 0 ? <EmptyNote>No long runs in this window.</EmptyNote> : null}
       </Panel>
     </div>
@@ -429,7 +443,7 @@ function IntensityTab({ snapshot }: { snapshot: AppSnapshot }) {
 
   return (
     <div className="grid gap-px bg-neutral-200">
-      <div className="grid gap-px lg:grid-cols-[1.4fr_0.7fr]">
+      <div className="grid gap-px @5xl:grid-cols-[1.4fr_0.7fr]">
         <Panel>
           <PanelHeader title="Time in zone" extra={runMax != null ? `HRmax ${runMax}` : undefined} />
           <SvgStackedWeekly
@@ -463,7 +477,7 @@ function IntensityTab({ snapshot }: { snapshot: AppSnapshot }) {
           })}
         </Panel>
       </div>
-      <div className="grid gap-px lg:grid-cols-2">
+      <div className="grid gap-px @5xl:grid-cols-2">
         <Panel>
           <PanelHeader title="Quality sessions" />
           <SvgBars
@@ -504,7 +518,7 @@ function FormTab({ snapshot }: { snapshot: AppSnapshot }) {
 
   return (
     <div className="grid gap-px bg-neutral-200">
-      <div className="grid gap-px lg:grid-cols-2">
+      <div className="grid gap-px @5xl:grid-cols-2">
         <Panel>
           <PanelHeader title="Cadence" extra="target 170–175" />
           <SvgLine
@@ -543,7 +557,7 @@ function FormTab({ snapshot }: { snapshot: AppSnapshot }) {
           </div>
         </Panel>
       </div>
-      <div className="grid gap-px lg:grid-cols-3">
+      <div className="grid gap-px @5xl:grid-cols-3">
         <Panel>
           <PanelHeader title="Cadence vs pace" />
           <EmptyNote>
@@ -586,7 +600,7 @@ function RecoveryTab({ snapshot, extras }: { snapshot: AppSnapshot; extras: Anal
 
   return (
     <div className="grid gap-px bg-neutral-200">
-      <div className="grid gap-px lg:grid-cols-2">
+      <div className="grid gap-px @5xl:grid-cols-2">
         <Panel>
           <PanelHeader
             title="Recovery by session type"
@@ -614,16 +628,17 @@ function RecoveryTab({ snapshot, extras }: { snapshot: AppSnapshot; extras: Anal
           )}
         </Panel>
       </div>
-      <div className="grid gap-px lg:grid-cols-3">
+      <div className="grid gap-px @5xl:grid-cols-3">
         <Panel>
           <PanelHeader title="Sleep debt" />
           <div className="px-3 py-2">
             <Sparkline
               values={snapshot.derived.slice().reverse().map((d) => d.sleep_debt_7d_min)}
-              width={280}
+              width={640}
               height={100}
               fillArea
               stroke="#171717"
+              className="w-full"
             />
           </div>
         </Panel>
@@ -699,7 +714,7 @@ function RecoveryByType({ snapshot }: { snapshot: AppSnapshot }) {
 function StatsTab({ extras }: { extras: AnalyzeExtras }) {
   const acwr = (extras.load?.series ?? []).map((s) => ({ date: s.date, value: s.acwr }));
   return (
-    <div className="grid gap-px bg-neutral-200 lg:grid-cols-3">
+    <div className="grid gap-px bg-neutral-200 @5xl:grid-cols-3">
       <Panel>
         <PanelHeader title="Correlation matrix" />
         <div className="p-2">
