@@ -1,8 +1,10 @@
 import Link from "next/link";
-import { AnalyzeView, ANALYZE_TABS, parseAnalyzeTab } from "@/components/analyze/analyze-view";
-import { beginAnalyzeExtras, loadAnalyzeExtras } from "@/lib/app/analyze-extras";
+import { AnalyzeView } from "@/components/analyze/analyze-view";
+import { ANALYZE_TABS, parseAnalyzeTab } from "@/lib/app/analyze-tabs";
+import { loadAnalyzeExtrasForTab, prefetchAnalyzeExtras } from "@/lib/app/analyze-extras";
 import { isoWeek } from "@/lib/app/dates";
-import { loadAppSnapshot, requireUser } from "@/lib/app/snapshot";
+import { loadAnalyzeSnapshot } from "@/lib/app/page-data";
+import { requireUser } from "@/lib/app/snapshot";
 import { parseWindow, windowQuery } from "@/lib/app/window";
 import { cn } from "@/lib/utils";
 
@@ -22,11 +24,9 @@ export default async function AnalyzePage({ searchParams }: { searchParams: Sear
   const window = parseWindow(params);
   const tab = parseAnalyzeTab(params.tab);
   const extrasDays = Math.min(365, Math.max(window.days, 90));
-  const [snapshot, heavy] = await Promise.all([
-    loadAppSnapshot(user.id, user.email, window),
-    beginAnalyzeExtras(user.id, extrasDays, window.focusRun),
-  ]);
-  const extras = await loadAnalyzeExtras(user.id, snapshot, heavy);
+  prefetchAnalyzeExtras(user.id, extrasDays, tab);
+  const snapshot = await loadAnalyzeSnapshot(user.id, user.email, window, tab);
+  const extras = await loadAnalyzeExtrasForTab(user.id, snapshot, tab);
   const week = isoWeek(snapshot.todayDate);
 
   return (
@@ -37,6 +37,7 @@ export default async function AnalyzePage({ searchParams }: { searchParams: Sear
             <Link
               key={t.id}
               href={`/analyze${windowQuery(window, { tab: t.id })}`}
+              prefetch
               className={cn(
                 "border-b-2 pb-0.5",
                 tab === t.id ? "border-foreground" : "border-transparent text-neutral-400 hover:text-foreground",

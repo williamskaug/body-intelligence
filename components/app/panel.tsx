@@ -86,7 +86,7 @@ export function Kpi({
       <div className="bi-label truncate" title={label}>
         {label}
       </div>
-      <div className="mt-1 font-mono text-lg tabular-nums leading-none tracking-tight whitespace-nowrap @7xl:text-xl">
+      <div className="mt-1 font-mono text-lg tabular-nums leading-none tracking-tight whitespace-nowrap @5xl:text-xl">
         {value}
       </div>
       {sub ? (
@@ -101,10 +101,10 @@ export function Kpi({
   );
   if (href) {
     return (
-      <a href={href} className="bi-panel block min-w-0 px-2.5 py-2 hover:bg-neutral-50 @7xl:px-3 @7xl:py-2.5">
+      <a href={href} className="bi-panel block min-w-0 px-2 py-1.5 hover:bg-neutral-50 @5xl:px-2.5 @5xl:py-2">
         {inner}
       </a>
     );
   }
-  return <div className="bi-panel min-w-0 px-2.5 py-2 @7xl:px-3 @7xl:py-2.5">{inner}</div>;
+  return <div className="bi-panel min-w-0 px-2 py-1.5 @5xl:px-2.5 @5xl:py-2">{inner}</div>;
 }

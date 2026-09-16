@@ -6,7 +6,7 @@ import { Panel, PanelHeader } from "@/components/app/panel";
 import { Sparkline } from "@/components/data/sparkline";
 import { computeBaseline } from "@/lib/data-display/baseline";
 import { num } from "@/lib/app/format";
-import type { AppSnapshot, DailyRow } from "@/lib/app/snapshot";
+import type { DailyRow } from "@/lib/app/snapshot";
 import { cn } from "@/lib/utils";
 
 type MetricId =
@@ -41,13 +41,21 @@ function fmtZ(z: number | null): string {
   return `z ${sign}${Math.abs(z).toFixed(2)}`;
 }
 
-export function BodyView({ snapshot }: { snapshot: AppSnapshot }) {
+export function BodyView({
+  todayDate,
+  dailyHistory,
+  capacity,
+}: {
+  todayDate: string;
+  dailyHistory: DailyRow[];
+  capacity: Array<{ date: string; vo2max_running: string | null }>;
+}) {
   const [selected, setSelected] = useState<MetricId>("hrv");
-  const daily = snapshot.dailyHistory;
+  const daily = dailyHistory;
   const chrono = useMemo(() => [...daily].reverse(), [daily]);
   const latest = daily[0] ?? null;
-  const vo2Series = snapshot.capacity.map((c) => num(c.vo2max_running));
-  const latestVo2 = [...snapshot.capacity].reverse().find((c) => num(c.vo2max_running) != null);
+  const vo2Series = capacity.map((c) => num(c.vo2max_running));
+  const latestVo2 = [...capacity].reverse().find((c) => num(c.vo2max_running) != null);
 
   const tiles: Tile[] = useMemo(() => {
     const seriesOf = (pick: (d: DailyRow) => number | null) => chrono.map(pick);
@@ -98,7 +106,7 @@ export function BodyView({ snapshot }: { snapshot: AppSnapshot }) {
   const active = tiles.find((t) => t.id === selected) ?? tiles[0]!;
 
   return (
-    <div className="grid min-w-0 gap-px bg-neutral-200 @6xl:grid-cols-[minmax(0,1.4fr)_minmax(0,22rem)]">
+    <div className="grid min-w-0 gap-px bg-neutral-200 @5xl:grid-cols-[minmax(0,1.4fr)_minmax(0,22rem)]">
       <div>
         <div className="grid grid-cols-2 gap-px bg-neutral-200 @3xl:grid-cols-3">
           {tiles.map((t) => (
@@ -152,7 +160,7 @@ export function BodyView({ snapshot }: { snapshot: AppSnapshot }) {
           </div>
         </Panel>
       </div>
-      <CheckInForm date={snapshot.todayDate} latest={latest} />
+      <CheckInForm date={todayDate} latest={latest} />
     </div>
   );
 }
@@ -202,9 +210,8 @@ function CheckInForm({
           });
         }}
       >
-        <p className="text-pretty text-[11px] leading-relaxed text-neutral-500">
-          Wearable vitals plus free-text notes. Subjective 1–5 scales are not captured — those
-          columns were dropped. Skip anything you don&apos;t have.
+        <p className="text-pretty text-[11px] leading-snug text-neutral-500">
+          Wearable vitals and notes. Skip anything you don&apos;t have.
         </p>
         <div className="grid grid-cols-1 gap-2 @xl:grid-cols-3">
           <Field label="Sleep h" name="sleep_h" defaultValue={latest?.sleep_h ?? ""} step="0.1" />

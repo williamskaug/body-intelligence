@@ -184,7 +184,7 @@ export function AgentsView({
             ?
           </span>
         </h2>
-        <ul className="mt-3 grid gap-px bg-neutral-200 sm:grid-cols-2 @7xl:grid-cols-3">
+        <ul className="mt-3 grid gap-px bg-neutral-200 sm:grid-cols-2 @5xl:grid-cols-3">
           {recipes.map((recipe) => {
             const state = installState.get(recipe.id);
             const covered = coveredBy(recipe);

@@ -33,7 +33,7 @@ export function HealthView({
     null;
 
   return (
-    <div className="grid h-full min-h-0 min-w-0 gap-px bg-neutral-200 @3xl:grid-cols-[minmax(0,16rem)_minmax(0,1fr)] @7xl:grid-cols-[minmax(0,16rem)_minmax(0,1fr)_minmax(0,22rem)]">
+    <div className="grid h-full min-h-0 min-w-0 gap-px bg-neutral-200 @3xl:grid-cols-[minmax(0,16rem)_minmax(0,1fr)] @5xl:grid-cols-[minmax(0,16rem)_minmax(0,1fr)_minmax(0,22rem)]">
       <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-white">
         <div className="flex items-center justify-between border-b border-neutral-200 px-3 py-2">
           <h2 className="text-[13px] font-semibold">Events</h2>
@@ -91,7 +91,7 @@ export function HealthView({
           </p>
         )}
       </section>
-      <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-white @3xl:col-span-2 @7xl:col-span-1">
+      <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-white @3xl:col-span-2 @5xl:col-span-1">
         <div className="flex items-center justify-between border-b border-neutral-200 px-3 py-2">
           <h2 className="font-mono text-[12px] font-semibold">HEALTH_LOG.md</h2>
           <span className="text-[10px] uppercase tracking-wide text-neutral-400">append-only</span>

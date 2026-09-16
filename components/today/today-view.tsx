@@ -86,7 +86,7 @@ export function TodayView({
 
   return (
     <div className="flex flex-col gap-px p-px">
-      <div className="grid min-w-0 grid-cols-2 gap-px bg-neutral-200 @xl:grid-cols-4 @7xl:grid-cols-8">
+      <div className="grid min-w-0 grid-cols-2 gap-px bg-neutral-200 @xl:grid-cols-4 @5xl:grid-cols-8">
         <Kpi
           label="Pred. marathon"
           value={formatClock(predSec)}

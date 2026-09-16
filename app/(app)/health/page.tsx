@@ -1,6 +1,6 @@
 import { HealthView } from "@/components/health/health-view";
-import { loadAppSnapshot, requireUser } from "@/lib/app/snapshot";
-import { parseWindow } from "@/lib/app/window";
+import { loadHealthPageData } from "@/lib/app/page-data";
+import { requireUser } from "@/lib/app/snapshot";
 
 export const dynamic = "force-dynamic";
 
@@ -15,15 +15,13 @@ export default async function HealthPage({ searchParams }: { searchParams: Searc
   const user = await requireUser();
   if (!user) return null;
   const params = await searchParams;
-  const window = parseWindow(params);
-  const snapshot = await loadAppSnapshot(user.id, user.email, window);
-  const healthLog = snapshot.contentByPath.get("HEALTH_LOG.md") ?? null;
+  const { events, todayDate, healthLog } = await loadHealthPageData(user.id);
 
   return (
     <div className="h-full min-h-0 overflow-hidden">
       <HealthView
-        events={snapshot.events}
-        todayDate={snapshot.todayDate}
+        events={events}
+        todayDate={todayDate}
         selectedId={params.event ?? null}
         healthLog={healthLog}
       />

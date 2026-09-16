@@ -31,17 +31,18 @@ export default async function SettingsPage() {
   if (!user) redirect("/login");
 
   const supabase = await createClient();
-  const profileRes = await supabase
-    .from("user_profiles")
-    .select("display_name, timezone, units_system, locale")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const [profileRes, apps, dataSources, mcpUrl] = await Promise.all([
+    supabase
+      .from("user_profiles")
+      .select("display_name, timezone, units_system, locale")
+      .eq("user_id", user.id)
+      .maybeSingle(),
+    loadConnectedApps(user.id),
+    loadDataSources(user.id),
+    resolveMcpUrl(),
+  ]);
   const profile = profileRes.data;
-
-  const apps = await loadConnectedApps(user.id);
-  const dataSources = await loadDataSources(user.id);
   const onboarding = recipes.find((r) => r.id === "onboarding");
-  const mcpUrl = await resolveMcpUrl();
 
   return (
     <div className="h-full min-h-0 overflow-auto">
