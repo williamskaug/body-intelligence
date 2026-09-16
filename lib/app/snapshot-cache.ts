@@ -21,6 +21,19 @@ export function statusChromeCacheKey(userId: string): string[] {
   return ["status-chrome", userId];
 }
 
+export function sliceCacheKey(slice: string, userId: string, span?: number | string): string[] {
+  return span == null ? ["slice", slice, userId] : ["slice", slice, userId, String(span)];
+}
+
+export function analyzeTabExtrasCacheKey(
+  userId: string,
+  days: number,
+  focusRun: boolean,
+  tab: string,
+): string[] {
+  return ["analyze-extras", tab, userId, String(days), focusRun ? "run" : "all"];
+}
+
 export function dehydrateContentMap(map: Map<string, string>): Record<string, string> {
   return Object.fromEntries(map);
 }

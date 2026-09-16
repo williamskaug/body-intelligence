@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseWindow, windowQuery } from "./window";
+import { fetchSpan, parseWindow, windowQuery } from "./window";
 
 describe("window", () => {
   it("defaults to 90D and treats nogolf=1 as RUN FOCUS", () => {
@@ -13,5 +13,12 @@ describe("window", () => {
     expect(windowQuery({ days: 30, focusRun: true }, { tab: "fitness" })).toBe(
       "?days=30&focus=run&tab=fitness",
     );
+  });
+
+  it("shares a 120-day fetch across 7/30/90 so chip changes do not refetch", () => {
+    expect(fetchSpan(7)).toBe(120);
+    expect(fetchSpan(30)).toBe(120);
+    expect(fetchSpan(90)).toBe(120);
+    expect(fetchSpan(365)).toBe(365);
   });
 });

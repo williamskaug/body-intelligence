@@ -1,23 +1,32 @@
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
-import { computeBaseline, type Baseline } from "@/lib/data-display/baseline";
+import type { Baseline } from "@/lib/data-display/baseline";
 import type { DerivedDailyRow, Gate } from "@/lib/data-display/derived";
-import type {
-  HealthEventUpdate,
-  ThreadedHealthEvent,
-} from "@/lib/data-display/health-events";
-import {
-  daysUntil,
-  nextRace,
-  parseGoalSeconds,
-  parseGoalsMarkdown,
-  racePredictionKey,
-  type ParsedRace,
-} from "@/lib/memory/parse-goals";
-import { parseThresholds, type ParsedThresholds } from "@/lib/memory/parse-thresholds";
+import type { ThreadedHealthEvent } from "@/lib/data-display/health-events";
+import type { ParsedRace } from "@/lib/memory/parse-goals";
+import type { ParsedThresholds } from "@/lib/memory/parse-thresholds";
 import { adminClient } from "@/lib/supabase/admin";
 import { addDays, isMissingRelation, localDateInTz } from "./dates";
 import { timeAgo } from "./format";
+import {
+  dailyPack,
+  derivedPack,
+  filterWorkouts,
+  loadCapacitySlice,
+  loadDailySlice,
+  loadDerivedSlice,
+  loadDocContents,
+  loadEventsSlice,
+  loadLatestPath,
+  loadMetricsSlice,
+  loadRecipesSlice,
+  loadTimezone as loadTimezoneSlice,
+  loadWorkoutsSlice,
+  loadZonesSlice,
+  raceFromGoals,
+  resolveWindowContext,
+  thresholdsFromDoc,
+} from "./data-slices";
 import {
   dehydrateContentMap,
   hydrateContentMap,
@@ -25,7 +34,7 @@ import {
   statusChromeCacheKey,
   userDataTag,
 } from "./snapshot-cache";
-import { applyFocus, isRunType, workoutTitle } from "./training";
+import { isRunType, workoutTitle } from "./training";
 import type { AppWindow, WindowDays } from "./window";
 
 export type DawnFooter = {
@@ -190,276 +199,104 @@ export type AppSnapshot = {
   latestInsightPath: string | null;
 };
 
-const STANDARD_DOCS = [
-  "MEMORY.md",
-  "PROFILE.md",
-  "PRINCIPLES.md",
-  "GOALS.md",
-  "CURRENT.md",
-  "HEALTH_LOG.md",
-  "NUTRITION.md",
-  "EQUIPMENT.md",
-  "THRESHOLDS.md",
-  "RECORDS.md",
-] as const;
-
-const DAILY_SELECT =
-  "id, date, sleep_h, sleep_deep_min, sleep_light_min, sleep_rem_min, sleep_awake_min, hrv_ms, rhr_bpm, spo2_avg_pct, respiration_avg_brpm, weight_kg, skin_temp_deviation_c, sleep_score, stress_score, body_battery_morning, body_battery_high, body_battery_low, body_battery_charged, body_battery_drained, training_readiness_score, training_status, steps, active_calories, floors_climbed, intensity_min_moderate, intensity_min_vigorous, sleep_notes, wellness_notes";
-
-const METRICS_SELECT =
-  "workout_id, date, cadence_spm, gct_ms, gct_balance_pct_left, vertical_oscillation_mm, vertical_ratio_pct, stride_len_m, te_aerobic, te_anaerobic, vendor_training_load, stamina_start_pct, stamina_end_pct, stamina_min_pct, decoupling_pct, elevation_gain_m, elevation_loss_m, avg_speed_kmh, max_speed_kmh, weather_temp_c, weather_humidity_pct, strength_volume_kg";
-
-const ZONES_SELECT =
-  "workout_id, date, hr_z1_s, hr_z2_s, hr_z3_s, hr_z4_s, hr_z5_s, power_z1_s, power_z2_s, power_z3_s, power_z4_s, power_z5_s, power_z6_s, power_z7_s";
-
-const CAPACITY_SELECT =
-  "date, vo2max_running, vo2max_cycling, lactate_threshold_hr_bpm, lactate_threshold_pace_s_per_km, lactate_threshold_power_w, cycling_ftp_w, endurance_score, race_pred_5k_s, race_pred_10k_s, race_pred_half_s, race_pred_marathon_s";
+export function emptySnapshot(base: {
+  userId: string;
+  email: string;
+  todayDate: string;
+  sinceDate: string;
+  days: number;
+  focusRun: boolean;
+  timezone: string;
+}): AppSnapshot {
+  return {
+    ...base,
+    workouts: [],
+    allWorkouts: [],
+    daily: [],
+    dailyHistory: [],
+    derived: [],
+    derivedGateByDate: {},
+    metricsByWorkoutId: {},
+    zonesByWorkoutId: {},
+    events: [],
+    capacity: [],
+    documents: [],
+    contentByPath: new Map(),
+    recipes: [],
+    race: null,
+    gateHistory: [],
+    baselines: { hrv: null, rhr: null, sleep: null },
+    thresholds: null,
+    latestBriefingPath: null,
+    latestInsightPath: null,
+  };
+}
 
 async function loadAppSnapshotUncached(
   userId: string,
   email: string,
   window: AppWindow,
 ): Promise<AppSnapshot> {
-  const timezone = await loadTimezone(userId);
-  const todayDate = localDateInTz(new Date(), timezone);
-  // Charts that show weekly history need more than the chip window; always
-  // pull at least 120 days so BUILD/TODAY have a runway, capped by 1Y.
-  const fetchDays = Math.max(window.days, 120);
-  const sinceDate = addDays(todayDate, -(fetchDays - 1));
-  const windowSince = addDays(todayDate, -(window.days - 1));
-
-  const sb = adminClient();
-  const [
-    workoutsRes,
-    dailyRes,
-    healthRes,
-    documentsRes,
-    derivedRes,
-    metricsRes,
-    zonesRes,
-    updatesRes,
-    recipesRes,
-    milestonesRes,
-    capacityRes,
-  ] = await Promise.all([
-    sb
-      .from("workouts")
-      .select(
-        "id, date, type, duration_min, distance_km, avg_hr, max_hr, rpe, shoes, source, notes",
-      )
-      .eq("user_id", userId)
-      .gte("date", sinceDate)
-      .order("date", { ascending: false }),
-    sb
-      .from("daily_entries")
-      .select(DAILY_SELECT)
-      .eq("user_id", userId)
-      .gte("date", sinceDate)
-      .order("date", { ascending: false }),
-    sb
-      .from("health_events")
-      .select("id, date, kind, body_part, severity, notes, resolved_date")
-      .eq("user_id", userId)
-      .order("date", { ascending: false }),
-    sb
-      .from("documents")
-      .select("path, updated_at")
-      .eq("user_id", userId)
-      .order("path", { ascending: true }),
-    sb
-      .from("derived_daily")
-      .select("*")
-      .eq("user_id", userId)
-      .gte("date", sinceDate)
-      .order("date", { ascending: false }),
-    sb
-      .from("workout_metrics")
-      .select(METRICS_SELECT)
-      .eq("user_id", userId)
-      .gte("date", sinceDate),
-    sb
-      .from("workout_zones")
-      .select(ZONES_SELECT)
-      .eq("user_id", userId)
-      .gte("date", sinceDate),
-    sb
-      .from("health_event_updates")
-      .select("event_id, date, note, severity_at_time")
-      .eq("user_id", userId)
-      .order("date", { ascending: true }),
-    sb
-      .from("installed_recipes")
-      .select("recipe_id, last_run_at, last_run_status, run_count")
-      .eq("user_id", userId),
-    sb
-      .from("health_events")
-      .select("id, next_milestone, next_milestone_date")
-      .eq("user_id", userId)
-      .not("next_milestone", "is", null),
-    sb
-      .from("capacity_metrics")
-      .select(CAPACITY_SELECT)
-      .eq("user_id", userId)
-      .gte("date", sinceDate)
-      .order("date", { ascending: true }),
-  ]);
-
-  for (const r of [workoutsRes, dailyRes, healthRes, documentsRes, recipesRes]) {
-    if (r.error) throw new Error(r.error.message);
-  }
-  for (const r of [derivedRes, metricsRes, zonesRes, updatesRes, milestonesRes, capacityRes]) {
-    if (r.error && !isMissingRelation(r.error)) throw new Error(r.error.message);
-  }
-
-  const allWorkouts = (workoutsRes.data ?? []) as WorkoutRow[];
-  const workouts = applyFocus(allWorkouts, window.focusRun).filter(
-    (w) => w.date >= windowSince,
-  );
-
-  const daily = (dailyRes.data ?? []) as DailyRow[];
-  const derived = (derivedRes.data ?? []) as DerivedDailyRow[];
-  const derivedGateByDate: Record<string, Gate> = {};
-  for (const d of derived) {
-    if (d.readiness_gate) derivedGateByDate[d.date] = d.readiness_gate;
-  }
-
-  const metricsByWorkoutId: Record<string, WorkoutMetricsRow> = {};
-  for (const m of (metricsRes.data ?? []) as WorkoutMetricsRow[]) {
-    metricsByWorkoutId[m.workout_id] = m;
-  }
-  const zonesByWorkoutId: Record<string, WorkoutZonesRow> = {};
-  for (const z of (zonesRes.data ?? []) as WorkoutZonesRow[]) {
-    zonesByWorkoutId[z.workout_id] = z;
-  }
-
-  const updatesByEvent = new Map<string, HealthEventUpdate[]>();
-  for (const u of (updatesRes.data ?? []) as Array<{ event_id: string } & HealthEventUpdate>) {
-    const entry: HealthEventUpdate = {
-      date: u.date,
-      note: u.note,
-      severity_at_time: u.severity_at_time,
-    };
-    const arr = updatesByEvent.get(u.event_id);
-    if (arr) arr.push(entry);
-    else updatesByEvent.set(u.event_id, [entry]);
-  }
-
-  const milestoneByEvent = new Map(
-    ((milestonesRes.data ?? []) as Array<{
-      id: string;
-      next_milestone: string | null;
-      next_milestone_date: string | null;
-    }>).map((m) => [m.id, m] as const),
-  );
-
-  type RawEvent = {
-    id: string;
-    date: string;
-    kind: string;
-    body_part: string | null;
-    severity: number | null;
-    notes: string | null;
-    resolved_date: string | null;
-  };
-  const events: ThreadedHealthEvent[] = ((healthRes.data ?? []) as RawEvent[]).map((e) => ({
-    ...e,
-    next_milestone: milestoneByEvent.get(e.id)?.next_milestone ?? null,
-    next_milestone_date: milestoneByEvent.get(e.id)?.next_milestone_date ?? null,
-    updates: updatesByEvent.get(e.id) ?? [],
-  }));
-
-  const docMeta = (documentsRes.data ?? []) as Array<{ path: string; updated_at: string }>;
-  const briefingMeta = docMeta
-    .filter((d) => d.path.startsWith("briefings/"))
-    .sort((a, b) => b.path.localeCompare(a.path));
-  const insightsMeta = docMeta
-    .filter((d) => d.path.startsWith("insights/"))
-    .sort((a, b) => b.path.localeCompare(a.path));
-  const latestBriefingPath =
-    briefingMeta.find((b) => b.path === `briefings/${todayDate}.md`)?.path ??
-    briefingMeta[0]?.path ??
-    null;
-  const latestInsightPath = insightsMeta[0]?.path ?? null;
-
-  const contentPaths = [
-    ...STANDARD_DOCS.filter((p) => docMeta.some((d) => d.path === p)),
-    ...(latestBriefingPath ? [latestBriefingPath] : []),
-    ...(latestInsightPath ? [latestInsightPath] : []),
-  ];
-  const contentRows = contentPaths.length
-    ? await sb.from("documents").select("path, content").eq("user_id", userId).in("path", contentPaths)
-    : { data: [] as Array<{ path: string; content: string }>, error: null };
-  if (contentRows.error) throw new Error(contentRows.error.message);
+  const ctx = await resolveWindowContext(userId, window);
+  const [workouts, metricsByWorkoutId, zonesByWorkoutId, dailyRows, derivedRows, events, capacity, recipes, briefingPath, insightPath] =
+    await Promise.all([
+      loadWorkoutsSlice(userId, ctx.todayDate, ctx.span),
+      loadMetricsSlice(userId, ctx.todayDate, ctx.span),
+      loadZonesSlice(userId, ctx.todayDate, ctx.span),
+      loadDailySlice(userId, ctx.todayDate, ctx.span),
+      loadDerivedSlice(userId, ctx.todayDate, ctx.span),
+      loadEventsSlice(userId),
+      loadCapacitySlice(userId, ctx.todayDate, ctx.span),
+      loadRecipesSlice(userId),
+      loadLatestPath(userId, "briefings/", `briefings/${ctx.todayDate}.md`),
+      loadLatestPath(userId, "insights/"),
+    ]);
   const contentByPath = new Map(
-    ((contentRows.data ?? []) as Array<{ path: string; content: string }>).map(
-      (r) => [r.path, r.content] as const,
+    Object.entries(
+      await loadDocContents(userId, [
+        "GOALS.md",
+        "CURRENT.md",
+        "THRESHOLDS.md",
+        "HEALTH_LOG.md",
+        ...(briefingPath ? [briefingPath] : []),
+        ...(insightPath ? [insightPath] : []),
+      ]),
     ),
   );
-
-  const documents: DocMeta[] = docMeta.map((d) => ({
-    path: d.path,
-    updated_at: d.updated_at,
-    content: contentByPath.get(d.path) ?? null,
-  }));
-
-  const goalsDoc = contentByPath.get("GOALS.md") ?? "";
-  const races = parseGoalsMarkdown(goalsDoc);
-  const targetRace = nextRace(races, todayDate);
-  const race: RaceInfo | null = targetRace
-    ? {
-        name: targetRace.name,
-        date: targetRace.date,
-        daysOut: daysUntil(targetRace.date, todayDate),
-        tier: targetRace.tier,
-        distance: targetRace.distance,
-        goal: targetRace.goal,
-        goalSeconds: parseGoalSeconds(targetRace.goal),
-        predKey: racePredictionKey(targetRace.distance),
-      }
-    : null;
-
-  const gateHistory = Array.from({ length: 14 }, (_, i) => {
-    const date = addDays(todayDate, -(13 - i));
-    return { date, gate: derivedGateByDate[date] ?? null };
-  });
-
-  const dailyForBase = daily.filter((d) => d.date >= addDays(todayDate, -59));
-  const baselines = {
-    hrv: computeBaseline(dailyForBase.map((d) => d.hrv_ms)),
-    rhr: computeBaseline(dailyForBase.map((d) => d.rhr_bpm)),
-    sleep: computeBaseline(dailyForBase.map((d) => (d.sleep_h == null ? null : Number(d.sleep_h)))),
-  };
-
-  const thresholdsRaw = contentByPath.get("THRESHOLDS.md") ?? "";
-  const thresholds = thresholdsRaw ? parseThresholds(thresholdsRaw) : null;
-
+  const { allWorkouts, workouts: windowWorkouts } = filterWorkouts(
+    workouts,
+    ctx.windowSince,
+    window.focusRun,
+  );
+  const daily = dailyPack(dailyRows, ctx.todayDate, ctx.windowSince);
+  const derived = derivedPack(derivedRows, ctx.todayDate, ctx.windowSince);
   return {
     userId,
     email,
-    todayDate,
-    sinceDate: windowSince,
+    todayDate: ctx.todayDate,
+    sinceDate: ctx.windowSince,
     days: window.days,
     focusRun: window.focusRun,
-    timezone,
-    workouts,
-    allWorkouts: applyFocus(allWorkouts, window.focusRun),
-    daily: daily.filter((d) => d.date >= windowSince),
-    dailyHistory: daily,
-    derived: derived.filter((d) => d.date >= windowSince),
-    derivedGateByDate,
+    timezone: ctx.timezone,
+    workouts: windowWorkouts,
+    allWorkouts,
+    daily: daily.daily,
+    dailyHistory: daily.dailyHistory,
+    derived: derived.derived,
+    derivedGateByDate: derived.derivedGateByDate,
     metricsByWorkoutId,
     zonesByWorkoutId,
     events,
-    capacity: (capacityRes.data ?? []) as CapacityRow[],
-    documents,
+    capacity,
+    documents: [],
     contentByPath,
-    recipes: (recipesRes.data ?? []) as RecipeRun[],
-    race,
-    gateHistory,
-    baselines,
-    thresholds,
-    latestBriefingPath,
-    latestInsightPath,
+    recipes,
+    race: raceFromGoals(contentByPath.get("GOALS.md") ?? "", ctx.todayDate),
+    gateHistory: derived.gateHistory,
+    baselines: daily.baselines,
+    thresholds: thresholdsFromDoc(contentByPath.get("THRESHOLDS.md")),
+    latestBriefingPath: briefingPath,
+    latestInsightPath: insightPath,
   };
 }
 
@@ -490,31 +327,30 @@ const cachedSnapshot = cache(
   },
 );
 
-export const loadTimezone = cache(async (userId: string): Promise<string> => {
-  const sb = adminClient();
-  const { data } = await sb
-    .from("user_profiles")
-    .select("timezone")
-    .eq("user_id", userId)
-    .maybeSingle();
-  const tz = (data as { timezone?: string } | null)?.timezone;
-  return tz && tz !== "UTC" ? tz : "Europe/Oslo";
-});
+export const loadTimezone = loadTimezoneSlice;
 
-export async function loadDocument(
-  userId: string,
-  path: string,
-): Promise<{ path: string; content: string; updated_at: string } | null> {
-  const sb = adminClient();
-  const { data, error } = await sb
-    .from("documents")
-    .select("path, content, updated_at")
-    .eq("user_id", userId)
-    .eq("path", path)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  return (data as { path: string; content: string; updated_at: string } | null) ?? null;
-}
+export const loadDocument = cache(
+  async (
+    userId: string,
+    path: string,
+  ): Promise<{ path: string; content: string; updated_at: string } | null> => {
+    return unstable_cache(
+      async () => {
+        const sb = adminClient();
+        const { data, error } = await sb
+          .from("documents")
+          .select("path, content, updated_at")
+          .eq("user_id", userId)
+          .eq("path", path)
+          .maybeSingle();
+        if (error) throw new Error(error.message);
+        return (data as { path: string; content: string; updated_at: string } | null) ?? null;
+      },
+      ["doc", userId, path],
+      { tags: [userDataTag(userId)], revalidate: 45 },
+    )();
+  },
+);
 
 /** Paths only — Memory does not need the 120-day workout snapshot. */
 export const loadDocumentIndex = cache(async (userId: string) => {

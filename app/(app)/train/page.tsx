@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { TrainCalendar, TrainList } from "@/components/train/train-view";
-import { loadAppSnapshot, requireUser } from "@/lib/app/snapshot";
+import { loadTrainPageData } from "@/lib/app/page-data";
+import { requireUser } from "@/lib/app/snapshot";
 import { parseWindow, windowQuery } from "@/lib/app/window";
 import { cn } from "@/lib/utils";
 
@@ -19,7 +20,7 @@ export default async function TrainPage({ searchParams }: { searchParams: Search
   if (!user) return null;
   const params = await searchParams;
   const window = parseWindow(params);
-  const snapshot = await loadAppSnapshot(user.id, user.email, window);
+  const snapshot = await loadTrainPageData(user.id, user.email, window);
   const view = params.view === "calendar" ? "calendar" : "list";
   const hours = snapshot.allWorkouts.reduce((a, w) => a + (w.duration_min ?? 0), 0) / 60;
 

@@ -1,10 +1,10 @@
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
-import type { AnalyzeExtras } from "@/components/analyze/analyze-view";
+import type { AnalyzeTab } from "@/lib/app/analyze-tabs";
 import { clipAtWord } from "@/lib/app/parse-week";
 import { num } from "@/lib/app/format";
 import type { AppSnapshot } from "@/lib/app/snapshot";
-import { analyzeExtrasCacheKey, userDataTag } from "@/lib/app/snapshot-cache";
+import { analyzeTabExtrasCacheKey, userDataTag } from "@/lib/app/snapshot-cache";
 import { correlationReport, linregress } from "@/lib/data-display/statistics";
 import { getCorrelationMatrix } from "@/lib/mcp/tools/get-correlation-matrix";
 import { getDistribution } from "@/lib/mcp/tools/get-distribution";
@@ -49,35 +49,73 @@ export const cachedLoadBalance = cache((userId: string, days: number) =>
   )(),
 );
 
-type HeavyExtras = Pick<
-  AnalyzeExtras,
-  "load" | "matrix" | "capacitySeries" | "recoveryBase" | "dists"
->;
+export type AnalyzeExtras = {
+  load: Awaited<ReturnType<typeof getLoadBalance>> | null;
+  matrix: {
+    metrics: string[];
+    matrix: Array<Array<number | null>>;
+    n: Array<Array<number>>;
+  } | null;
+  capacitySeries: { dates: string[]; series: Record<string, Array<number | null>> } | null;
+  recoveryBase: { dates: string[]; series: Record<string, Array<number | null>> } | null;
+  dists: Array<{
+    metric: string;
+    histogram: { edges: number[]; counts: number[] } | null;
+    percentiles: { p5: number | null; p50: number | null; p95: number | null };
+    latest: number | null;
+  } | null>;
+  sleepHrv: {
+    points: Array<{ x: number; y: number; date: string }>;
+    line: { x1: number; y1: number; x2: number; y2: number } | null;
+    stats: { r: number | null; r2: number | null; slope: number | null; n: number };
+  } | null;
+  insightLead: string | null;
+  insightPath: string | null;
+};
 
-const loadHeavyExtras = cache((userId: string, days: number, focusRun: boolean) =>
+function emptyExtras(): AnalyzeExtras {
+  return {
+    load: null,
+    matrix: null,
+    capacitySeries: null,
+    recoveryBase: null,
+    dists: [],
+    sleepHrv: null,
+    insightLead: null,
+    insightPath: null,
+  };
+}
+
+const loadCapacitySeries = cache((userId: string) =>
   unstable_cache(
-    async (): Promise<Omit<HeavyExtras, "dists"> & { distPayload: HeavyExtras["dists"] }> => {
-      const [load, matrix, capacitySeries, recoveryBase, ...dists] = await Promise.all([
-        safe(cachedLoadBalance(userId, days)),
+    () => safe(getMetricSeries(userId, { metrics: CAPACITY_KEYS, window_days: 365 })),
+    ["capacity-series", userId],
+    { tags: [userDataTag(userId)], revalidate: 45 },
+  )(),
+);
+
+const loadRecoverySeries = cache((userId: string, days: number) =>
+  unstable_cache(
+    () => safe(getMetricSeries(userId, { metrics: ["hrv_ms", "rhr_bpm"], window_days: days })),
+    ["recovery-series", userId, String(days)],
+    { tags: [userDataTag(userId)], revalidate: 45 },
+  )(),
+);
+
+const loadStatsEngine = cache((userId: string, days: number) =>
+  unstable_cache(
+    async () => {
+      const [matrix, ...dists] = await Promise.all([
         safe(getCorrelationMatrix(userId, { metrics: MATRIX_METRICS, window_days: days })),
-        safe(getMetricSeries(userId, { metrics: CAPACITY_KEYS, window_days: 365 })),
-        safe(getMetricSeries(userId, { metrics: ["hrv_ms", "rhr_bpm"], window_days: days })),
         ...DIST_METRICS.map((metric) =>
           safe(getDistribution(userId, { metric, window_days: days, bins: 14 })),
         ),
       ]);
       return {
-        load,
         matrix: matrix
           ? { metrics: matrix.metrics, matrix: matrix.matrix, n: matrix.n_matrix }
           : null,
-        capacitySeries: capacitySeries
-          ? { dates: capacitySeries.dates, series: capacitySeries.series }
-          : null,
-        recoveryBase: recoveryBase
-          ? { dates: recoveryBase.dates, series: recoveryBase.series }
-          : null,
-        distPayload: dists.map((d, i) =>
+        dists: dists.map((d, i) =>
           d
             ? {
                 metric: DIST_METRICS[i]!,
@@ -87,43 +125,62 @@ const loadHeavyExtras = cache((userId: string, days: number, focusRun: boolean) 
                   p50: d.percentiles.p50,
                   p95: d.percentiles.p95,
                 },
-                latest: null,
+                latest: null as number | null,
               }
             : null,
         ),
       };
     },
-    analyzeExtrasCacheKey(userId, days, focusRun),
+    analyzeTabExtrasCacheKey(userId, days, false, "stats-engine"),
     { tags: [userDataTag(userId)], revalidate: 45 },
   )(),
 );
 
-/** Kick the stats-engine extras without waiting on the 120-day snapshot. */
-export const beginAnalyzeExtras = loadHeavyExtras;
+/** Fire tab extras without waiting on the route snapshot. */
+export function prefetchAnalyzeExtras(userId: string, days: number, tab: AnalyzeTab): void {
+  if (tab === "build" || tab === "stats") void cachedLoadBalance(userId, days);
+  if (tab === "fitness") void loadCapacitySeries(userId);
+  if (tab === "recovery") void loadRecoverySeries(userId, days);
+  if (tab === "stats") void loadStatsEngine(userId, days);
+}
 
-export async function loadAnalyzeExtras(
+/** Tab-scoped stats extras. Build does not wait on the correlation matrix. */
+export async function loadAnalyzeExtrasForTab(
   userId: string,
   snapshot: AppSnapshot,
-  heavy?: Awaited<ReturnType<typeof loadHeavyExtras>>,
+  tab: AnalyzeTab,
 ): Promise<AnalyzeExtras> {
   const days = Math.min(365, Math.max(snapshot.days, 90));
-  const resolved = heavy ?? (await loadHeavyExtras(userId, days, snapshot.focusRun));
-  const insight = snapshot.latestInsightPath
-    ? (snapshot.contentByPath.get(snapshot.latestInsightPath) ?? null)
-    : null;
+  const extras = emptyExtras();
+  extras.insightPath = snapshot.latestInsightPath;
+  if (snapshot.latestInsightPath) {
+    extras.insightLead = insightLead(snapshot.contentByPath.get(snapshot.latestInsightPath) ?? null);
+  }
 
-  return {
-    load: resolved.load,
-    matrix: resolved.matrix,
-    capacitySeries: resolved.capacitySeries,
-    recoveryBase: resolved.recoveryBase,
-    dists: resolved.distPayload.map((d) =>
+  if (tab === "build" || tab === "stats") {
+    extras.load = await safe(cachedLoadBalance(userId, days));
+  }
+  if (tab === "fitness") {
+    const capacitySeries = await loadCapacitySeries(userId);
+    extras.capacitySeries = capacitySeries
+      ? { dates: capacitySeries.dates, series: capacitySeries.series }
+      : null;
+  }
+  if (tab === "recovery") {
+    const recoveryBase = await loadRecoverySeries(userId, days);
+    extras.recoveryBase = recoveryBase
+      ? { dates: recoveryBase.dates, series: recoveryBase.series }
+      : null;
+    extras.sleepHrv = sleepHrvScatter(snapshot);
+  }
+  if (tab === "stats") {
+    const stats = await loadStatsEngine(userId, days);
+    extras.matrix = stats.matrix;
+    extras.dists = stats.dists.map((d) =>
       d ? { ...d, latest: latestDaily(snapshot, d.metric) } : null,
-    ),
-    sleepHrv: sleepHrvScatter(snapshot),
-    insightLead: insightLead(insight),
-    insightPath: snapshot.latestInsightPath,
-  };
+    );
+  }
+  return extras;
 }
 
 function latestDaily(snapshot: AppSnapshot, metric: string): number | null {

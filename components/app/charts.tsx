@@ -141,41 +141,58 @@ export function SvgLine({
     pen = true;
   });
   const lastIdx = [...points.keys()].reverse().find((i) => points[i]!.y != null);
+  const topLabel = yFormat ? yFormat(dataMax) : dataMax.toFixed(0);
+  const botLabel = yFormat ? yFormat(dataMin) : dataMin.toFixed(0);
+  const lastLabel =
+    lastIdx != null && points[lastIdx]!.y != null
+      ? yFormat
+        ? yFormat(points[lastIdx]!.y!)
+        : points[lastIdx]!.y!.toFixed(0)
+      : null;
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} className="block">
-      {(refs ?? []).map((r, i) => (
-        <line
-          key={i}
-          x1={padL}
-          x2={width - padR}
-          y1={y(r.y)}
-          y2={y(r.y)}
-          stroke={r.color ?? "#e11d48"}
-          strokeWidth={1}
-          strokeDasharray={r.dash === false ? undefined : "4 3"}
-        />
-      ))}
-      <path d={d} fill="none" stroke={stroke} strokeWidth={1.6} />
-      {lastIdx != null && points[lastIdx]!.y != null ? (
-        <circle cx={x(lastIdx)} cy={y(points[lastIdx]!.y!)} r={2.4} fill="#171717" />
-      ) : null}
-      <text x={2} y={y(dataMax) + 3} fontSize={9} fill="#737373">
-        {yFormat ? yFormat(dataMax) : dataMax.toFixed(0)}
-      </text>
-      <text x={2} y={y(dataMin) + 3} fontSize={9} fill="#737373">
-        {yFormat ? yFormat(dataMin) : dataMin.toFixed(0)}
-      </text>
-      {lastIdx != null && points[lastIdx]!.y != null ? (
-        <text
-          x={Math.min(x(lastIdx) + 6, width - 4)}
-          y={y(points[lastIdx]!.y!) - 6}
-          fontSize={9}
-          fill="#171717"
+    <div className="relative min-w-0">
+      <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} className="block">
+        {(refs ?? []).map((r, i) => (
+          <line
+            key={i}
+            x1={padL}
+            x2={width - padR}
+            y1={y(r.y)}
+            y2={y(r.y)}
+            stroke={r.color ?? "#e11d48"}
+            strokeWidth={1}
+            strokeDasharray={r.dash === false ? undefined : "4 3"}
+          />
+        ))}
+        <path d={d} fill="none" stroke={stroke} strokeWidth={1.6} />
+        {lastIdx != null && points[lastIdx]!.y != null ? (
+          <circle cx={x(lastIdx)} cy={y(points[lastIdx]!.y!)} r={2.4} fill="#171717" />
+        ) : null}
+      </svg>
+      <span
+        className="pointer-events-none absolute left-0 font-mono text-[9px] leading-none text-neutral-500"
+        style={{ top: `${(y(dataMax) / height) * 100}%` }}
+      >
+        {topLabel}
+      </span>
+      <span
+        className="pointer-events-none absolute left-0 font-mono text-[9px] leading-none text-neutral-500"
+        style={{ top: `${(y(dataMin) / height) * 100}%` }}
+      >
+        {botLabel}
+      </span>
+      {lastLabel != null && lastIdx != null ? (
+        <span
+          className="pointer-events-none absolute font-mono text-[9px] leading-none text-neutral-800"
+          style={{
+            left: `${Math.min((x(lastIdx) + 6) / width, 0.86) * 100}%`,
+            top: `${((y(points[lastIdx]!.y!) - 10) / height) * 100}%`,
+          }}
         >
-          {yFormat ? yFormat(points[lastIdx]!.y!) : points[lastIdx]!.y!.toFixed(0)}
-        </text>
+          {lastLabel}
+        </span>
       ) : null}
-    </svg>
+    </div>
   );
 }
 

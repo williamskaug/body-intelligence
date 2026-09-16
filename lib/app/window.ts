@@ -44,3 +44,13 @@ export function windowQuery(window: AppWindow, extra?: Record<string, string | u
 export function windowLabel(days: number): string {
   return days === 365 ? "1Y" : `${days}D`;
 }
+
+/**
+ * DB fetch runway. 7/30/90 all share a 120-day slice so chip changes and
+ * Today→Train do not refetch; 1Y is the only wider pull.
+ */
+export type FetchSpan = 120 | 365;
+
+export function fetchSpan(days: number): FetchSpan {
+  return days > 120 ? 365 : 120;
+}
